@@ -19,6 +19,8 @@ import {
   LogOut,
   Menu,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -36,6 +38,7 @@ import {
   performanceViewModel,
   tasksViewModel,
 } from "./api/index.js";
+import { getNavigationPresentation } from "./navigationState.js";
 
 const navItems = [
   { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
@@ -67,6 +70,21 @@ function sourceFactory() {
   } catch (error) {
     return { source: null, error };
   }
+}
+
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mediaQuery = window.matchMedia(query);
+    const handleChange = (event) => setMatches(event.matches);
+    setMatches(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, [query]);
+
+  return matches;
 }
 
 function formatSyncTime(value) {
@@ -119,18 +137,17 @@ function LoginScreen({ onLogin, error, loading, configured }) {
   );
 }
 
-function ClientRail({ clients, activeClient, onSelect, onOpenMobile }) {
+function ClientRail({ clients, activeClient, onSelect, visible }) {
   return (
-    <aside className="client-rail" aria-label="고객사 선택">
+    <aside id="client-navigation" className="client-rail" aria-label="고객사 선택" aria-hidden={!visible}>
       <div className="rail-top">{clients.map((client) => <button key={client.id} className={`client-button ${activeClient === client.id ? "is-active" : ""}`} onClick={() => onSelect(client.id)} title={`${client.name} · ${client.descriptor}`}><span className="client-name">{client.name}</span><i className={`presence ${client.status}`} /></button>)}</div>
-      <button className="rail-button mobile-menu-button" onClick={onOpenMobile} aria-label="메뉴 열기"><Menu size={18} /></button>
     </aside>
   );
 }
 
-function ProjectSidebar({ project, activeView, onView, open, onClose, taskCount, sourceState, connectionReady }) {
+function ProjectSidebar({ project, activeView, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
   return (
-    <aside className={`project-sidebar ${open ? "is-open" : ""}`}>
+    <aside id="project-navigation" className={`project-sidebar ${open ? "is-open" : ""}`} aria-label="프로젝트 탐색" aria-hidden={!visible}>
       <div className="sidebar-header"><div><p className="eyebrow">{project.clientName}</p><h1>{project.name}</h1></div><button className="icon-button mobile-close" onClick={onClose} aria-label="메뉴 닫기"><X size={17} /></button></div>
       <div className="project-switcher"><div><span className="project-dot" /><strong>{project.status}</strong></div><ChevronDown size={15} /></div>
       <nav className="project-nav"><p className="nav-label">프로젝트</p>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>; })}</nav>
@@ -144,8 +161,11 @@ function ActorBadge({ actor, onLogout, live }) {
   return <div className="actor-badge"><span><strong>{actor?.name || "사용자"}</strong><small>{actor?.role === "client" ? "고객 조회" : actor?.role === "ns" ? "실행사 편집" : "포켓 운영"}</small></span>{live && <button className="icon-button" onClick={onLogout} aria-label="로그아웃" title="로그아웃"><LogOut size={16} /></button>}</div>;
 }
 
-function Topbar({ project, actor, onLogout, live, search, setSearch }) {
-  return <header className="topbar"><div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무·콘텐츠 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+function Topbar({ project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation }) {
+  const NavigationIcon = navigation.usesDrawer
+    ? navigation.expanded ? X : Menu
+    : navigation.expanded ? PanelLeftClose : PanelLeftOpen;
+  return <header className="topbar"><div className="topbar-leading"><button className="icon-button navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.expanded} aria-controls="client-navigation project-navigation"><NavigationIcon size={17} strokeWidth={1.9} /></button><div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무·콘텐츠 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
 }
 
 function MetricCard({ metric, onOpen }) {
@@ -287,11 +307,20 @@ export function App() {
   const [view, setView] = useState(initialView);
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopNavigationCollapsed, setDesktopNavigationCollapsed] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [createEntity, setCreateEntity] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
   const isDemo = source?.config.useDemoOnly;
   const live = Boolean(source && !isDemo);
+  const compactViewport = useMediaQuery("(max-width: 900px)");
+  const actorRole = bootstrapState.data?.actor?.role || "client";
+  const navigation = getNavigationPresentation({
+    role: actorRole,
+    compactViewport,
+    desktopCollapsed: desktopNavigationCollapsed,
+    drawerOpen: sidebarOpen,
+  });
 
   useEffect(() => source?.subscribe(setSourceState), [source]);
   useEffect(() => {
@@ -302,6 +331,17 @@ export function App() {
     const timeout = window.setTimeout(() => setSaveNotice(null), 4500);
     return () => window.clearTimeout(timeout);
   }, [saveNotice]);
+  useEffect(() => {
+    if (!navigation.usesDrawer && sidebarOpen) setSidebarOpen(false);
+  }, [navigation.usesDrawer, sidebarOpen]);
+  useEffect(() => {
+    if (!navigation.isDrawerOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [navigation.isDrawerOpen]);
 
   const loadBootstrap = useCallback(async (signal) => {
     if (!source || (!isDemo && !source.getSession())) return;
@@ -411,12 +451,20 @@ export function App() {
     setSearch("");
   };
 
+  const toggleNavigation = () => {
+    if (navigation.usesDrawer) {
+      setSidebarOpen((current) => !current);
+      return;
+    }
+    setDesktopNavigationCollapsed((current) => !current);
+  };
+
   return (
-    <div className="app-shell">
-      <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} onOpenMobile={() => setSidebarOpen(true)} />
-      <ProjectSidebar project={project} activeView={view} onView={setView} open={sidebarOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} />
+    <div className={`app-shell ${navigation.shellCollapsed ? "is-navigation-collapsed" : ""} ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""}`}>
+      <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.expanded} />
+      <ProjectSidebar project={project} activeView={view} onView={setView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.expanded} />
       {sidebarOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live} search={search} setSearch={setSearch} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setRetryKey((value) => value + 1)} onCreate={setCreateEntity} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : live ? "연결 확인 중" : "비식별 오프라인 데모"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setRetryKey((value) => value + 1)} onCreate={setCreateEntity} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : live ? "연결 확인 중" : "비식별 오프라인 데모"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
     </div>

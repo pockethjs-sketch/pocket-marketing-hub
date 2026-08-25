@@ -106,6 +106,13 @@ try {
   assert(await evaluate(client, "document.querySelector('.role-trigger') === null") === true, "Demo role switcher must not render");
   assert(await evaluate(client, "document.querySelector('.brand-mark') === null") === true, "Removed Pocket P logo returned");
   assert(await evaluate(client, "document.querySelector('.sidebar-footer .icon-button') === null") === true, "Removed sidebar footer icon returned");
+  assert(await evaluate(client, "Boolean(document.querySelector('.navigation-toggle'))") === true, "Navigation toggle did not render");
+  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
+  await delay(100);
+  assert(await evaluate(client, "document.querySelector('.app-shell').classList.contains('is-navigation-collapsed')") === true, "Desktop navigation did not collapse");
+  assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "Collapsed client rail is still visible");
+  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
+  await delay(100);
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('콘텐츠')).click()")
   await delay(150);
@@ -128,7 +135,10 @@ try {
   await client.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await client.send("Page.reload", { ignoreCache: true });
   await delay(700);
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.mobile-menu-button')).display !== 'none'") === true, "Mobile menu trigger is hidden");
+  assert(await evaluate(client, "getComputedStyle(document.querySelector('.navigation-toggle')).display !== 'none'") === true, "Mobile menu trigger is hidden");
+  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
+  await delay(100);
+  assert(await evaluate(client, "document.querySelector('.app-shell').classList.contains('is-navigation-drawer-open')") === true, "Mobile navigation drawer did not open");
   const mobileOverflow = await evaluate(client, "document.documentElement.scrollWidth > window.innerWidth");
   assert(mobileOverflow === false, "Mobile view has horizontal overflow");
 

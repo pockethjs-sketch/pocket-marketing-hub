@@ -2115,6 +2115,130 @@ select:focus-visible {
   }
 }
 
+/* Role-aware navigation: persistent for operators, temporary for clients and compact screens. */
+.topbar-leading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.navigation-toggle {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--muted);
+}
+
+.navigation-toggle:hover {
+  border-color: #bfdbfe;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.app-shell.is-navigation-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell.is-navigation-collapsed:not(.is-navigation-drawer-open) > .client-rail,
+.app-shell.is-navigation-collapsed:not(.is-navigation-drawer-open) > .project-sidebar {
+  display: none;
+}
+
+.app-shell.is-navigation-collapsed > .app-main {
+  grid-column: 1;
+}
+
+.app-shell.is-navigation-drawer-open > .client-rail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 90;
+  display: flex;
+  width: 136px;
+  min-height: 100vh;
+}
+
+.app-shell.is-navigation-drawer-open > .project-sidebar {
+  position: fixed;
+  inset: 0 auto 0 136px;
+  z-index: 90;
+  display: flex;
+  width: 248px;
+  min-height: 100vh;
+  transform: translateX(0);
+  box-shadow: 18px 0 38px rgba(15, 23, 42, 0.16);
+}
+
+.app-shell.is-navigation-drawer-open .mobile-close {
+  display: inline-flex !important;
+}
+
+.app-shell.is-navigation-drawer-open > .mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: block;
+  border: 0;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+@media (max-width: 900px) {
+  .app-shell,
+  .app-shell.is-navigation-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell:not(.is-navigation-drawer-open) > .client-rail,
+  .app-shell:not(.is-navigation-drawer-open) > .project-sidebar {
+    display: none;
+  }
+
+  .app-shell > .app-main {
+    grid-column: 1;
+  }
+
+  .app-shell.is-navigation-drawer-open > .client-rail {
+    width: 116px;
+  }
+
+  .app-shell.is-navigation-drawer-open > .project-sidebar {
+    left: 116px;
+    width: min(248px, calc(100vw - 116px));
+  }
+
+  .mobile-menu-button {
+    display: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .app-shell.is-navigation-drawer-open > .client-rail {
+    width: 86px;
+    padding-inline: 6px;
+  }
+
+  .app-shell.is-navigation-drawer-open > .client-rail .client-button {
+    width: 72px;
+    padding-inline: 10px 18px;
+  }
+
+  .app-shell.is-navigation-drawer-open > .client-rail .client-button.is-active::before {
+    left: -7px;
+  }
+
+  .app-shell.is-navigation-drawer-open > .project-sidebar {
+    left: 86px;
+    width: calc(100vw - 86px);
+  }
+
+  .topbar-leading {
+    gap: 7px;
+  }
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

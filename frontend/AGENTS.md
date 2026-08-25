@@ -13,6 +13,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - The visual target is the existing Pocket KPI operational UI: Pretendard, cool gray canvas, white surfaces, cobalt-blue primary actions, slate text, thin borders, shallow shadows, and compact 3/5/7px radii.
 - Do not reintroduce editorial serif or mono typography, terracotta/olive brand palettes, decorative `01–04` numbers, giant watermark numerals, English uppercase kickers, glass effects, or presentation-style hero layouts.
 - The desktop shell uses a Discord-like client rail and a second project navigation column.
+- Pocket and executor accounts may collapse both navigation columns together from the top bar. Client accounts start with both columns hidden and use the same top-bar control only when temporary navigation is needed.
 - Client selectors in the rail are horizontal name buttons, never initials-only avatars. Preserve each client's own script and brand spelling (for example `UND`, `무극`).
 - Keep overview hierarchy to four primary signals, a compact monthly/week flow, attention items, channel progress, and recent updates.
 - Supplied project-plan HTML files are requirements references only. Do not copy their visible copy, brand palette, typography, or component anatomy into the live product UI.

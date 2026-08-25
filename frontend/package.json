@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview",
+    "test:navigation": "node --test tests/navigation-state.test.mjs",
     "test:ui": "node scripts/browser-smoke.mjs",
     "test:sites": "node --test tests/sites-worker.test.mjs"
   },
