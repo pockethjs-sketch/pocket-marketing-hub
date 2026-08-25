@@ -9,19 +9,18 @@ import { createHubApi } from "../src/api/hubApi.js";
 import { createSessionStore } from "../src/api/session.js";
 import { bootstrapViewModel, overviewViewModel, tasksViewModel } from "../src/api/viewModel.js";
 
-test("API URL이 없으면 offline-demo 조회로 명확히 전환한다", async () => {
+test("API URL이 없으면 설정 오류를 명확히 반환한다", async () => {
   const config = readApiConfig({ VITE_POCKET_API_MODE: "auto" });
   const source = createHubDataSource({ config });
-  const result = await source.bootstrap({ role: "pocket" });
 
-  assert.equal(result.ok, true);
-  assert.equal(result.revision, "demo");
-  assert.equal(source.getState().mode, "offline-demo");
-  assert.equal(source.getState().fallbackReason, "missing_api_url");
+  await assert.rejects(
+    source.bootstrap({ role: "pocket" }),
+    (error) => error instanceof HubApiError && error.code === "missing_api_url",
+  );
 });
 
-test("offline-demo 쓰기는 저장 성공처럼 처리하지 않는다", async () => {
-  const config = readApiConfig({ VITE_POCKET_API_MODE: "demo" });
+test("API가 없을 때 쓰기는 저장 성공처럼 처리하지 않는다", async () => {
+  const config = readApiConfig({ VITE_POCKET_API_MODE: "auto" });
   const source = createHubDataSource({ config });
 
   await assert.rejects(
@@ -39,7 +38,7 @@ test("live 읽기 성공 시 마지막 동기화 시각을 상태에 기록한�
   const config = {
     endpoint: "https://example.invalid/api",
     mode: "live",
-    timeoutMs: 15000,
+    timeoutMs: 60000,
     credentials: "omit",
     hasEndpoint: true,
     useDemoOnly: false,

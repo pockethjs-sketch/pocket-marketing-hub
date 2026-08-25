@@ -18,7 +18,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Keep overview hierarchy to four primary signals, a compact monthly/week flow, attention items, channel progress, and recent updates.
 - Supplied project-plan HTML files are requirements references only. Do not copy their visible copy, brand palette, typography, or component anatomy into the live product UI.
 - Use a single normalized source and role-based projection. Client mode is read-only and must hide executor names and internal notes.
-- Until authenticated server-side filtering exists, GitHub Pages uses only non-sensitive demo data and must state that the live Google Sheet is not connected.
-- Treat `docs/INTEGRATION_STATUS.md` as the source of truth for connection claims. Never present demo UI controls as persisted inputs, and never label the Sheet as connected until the completion criteria in that document pass.
+- GitHub Pages and local production previews use the authenticated Apps Script API. Never add bundled demo customer or project data as a fallback.
+- Treat `docs/INTEGRATION_STATUS.md` as the source of truth for connection claims. Never present controls as persisted until the server confirms the Sheet write.
 - Keep Sheet IDs, Apps Script URLs, API tokens, and customer data out of the public frontend and repository. All operational reads and writes must pass through a server-side authenticated, project-scoped API.
-- Resolve the `POCKET_ONLY` / `PROJECT_TEAM` / `CLIENT` visibility model and migrate existing rows before replacing demo data with live data.
+- Preserve the `POCKET_ONLY` / `PROJECT_TEAM` / `CLIENT` visibility model for all new and migrated rows.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -152,7 +152,7 @@ function ProjectSidebar({ project, activeView, onView, open, onClose, taskCount,
       <div className="project-switcher"><div><span className="project-dot" /><strong>{project.status}</strong></div><ChevronDown size={15} /></div>
       <nav className="project-nav"><p className="nav-label">프로젝트</p>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>; })}</nav>
       <div className="sidebar-section"><p className="nav-label">현재 단계</p><div className="phase-brief"><div className="phase-number">{project.phase?.slice(0, 2) || "-"}</div><div><strong>{project.phase}</strong><span>{project.period}</span></div></div></div>
-      <div className="sidebar-footer"><div><strong>{connectionReady ? "Google Sheets 연결됨" : sourceState.mode === "live" ? "연결 확인 중" : "오프라인 데모"}</strong><span>{formatSyncTime(sourceState.lastSuccessfulAt)}</span></div></div>
+      <div className="sidebar-footer"><div><strong>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</strong><span>{formatSyncTime(sourceState.lastSuccessfulAt)}</span></div></div>
     </aside>
   );
 }
@@ -311,8 +311,9 @@ export function App() {
   const [retryKey, setRetryKey] = useState(0);
   const [createEntity, setCreateEntity] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
-  const isDemo = source?.config.useDemoOnly;
-  const live = Boolean(source && !isDemo);
+  const activeProjectIdRef = useRef(null);
+  const bootstrapOverviewProjectRef = useRef(null);
+  const live = Boolean(source);
   const compactViewport = useMediaQuery("(max-width: 900px)");
   const actorRole = bootstrapState.data?.actor?.role || "client";
   const navigation = getNavigationPresentation({
@@ -344,31 +345,67 @@ export function App() {
   }, [navigation.isDrawerOpen]);
 
   const loadBootstrap = useCallback(async (signal) => {
-    if (!source || (!isDemo && !source.getSession())) return;
+    if (!source || !source.getSession()) return;
     setBootstrapState({ status: "loading", data: null, error: null });
     try {
       const envelope = await source.bootstrap({ signal });
       if (signal?.aborted) return;
       const data = bootstrapViewModel(envelope);
+      const currentProjectId = activeProjectIdRef.current;
+      const nextProjectId = data.projects[currentProjectId]
+        ? currentProjectId
+        : data.clients[0]?.projectId || Object.keys(data.projects)[0] || null;
       setBootstrapState({ status: "ready", data, error: null });
       setActiveClient((current) => data.clients.some((item) => item.id === current) ? current : data.clients[0]?.id || null);
-      setActiveProjectId((current) => data.projects[current] ? current : data.clients[0]?.projectId || Object.keys(data.projects)[0] || null);
+      setActiveProjectId(nextProjectId);
+      activeProjectIdRef.current = nextProjectId;
+      if (data.initialOverview?.projectId === nextProjectId && data.initialOverview?.data) {
+        bootstrapOverviewProjectRef.current = nextProjectId;
+        setOverviewState({
+          status: "ready",
+          data: overviewViewModel(
+            { ...envelope, data: data.initialOverview.data },
+            data.projects[nextProjectId],
+          ),
+          error: null,
+          resource: "overview",
+          projectId: nextProjectId,
+        });
+      } else {
+        bootstrapOverviewProjectRef.current = null;
+        setOverviewState(blankPage);
+      }
+      if (data.initialTasks?.projectId === nextProjectId && data.initialTasks?.data) {
+        setResourceState({
+          status: "ready",
+          data: tasksViewModel({ ...envelope, data: data.initialTasks.data }),
+          error: null,
+          resource: "tasks",
+          projectId: nextProjectId,
+        });
+      } else {
+        setResourceState(blankPage);
+      }
     } catch (error) {
       if (signal?.aborted) return;
       if (error.code === "unauthorized") setSession(null);
       setBootstrapState({ status: "error", data: null, error });
     }
-  }, [source, isDemo]);
+  }, [source]);
 
   useEffect(() => {
-    if (!isDemo && !session) return undefined;
+    if (!session) return undefined;
     const controller = new AbortController();
     loadBootstrap(controller.signal);
     return () => controller.abort();
-  }, [isDemo, session, loadBootstrap, retryKey]);
+  }, [session, loadBootstrap, retryKey]);
 
   useEffect(() => {
     if (!source || !activeProjectId || bootstrapState.status !== "ready") return undefined;
+    if (bootstrapOverviewProjectRef.current === activeProjectId) {
+      bootstrapOverviewProjectRef.current = null;
+      return undefined;
+    }
     const controller = new AbortController();
     setOverviewState({ status: "loading", data: null, error: null, resource: "overview", projectId: activeProjectId });
     source.overview({ projectId: activeProjectId, signal: controller.signal }).then((envelope) => setOverviewState({ status: "ready", data: overviewViewModel(envelope, bootstrapState.data.projects[activeProjectId]), error: null, resource: "overview", projectId: activeProjectId })).catch((error) => { if (!controller.signal.aborted) { if (error.code === "unauthorized") setSession(null); setOverviewState({ status: "error", data: null, error, resource: "overview", projectId: activeProjectId }); } });
@@ -377,9 +414,12 @@ export function App() {
 
   useEffect(() => {
     if (!source || !activeProjectId || view === "overview" || bootstrapState.status !== "ready") return undefined;
+    if (view === "tasks" && resourceState.status === "ready" && resourceState.resource === "tasks" && resourceState.projectId === activeProjectId) {
+      return undefined;
+    }
     const controller = new AbortController();
     setResourceState({ status: "loading", data: null, error: null, resource: view, projectId: activeProjectId });
-    const params = { projectId: activeProjectId, limit: 100, signal: controller.signal };
+    const params = { projectId: activeProjectId, limit: 200, signal: controller.signal };
     let request;
     if (view === "tasks") request = source.tasks(params).then(tasksViewModel);
     if (view === "content") request = source.contents(params).then(contentsViewModel);
@@ -398,6 +438,8 @@ export function App() {
 
   const logout = () => {
     source.logout();
+    activeProjectIdRef.current = null;
+    bootstrapOverviewProjectRef.current = null;
     setSession(null);
     setBootstrapState(blankPage);
     setOverviewState(blankPage);
@@ -445,6 +487,7 @@ export function App() {
     if (!client) return;
     setActiveClient(clientId);
     setActiveProjectId(client.projectId);
+    activeProjectIdRef.current = client.projectId;
     setOverviewState({ ...blankPage, status: "loading", resource: "overview", projectId: client.projectId });
     setResourceState(blankPage);
     setView("overview");
@@ -464,7 +507,7 @@ export function App() {
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.expanded} />
       <ProjectSidebar project={project} activeView={view} onView={setView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.expanded} />
       {sidebarOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setRetryKey((value) => value + 1)} onCreate={setCreateEntity} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : live ? "연결 확인 중" : "비식별 오프라인 데모"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setRetryKey((value) => value + 1)} onCreate={setCreateEntity} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
     </div>

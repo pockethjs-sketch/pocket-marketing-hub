@@ -59,8 +59,20 @@ const FORMAT_LABELS = {
 };
 
 const PRIORITY_LABELS = { LOW: "낮음", NORMAL: "보통", HIGH: "높음", CRITICAL: "긴급", URGENT: "긴급" };
-const ORG_LABELS = { POCKET: "포켓컴퍼니", NS: "NS 마케팅", NS_MARKETING: "NS 마케팅", CLIENT: "고객사" };
+// 화면의 대외 담당 주체는 포켓컴퍼니로 통일한다.
+// 원장에 남아 있는 기존 NS 코드도 표시 단계에서는 포켓컴퍼니로 정규화한다.
+const ORG_LABELS = { POCKET: "포켓컴퍼니", NS: "포켓컴퍼니", NS_MARKETING: "포켓컴퍼니", CLIENT: "고객사" };
 const UNIT_LABELS = { COUNT: "건", PEOPLE: "명", KRW: "원", PERCENT: "%", RATE: "%", VIEW: "회" };
+
+function ownerLabel(orgCode, assignee) {
+  const mappedOrg = ORG_LABELS[String(orgCode || "").trim().toUpperCase()];
+  if (mappedOrg) return mappedOrg;
+
+  const rawAssignee = String(assignee || "").trim();
+  const normalizedAssignee = rawAssignee.toUpperCase().replace(/[\s_-]/g, "");
+  if (["NS", "NS마케팅", "NSMARKETING"].includes(normalizedAssignee)) return "포켓컴퍼니";
+  return rawAssignee || "미지정";
+}
 
 function codeLabel(code, labels, fallback = "미지정") {
   const normalized = String(code || "").toUpperCase();
@@ -119,15 +131,6 @@ function projectShell(row, clientsById = {}, generatedAt = null) {
 
 export function bootstrapViewModel(envelope) {
   const data = envelope?.data || {};
-  if (envelope?.revision === "demo") {
-    return {
-      clients: data.clients || [],
-      projects: data.projects || {},
-      channels: [],
-      actor: { id: "demo", name: "데모 사용자", roleCode: "POCKET_MANAGER", role: "pocket", organization: "POCKET" },
-      generatedAt: envelope.generatedAt || null,
-    };
-  }
   const clientRows = (Array.isArray(data.clients) ? data.clients : []).filter((row) => !Boolean(row.is_demo));
   const visibleClientIds = new Set(clientRows.map((row) => row.client_id));
   const projectRows = (Array.isArray(data.projects) ? data.projects : []).filter((row) => visibleClientIds.has(row.client_id));
@@ -157,6 +160,8 @@ export function bootstrapViewModel(envelope) {
       organization: currentUser.organization || null,
     } : null,
     generatedAt: envelope?.generatedAt || null,
+    initialOverview: data.initialOverview || null,
+    initialTasks: data.initialTasks || null,
   };
 }
 
@@ -186,14 +191,6 @@ function overviewKpi(row) {
 
 export function overviewViewModel(envelope, fallbackProject) {
   const data = envelope?.data || {};
-  if (envelope?.revision === "demo") {
-    return {
-      project: data.project || fallbackProject,
-      kpis: data.performance || [],
-      activities: data.activity || [],
-      generatedAt: envelope.generatedAt || null,
-    };
-  }
   const summary = data.summary || {};
   const taskSummary = summary.tasks || {};
   const contentSummary = summary.contents || {};
@@ -246,9 +243,6 @@ export function overviewViewModel(envelope, fallbackProject) {
 
 export function tasksViewModel(envelope) {
   const data = envelope?.data || {};
-  if (envelope?.revision === "demo") {
-    return { items: data.items || [], total: Number(data.total || 0), nextCursor: null, generatedAt: envelope.generatedAt || null };
-  }
   return {
     items: (data.items || []).map((row) => ({
       id: row.task_id,
@@ -257,7 +251,7 @@ export function tasksViewModel(envelope) {
       title: row.title || "제목 없는 업무",
       status: codeLabel(row.status_code, STATUS_LABELS),
       priority: codeLabel(row.priority_code, PRIORITY_LABELS),
-      owner: ORG_LABELS[row.responsible_org_code] || row.assignee_user_id || "미지정",
+      owner: ownerLabel(row.responsible_org_code, row.assignee_user_id),
       due: dateOnly(row.due_date),
       clientVisible: true,
       parent: row.category_code ? codeLabel(row.category_code, {}) : "업무",
@@ -271,9 +265,6 @@ export function tasksViewModel(envelope) {
 
 export function contentsViewModel(envelope) {
   const data = envelope?.data || {};
-  if (envelope?.revision === "demo") {
-    return { items: data.items || [], total: Number(data.total || 0), nextCursor: null, range: null, generatedAt: envelope.generatedAt || null };
-  }
   return {
     items: (data.items || []).map((row) => ({
       id: row.content_id,
@@ -296,9 +287,6 @@ export function contentsViewModel(envelope) {
 
 export function performanceViewModel(envelope) {
   const data = envelope?.data || {};
-  if (envelope?.revision === "demo") {
-    return { items: data.items || [], channels: [], daily: [], range: null, generatedAt: envelope.generatedAt || null };
-  }
   const latest = {};
   (data.actuals || []).forEach((row) => {
     const current = latest[row.kpi_id];
@@ -328,9 +316,6 @@ export function performanceViewModel(envelope) {
 
 export function filesViewModel(envelope) {
   const data = envelope?.data || {};
-  if (envelope?.revision === "demo") {
-    return { items: data.items || [], total: Number(data.total || 0), nextCursor: null, generatedAt: envelope.generatedAt || null };
-  }
   return {
     items: (data.items || []).map((row) => ({
       id: row.file_id,
@@ -348,9 +333,6 @@ export function filesViewModel(envelope) {
 
 export function activityListViewModel(envelope) {
   const data = envelope?.data || {};
-  if (envelope?.revision === "demo") {
-    return { items: data.items || [], nextCursor: null, generatedAt: envelope.generatedAt || null };
-  }
   return {
     items: (data.items || []).map(activityViewModel),
     nextCursor: data.nextCursor || null,

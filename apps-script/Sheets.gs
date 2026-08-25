@@ -1,4 +1,55 @@
 var MH_SPREADSHEET_CACHE = null;
+var MH_TABLE_MEMORY_CACHE = {};
+var MH_FORCE_FRESH_TABLES = false;
+var MH_TABLE_CACHE_TTL_SECONDS = 45;
+var MH_TABLE_CACHE_MAX_BYTES = 85000;
+
+function mhTableCacheKey_(sheetName) {
+  var spreadsheetId = mhSetting_(MH_PROPERTY_KEYS.SHEET_ID, '');
+  return 'mh_table_v2_' + mhHashToken_(spreadsheetId + '|' + sheetName).slice(0, 48);
+}
+
+function mhCachedTablePayload_(sheetName) {
+  if (MH_FORCE_FRESH_TABLES) return null;
+  try {
+    var raw = CacheService.getScriptCache().get(mhTableCacheKey_(sheetName));
+    var parsed = raw ? mhParseJson_(raw, null) : null;
+    if (!parsed || !Array.isArray(parsed.headers) || !Array.isArray(parsed.rows)) return null;
+    return {
+      sheetName: sheetName,
+      sheet: null,
+      headers: parsed.headers,
+      rows: parsed.rows
+    };
+  } catch (ignored) {
+    return null;
+  }
+}
+
+function mhRememberTablePayload_(sheetName, table) {
+  if (MH_FORCE_FRESH_TABLES) return;
+  try {
+    var serialized = JSON.stringify({ headers: table.headers, rows: table.rows });
+    if (Utilities.newBlob(serialized).getBytes().length > MH_TABLE_CACHE_MAX_BYTES) return;
+    CacheService.getScriptCache().put(
+      mhTableCacheKey_(sheetName),
+      serialized,
+      MH_TABLE_CACHE_TTL_SECONDS
+    );
+  } catch (ignored) {}
+}
+
+function mhInvalidateTableCache_(sheetName) {
+  delete MH_TABLE_MEMORY_CACHE[sheetName];
+  try {
+    CacheService.getScriptCache().remove(mhTableCacheKey_(sheetName));
+  } catch (ignored) {}
+}
+
+function mhUseFreshTables_() {
+  MH_FORCE_FRESH_TABLES = true;
+  MH_TABLE_MEMORY_CACHE = {};
+}
 
 function mhSpreadsheet_() {
   if (MH_SPREADSHEET_CACHE) return MH_SPREADSHEET_CACHE;
@@ -21,6 +72,14 @@ function mhSheet_(sheetName) {
 }
 
 function mhReadTable_(sheetName) {
+  if (!MH_FORCE_FRESH_TABLES && MH_TABLE_MEMORY_CACHE[sheetName]) {
+    return MH_TABLE_MEMORY_CACHE[sheetName];
+  }
+  var cached = mhCachedTablePayload_(sheetName);
+  if (cached) {
+    MH_TABLE_MEMORY_CACHE[sheetName] = cached;
+    return cached;
+  }
   var sheet = mhSheet_(sheetName);
   var lastRow = sheet.getLastRow();
   var lastColumn = sheet.getLastColumn();
@@ -44,7 +103,10 @@ function mhReadTable_(sheetName) {
     row.__rowNumber = rowIndex + 1;
     rows.push(row);
   }
-  return { sheet: sheet, headers: headers, rows: rows };
+  var table = { sheetName: sheetName, sheet: sheet, headers: headers, rows: rows };
+  MH_TABLE_MEMORY_CACHE[sheetName] = table;
+  mhRememberTablePayload_(sheetName, table);
+  return table;
 }
 
 function mhActiveRows_(sheetName) {
@@ -77,13 +139,16 @@ function mhAppendRecord_(sheetName, record) {
   var values = table.headers.map(function (header) {
     return Object.prototype.hasOwnProperty.call(record, header) ? record[header] : '';
   });
-  table.sheet.appendRow(values);
+  var sheet = table.sheet || mhSheet_(sheetName);
+  sheet.appendRow(values);
   SpreadsheetApp.flush();
+  mhInvalidateTableCache_(sheetName);
   return record;
 }
 
 function mhUpdateRecord_(table, rowNumber, record) {
-  var range = table.sheet.getRange(rowNumber, 1, 1, table.headers.length);
+  var sheet = table.sheet || mhSheet_(table.sheetName);
+  var range = sheet.getRange(rowNumber, 1, 1, table.headers.length);
   var current = range.getValues()[0];
   var formulas = range.getFormulas()[0];
   table.headers.forEach(function (header, index) {
@@ -92,9 +157,10 @@ function mhUpdateRecord_(table, rowNumber, record) {
     var same = mhStableJson_(mhToIsoValue_(current[index])) === mhStableJson_(mhToIsoValue_(next));
     if (same) return;
     if (formulas[index]) throw mhApiError_('schema_mismatch', 'formula_field_is_server_read_only', 500);
-    table.sheet.getRange(rowNumber, index + 1).setValue(next);
+    sheet.getRange(rowNumber, index + 1).setValue(next);
   });
   SpreadsheetApp.flush();
+  mhInvalidateTableCache_(table.sheetName);
   return record;
 }
 

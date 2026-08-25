@@ -1,4 +1,7 @@
 function mhHandleMutation_(request, actor) {
+  // Writes must never trust the short-lived read cache. Always re-read the
+  // current Sheet rows before validating row versions or applying changes.
+  mhUseFreshTables_();
   var mutation = request.mutation || request;
   var mutationId = mhAsText_(mutation.mutationId || mutation.mutation_id);
   var entityType = mhAsText_(mutation.entityType || mutation.entity_type).toLowerCase();

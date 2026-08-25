@@ -1,5 +1,4 @@
 import { readApiConfig } from "./config.js";
-import { createDemoAdapter } from "./demoAdapter.js";
 import { HubApiError, OfflineMutationError, publicApiError } from "./errors.js";
 import { createHubApi, READ_ACTIONS } from "./hubApi.js";
 
@@ -14,12 +13,11 @@ const INITIAL_STATE = Object.freeze({
 
 export function createHubDataSource(options = {}) {
   const config = options.config || readApiConfig();
-  const demo = options.demo || createDemoAdapter();
   const live = config.hasEndpoint ? (options.live || createHubApi(config, options)) : null;
   const listeners = new Set();
   let state = {
     ...INITIAL_STATE,
-    mode: config.useDemoOnly ? "offline-demo" : "live",
+    mode: "live",
     user: live?.getSession?.()?.user || null,
   };
 
@@ -49,16 +47,7 @@ export function createHubDataSource(options = {}) {
 
     emit({ phase: "loading", action: resource, error: null });
 
-    if (config.useDemoOnly) {
-      const result = await demo[resource](params);
-      emit({
-        mode: "offline-demo",
-        phase: "ready",
-        action: null,
-        fallbackReason: config.mode === "demo" ? "forced_demo" : "missing_api_url",
-      });
-      return result;
-    }
+    if (!live) throw new HubApiError("API 주소가 설정되지 않았습니다.", { code: "missing_api_url", action: resource, retriable: false });
 
     try {
       const result = await live[resource](params);
@@ -86,7 +75,7 @@ export function createHubDataSource(options = {}) {
   }
 
   async function mutate(input) {
-    if (!live || state.mode === "offline-demo") {
+    if (!live) {
       const error = new OfflineMutationError();
       emit({ phase: "error", action: null, error: publicApiError(error) });
       throw error;

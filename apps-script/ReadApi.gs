@@ -53,6 +53,16 @@ function mhReadBootstrap_(request, actor) {
       'display_name', 'account_url', 'channel_role', 'cadence', 'status_code'
     ]));
   });
+  var preferredProjectId = mhAsText_(request.projectId || request.project_id);
+  var initialProject = projects.filter(function (project) {
+    return mhAsText_(project.project_id) === preferredProjectId;
+  })[0] || projects[0] || null;
+  var initialOverview = initialProject
+    ? mhReadOverview_({ limit: 5 }, actor, initialProject)
+    : null;
+  var initialTasks = initialProject
+    ? mhReadTasks_({ limit: MH_PAGE_MAX }, actor, initialProject)
+    : null;
   return {
     scope: { clientId: null, projectId: null, visibility: null },
     data: {
@@ -64,7 +74,15 @@ function mhReadBootstrap_(request, actor) {
       },
       clients: clients,
       projects: projectItems,
-      channels: channels
+      channels: channels,
+      initialOverview: initialOverview ? {
+        projectId: mhAsText_(initialProject.project_id),
+        data: initialOverview
+      } : null,
+      initialTasks: initialTasks ? {
+        projectId: mhAsText_(initialProject.project_id),
+        data: initialTasks
+      } : null
     }
   };
 }

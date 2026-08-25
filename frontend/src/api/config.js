@@ -1,6 +1,6 @@
 import { HubApiError } from "./errors.js";
 
-const VALID_MODES = new Set(["auto", "live", "demo"]);
+const VALID_MODES = new Set(["auto", "live"]);
 const VALID_CREDENTIALS = new Set(["omit", "same-origin", "include"]);
 
 function cleanEndpoint(value) {
@@ -31,7 +31,7 @@ function cleanEndpoint(value) {
 
 function timeoutValue(value) {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 15000;
+  if (!Number.isFinite(parsed)) return 60000;
   return Math.max(3000, Math.min(parsed, 60000));
 }
 
@@ -55,6 +55,5 @@ export function readApiConfig(env = import.meta.env) {
     timeoutMs: timeoutValue(env?.VITE_POCKET_API_TIMEOUT_MS),
     credentials,
     hasEndpoint: Boolean(endpoint),
-    useDemoOnly: mode === "demo" || (mode === "auto" && !endpoint),
   });
 }
