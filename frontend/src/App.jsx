@@ -7,6 +7,8 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
   CircleDot,
   ClipboardCheck,
   FileText,
@@ -17,10 +19,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   LogOut,
-  Menu,
   MoreHorizontal,
-  PanelLeftClose,
-  PanelLeftOpen,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -38,7 +37,7 @@ import {
   performanceViewModel,
   tasksViewModel,
 } from "./api/index.js";
-import { getNavigationPresentation } from "./navigationState.js";
+import { getNavigationPresentation, getNextDesktopNavigationState } from "./navigationState.js";
 
 const navItems = [
   { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
@@ -162,10 +161,8 @@ function ActorBadge({ actor, onLogout, live }) {
 }
 
 function Topbar({ project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation }) {
-  const NavigationIcon = navigation.usesDrawer
-    ? navigation.expanded ? X : Menu
-    : navigation.expanded ? PanelLeftClose : PanelLeftOpen;
-  return <header className="topbar"><div className="topbar-leading"><button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.expanded} aria-controls="client-navigation project-navigation"><NavigationIcon size={17} strokeWidth={1.9} /><span>{navigation.expanded ? "메뉴 접기" : "메뉴 열기"}</span></button><div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무·콘텐츠 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+  const NavigationIcon = navigation.iconDirection === "left" ? ChevronsLeft : ChevronsRight;
+  return <header className="topbar"><div className="topbar-leading"><button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.anyVisible} aria-controls="client-navigation project-navigation"><NavigationIcon size={18} strokeWidth={2} /></button><div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무·콘텐츠 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
 }
 
 function MetricCard({ metric, onOpen }) {
@@ -307,7 +304,7 @@ export function App() {
   const [view, setView] = useState(initialView);
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [desktopNavigationCollapsed, setDesktopNavigationCollapsed] = useState(false);
+  const [desktopNavigation, setDesktopNavigation] = useState({ stage: 0, direction: "collapse" });
   const [retryKey, setRetryKey] = useState(0);
   const [createEntity, setCreateEntity] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
@@ -319,7 +316,8 @@ export function App() {
   const navigation = getNavigationPresentation({
     role: actorRole,
     compactViewport,
-    desktopCollapsed: desktopNavigationCollapsed,
+    desktopStage: desktopNavigation.stage,
+    desktopDirection: desktopNavigation.direction,
     drawerOpen: sidebarOpen,
   });
 
@@ -499,13 +497,13 @@ export function App() {
       setSidebarOpen((current) => !current);
       return;
     }
-    setDesktopNavigationCollapsed((current) => !current);
+    setDesktopNavigation((current) => getNextDesktopNavigationState(current));
   };
 
   return (
-    <div className={`app-shell ${navigation.shellCollapsed ? "is-navigation-collapsed" : ""} ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""}`}>
-      <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.expanded} />
-      <ProjectSidebar project={project} activeView={view} onView={setView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.expanded} />
+    <div className={`app-shell ${navigation.shellCollapsed ? "is-navigation-collapsed" : ""} ${navigation.clientRailCollapsed ? "is-client-rail-collapsed" : ""} ${navigation.projectSidebarCollapsed ? "is-project-sidebar-collapsed" : ""} ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""}`}>
+      <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
+      <ProjectSidebar project={project} activeView={view} onView={setView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
       {sidebarOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
       <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setRetryKey((value) => value + 1)} onCreate={setCreateEntity} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}

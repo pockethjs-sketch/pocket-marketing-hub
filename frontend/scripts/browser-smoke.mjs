@@ -109,8 +109,15 @@ try {
   assert(await evaluate(client, "Boolean(document.querySelector('.navigation-toggle'))") === true, "Navigation toggle did not render");
   await evaluate(client, "document.querySelector('.navigation-toggle').click()");
   await delay(100);
-  assert(await evaluate(client, "document.querySelector('.app-shell').classList.contains('is-navigation-collapsed')") === true, "Desktop navigation did not collapse");
+  assert(await evaluate(client, "document.querySelector('.app-shell').classList.contains('is-client-rail-collapsed')") === true, "Desktop client rail did not collapse first");
+  assert(await evaluate(client, "document.querySelector('.app-shell').classList.contains('is-navigation-collapsed')") === false, "Desktop navigation collapsed both columns on the first click");
   assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "Collapsed client rail is still visible");
+  assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") !== "none", "Project sidebar collapsed too early");
+  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
+  await delay(100);
+  assert(await evaluate(client, "document.querySelector('.app-shell').classList.contains('is-navigation-collapsed')") === true, "Desktop project sidebar did not collapse on the second click");
+  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
+  await delay(100);
   await evaluate(client, "document.querySelector('.navigation-toggle').click()");
   await delay(100);
 

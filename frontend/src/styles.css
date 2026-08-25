@@ -2125,25 +2125,39 @@ select:focus-visible {
 
 .navigation-toggle {
   display: inline-flex;
-  width: auto;
-  height: 32px;
-  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
+  padding: 0;
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
   background: #fff;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
+  cursor: pointer;
 }
 
 .navigation-toggle:hover {
   border-color: #bfdbfe;
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+@media (min-width: 901px) {
+  .app-shell.is-client-rail-collapsed:not(.is-project-sidebar-collapsed) {
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+
+  .app-shell.is-client-rail-collapsed:not(.is-project-sidebar-collapsed) > .client-rail {
+    display: none;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .app-shell.is-client-rail-collapsed:not(.is-project-sidebar-collapsed) {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
 }
 
 .app-shell.is-navigation-collapsed {
