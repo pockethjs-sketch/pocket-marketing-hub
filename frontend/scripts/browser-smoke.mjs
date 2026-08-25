@@ -119,7 +119,7 @@ try {
 
   await evaluate(client, "document.querySelectorAll('.client-button')[1].click()")
   await delay(100);
-  assert((await evaluate(client, "document.querySelector('.sidebar-header h1').textContent")).includes("소셜 채널"), "Client switching failed");
+  assert((await evaluate(client, "document.querySelector('.sidebar-header h1').textContent")).includes("콘텐츠 채널"), "Client switching failed");
 
   await client.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await client.send("Page.reload", { ignoreCache: true });

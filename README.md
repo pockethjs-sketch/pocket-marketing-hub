@@ -42,6 +42,7 @@ npm run dev
 
 ## 문서
 
+- [Google Sheets 연동 현황](docs/INTEGRATION_STATUS.md)
 - [데이터 모델](docs/DATA_MODEL.md)
 - [저장·연동 원칙](docs/STORAGE_AND_SYNC.md)
 - [읽기 API 계약](docs/API_CONTRACT.md)

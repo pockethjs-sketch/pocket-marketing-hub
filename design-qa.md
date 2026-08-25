@@ -1,41 +1,31 @@
 # Design QA
 
-## Source and implementation
+## Visual target
 
-- Source: `docs/source-team-tracker.png`, `docs/source-client-plan.png`
-- Implementation: `frontend/src/App.jsx`, `frontend/src/styles.css`
-- Reference viewport: 1440 × 1000 px, DPR 1
-- Focused implementation captures: 1440 × 950 px, DPR 1
-- Mobile capture: 390 × 844 px, DPR 1
-- CSS viewport: desktop 1440 px, tablet 1024 px, mobile 390 px
-- State: UND 90일 프로젝트, 포켓 운영자 기본 화면; 업무 고객사 화면; 콘텐츠 캘린더; 성과 화면
+- Pocket reference: `../pocket-kpi-deploy/qa-dashboard.png`
+- Marketing Hub implementation: `frontend/src/App.jsx`, `frontend/src/styles.css`
+- Comparison capture: `docs/pocket-reskin-comparison.png`
+- Implementation capture: `docs/implementation-pocket-reskin.png`
+- Reference comparison state: desktop 1440 × 900 px top viewport
 
-## Comparison evidence
-
-- Full comparison: `docs/design-qa-comparison.png`
-- Source capture: `docs/source-team-tracker.png`
-- Final overview: `docs/implementation-overview-final.png`
-- Client task visibility: `docs/implementation-tasks-client.png`
-- Content calendar: `docs/implementation-content.png`
-- Performance: `docs/implementation-performance.png`
-- Mobile: `docs/implementation-overview-mobile-v2.png`
+The supplied UND HTML files remain requirements references only. Their editorial copy, serif/mono typography, warm palette, decorative numbering, and presentation-style layout are not the visual target.
 
 ## Findings
 
-1. The implementation preserves the source's editorial Korean serif headings, warm terracotta/olive status system, thin rules, compact 3–7 px radii, and dense operational layout.
-2. The new client rail and project navigation add the requested Discord-like hierarchy without replacing the source's project-plan information density.
-3. Overview, tasks, content, performance, files, client switching, role projection, filters, and calendar/list controls are functional with realistic sanitized data.
-4. The client projection removes private tasks and executor identity; the public demo has no live Google Sheet, secret, contact, or contract data.
-5. Desktop, tablet, and mobile layouts render without horizontal overflow. The mobile sidebar is fully off-canvas instead of leaving a clipped rail.
-6. Browser smoke testing reports no runtime exception, console warning/error, broken primary navigation, or missing favicon request.
-7. Production Vite build and Sites-compatible worker tests pass.
+1. Pretendard, cool-gray canvas, white surfaces, cobalt-blue actions, slate text, thin borders, shallow shadows, and 3/5/7px radii now match the Pocket KPI product family.
+2. Client selectors show the full names `UND` and `무극` as horizontal Discord-like buttons instead of initials-only squares.
+3. The overview uses Pocket's operational hierarchy: compact project header, four KPI cards, weekly flow, action list, channel progress, and activity log.
+4. Editorial serif/mono fonts, terracotta/olive brand treatment, giant watermark numerals, decorative `01–04` markers, glass effects, and proposal-style hero composition have been removed.
+5. Project dates have a wider metadata column, small operational labels were raised to at least 10–11px in the active Pocket override, and the weekly cards were tightened for higher information density.
+6. Desktop and mobile browser smoke tests cover navigation, role visibility, filters, calendar/list toggle, KPI rendering, client switching, overflow, and console health.
+7. The UI still uses non-sensitive demo data. Google Sheets connection status is documented separately in `docs/INTEGRATION_STATUS.md` and is not visually overstated.
 
 ## Comparison history
 
-- Pass 1: 1440 px overview captured; visual direction matched, but mobile navigation left a narrow sidebar edge.
-- Pass 2: mobile off-canvas transform corrected; 390 px capture showed no sidebar residue or overflow.
-- Pass 3: equal-size 1440 px source/implementation comparison assembled and inspected; no P0, P1, or P2 visual defect remained.
-- Pass 4: automated interaction smoke covered role filtering, navigation, calendar, KPI rendering, client switch, mobile overflow, and console health.
+- Pass 1: source HTML-based editorial UI; rejected because it looked unlike Pocket and copied presentation anatomy too closely.
+- Pass 2: Pocket KPI token replacement and operational component restyling.
+- Pass 3: equal-size combined comparison against the existing Pocket KPI screen; no blocking visual defect found.
+- Pass 4: date-column width, text legibility, and weekly-card density tightened after visual QA.
 
 ## Final result
 

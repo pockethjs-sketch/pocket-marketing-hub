@@ -138,7 +138,7 @@ function ProjectSidebar({ project, activeView, onView, open, onClose }) {
             >
               <Icon size={17} strokeWidth={1.8} />
               <span>{item.label}</span>
-              {item.id === "tasks" && <em>103</em>}
+              {item.id === "tasks" && <em>{tasks.length}</em>}
             </button>
           );
         })}
@@ -147,10 +147,10 @@ function ProjectSidebar({ project, activeView, onView, open, onClose }) {
       <div className="sidebar-section">
         <p className="nav-label">현재 단계</p>
         <div className="phase-brief">
-          <div className="phase-number">P0</div>
+          <div className="phase-number">4주</div>
           <div>
-            <strong>구축 3주</strong>
-            <span>9월 1일 — 9월 21일</span>
+            <strong>{project.phase}</strong>
+            <span>{project.period}</span>
           </div>
         </div>
         <ProgressBar value={32} />
@@ -267,7 +267,7 @@ function OverviewView({ project, role, onNavigate }) {
       <section className="overview-grid">
         <div className="panel phase-panel">
           <div className="panel-heading">
-            <div><span className="section-number">01</span><h3>90일 진행 흐름</h3></div>
+            <div><span className="section-number">01</span><h3>월간 운영 흐름</h3></div>
             <button className="text-button" onClick={() => onNavigate("tasks")}>업무 전체 보기 <ArrowRight size={14} /></button>
           </div>
           <div className="phase-timeline">
@@ -377,17 +377,17 @@ function TasksView({ role, query }) {
 
   return (
     <div className="view-stack">
-      <ViewHeader eyebrow="EXECUTION BOARD" title="업무" description={role === "client" ? "고객 공개 업무의 일정과 완료 결과를 확인합니다." : "103개 업무를 단계·분야·상태별로 관리합니다."}>
+      <ViewHeader eyebrow="업무 관리" title="업무" description={role === "client" ? "공개된 업무의 일정과 완료 결과를 확인합니다." : "이번 달 업무를 주차·채널·상태별로 관리합니다."}>
         <button className="secondary-button"><CalendarDays size={15} /> 일정 보기</button>
         {role !== "client" && <button className="primary-button">업무 추가</button>}
       </ViewHeader>
       <div className="filter-bar">
         <ListFilter size={16} />
         <div className="segmented-control">
-          {["전체", "P0", "M1", "M2", "M3"].map((item) => <button key={item} className={phase === item ? "is-active" : ""} onClick={() => setPhase(item)}>{item}</button>)}
+          {["전체", ...new Set(tasks.map((task) => task.phase))].map((item) => <button key={item} className={phase === item ? "is-active" : ""} onClick={() => setPhase(item)}>{item}</button>)}
         </div>
         <select value={stream} onChange={(event) => setStream(event.target.value)}>
-          <option>전체</option><option>전략·마케팅</option><option>디자인</option><option>영상</option>
+          <option>전체</option><option>유튜브</option><option>인스타그램</option><option>SEO</option>
         </select>
         <span className="result-count">{visibleTasks.length}건 표시</span>
       </div>
@@ -425,12 +425,12 @@ function ContentView({ role, query }) {
   ];
   return (
     <div className="view-stack">
-      <ViewHeader eyebrow="CONTENT OPERATIONS" title="콘텐츠" description="콘텐츠는 업무와 분리해 기획부터 게시까지 하나의 원장으로 관리합니다.">
+      <ViewHeader eyebrow="콘텐츠 관리" title="콘텐츠" description="채널별 콘텐츠의 기획·검수·게시 상태를 확인합니다.">
         <div className="segmented-control compact"><button className={mode === "list" ? "is-active" : ""} onClick={() => setMode("list")}>목록</button><button className={mode === "calendar" ? "is-active" : ""} onClick={() => setMode("calendar")}>캘린더</button></div>
         {role !== "client" && <button className="primary-button">콘텐츠 추가</button>}
       </ViewHeader>
       <section className="content-summary">
-        <div className="content-summary-title"><span>구축 P0</span><strong>8 / 32</strong><small>초기 콘텐츠 발행</small></div>
+        <div className="content-summary-title"><span>8월 운영</span><strong>4 / 8</strong><small>이번 달 콘텐츠 발행</small></div>
         {channelSummary.map((item) => (
           <div key={item.label} className="content-quota"><span>{item.label}</span><strong>{item.value}<small>/{item.total}</small></strong><ProgressBar value={(item.value / item.total) * 100} /></div>
         ))}
@@ -466,12 +466,12 @@ function ContentView({ role, query }) {
 function PerformanceView() {
   return (
     <div className="view-stack">
-      <ViewHeader eyebrow="PERFORMANCE" title="성과" description="산출물 이행과 실제 고객 행동을 분리해 판단합니다.">
-        <button className="secondary-button"><CalendarDays size={15} /> 9월</button>
+      <ViewHeader eyebrow="성과 요약" title="성과" description="채널별 실행 결과와 고객 반응을 목표 대비로 확인합니다.">
+        <button className="secondary-button"><CalendarDays size={15} /> 8월</button>
       </ViewHeader>
       <section className="performance-intro panel">
-        <div><span className="section-number">01</span><h3>핵심 KPI</h3><p>문서에 정의된 6개 지표를 목표 대비로 봅니다. 현재 수치는 비식별 샘플입니다.</p></div>
-        <div className="performance-score"><strong>42<small>%</small></strong><span>가중 달성률</span></div>
+        <div><span className="section-number">01</span><h3>핵심 KPI</h3><p>콘텐츠 실행과 채널 반응을 목표 대비로 봅니다. 현재 수치는 비식별 샘플입니다.</p></div>
+        <div className="performance-score"><strong>57<small>%</small></strong><span>가중 달성률</span></div>
       </section>
       <section className="kpi-grid">
         {kpis.map((kpi, index) => {
@@ -481,16 +481,16 @@ function PerformanceView() {
               <header><span>0{index + 1}</span><i>{kpi.weight}%</i></header>
               <h3>{kpi.name}</h3>
               <div className="kpi-value"><strong>{kpi.value.toLocaleString()}</strong><small>{kpi.unit}</small><span>/ 목표 {kpi.target.toLocaleString()}</span></div>
-              <ProgressBar value={percent} color={percent >= 70 ? "var(--olive)" : "var(--accent)"} />
+              <ProgressBar value={percent} color={percent >= 70 ? "var(--success)" : "var(--accent)"} />
               <footer><span>{percent}% 달성</span><span>{kpi.source}</span></footer>
             </article>
           );
         })}
       </section>
       <section className="panel funnel-panel">
-        <div className="panel-heading"><div><span className="section-number">02</span><h3>자사몰 행동 흐름</h3></div><span className="panel-note">샘플 데이터</span></div>
+        <div className="panel-heading"><div><span className="section-number">02</span><h3>채널 반응 흐름</h3></div><span className="panel-note">샘플 데이터</span></div>
         <div className="funnel-flow">
-          {[{label:"방문",value:"1,240"},{label:"상세 조회",value:"678"},{label:"문의",value:"14"},{label:"쇼룸 예약",value:"8"}].map((item, index) => <article key={item.label}><span>0{index + 1}</span><strong>{item.value}</strong><small>{item.label}</small>{index < 3 && <ArrowRight size={17} />}</article>)}
+          {[{label:"콘텐츠 노출",value:"24,680"},{label:"콘텐츠 반응",value:"1,420"},{label:"프로필 이동",value:"186"},{label:"상담 문의",value:"14"}].map((item, index) => <article key={item.label}><span>0{index + 1}</span><strong>{item.value}</strong><small>{item.label}</small>{index < 3 && <ArrowRight size={17} />}</article>)}
         </div>
       </section>
     </div>
@@ -499,13 +499,13 @@ function PerformanceView() {
 
 function FilesView({ role }) {
   const files = [
-    { type: "실행계획", title: "UND 90일 실행계획 · 고객 공유용", date: "8월 25일", visibility: "고객 공개" },
-    { type: "트래커", title: "UND 90일 팀 트래커", date: "8월 25일", visibility: role === "client" ? "고객 공개" : "프로젝트팀" },
-    { type: "리포트", title: "8월 채널 기초 측정", date: "8월 31일", visibility: "고객 공개" },
+    { type: "캘린더", title: "8월 콘텐츠 캘린더", date: "8월 25일", visibility: "고객 공개" },
+    { type: "촬영자료", title: "9월 유튜브 촬영 콘티", date: "8월 25일", visibility: role === "client" ? "고객 공개" : "프로젝트팀" },
+    { type: "리포트", title: "8월 4주차 채널 성과", date: "8월 25일", visibility: "고객 공개" },
   ];
   return (
     <div className="view-stack">
-      <ViewHeader eyebrow="FILES & ACTIVITY" title="자료·활동" description="산출물 근거와 최근 변경 흐름을 한곳에서 확인합니다.">
+      <ViewHeader eyebrow="자료 관리" title="자료·활동" description="공유 자료와 프로젝트 변경 이력을 한곳에서 확인합니다.">
         {role !== "client" && <button className="primary-button">자료 등록</button>}
       </ViewHeader>
       <section className="overview-grid file-grid">
