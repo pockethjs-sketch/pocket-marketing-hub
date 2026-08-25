@@ -2124,13 +2124,20 @@ select:focus-visible {
 }
 
 .navigation-toggle {
-  width: 32px;
+  display: inline-flex;
+  width: auto;
   height: 32px;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
   background: #fff;
   color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .navigation-toggle:hover {

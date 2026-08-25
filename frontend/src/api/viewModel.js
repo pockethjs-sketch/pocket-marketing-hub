@@ -128,14 +128,15 @@ export function bootstrapViewModel(envelope) {
       generatedAt: envelope.generatedAt || null,
     };
   }
-  const projectRows = Array.isArray(data.projects) ? data.projects : [];
-  const clients = (Array.isArray(data.clients) ? data.clients : []).map((row) => ({
+  const clientRows = (Array.isArray(data.clients) ? data.clients : []).filter((row) => !Boolean(row.is_demo));
+  const visibleClientIds = new Set(clientRows.map((row) => row.client_id));
+  const projectRows = (Array.isArray(data.projects) ? data.projects : []).filter((row) => visibleClientIds.has(row.client_id));
+  const clients = clientRows.map((row) => ({
     id: row.client_id,
     name: row.display_name || row.client_id,
-    descriptor: row.is_demo ? "예시 프로젝트" : "마케팅 운영",
+    descriptor: "마케팅 운영",
     projectId: projectRows.find((project) => project.client_id === row.client_id)?.project_id || null,
     status: row.status_code === "ACTIVE" ? "active" : "planned",
-    isDemo: Boolean(row.is_demo),
   }));
   const clientsById = Object.fromEntries(clients.map((client) => [client.id, client]));
   const projects = Object.fromEntries(projectRows.map((row) => [
