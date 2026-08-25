@@ -6,3 +6,8 @@ node_modules/
 *.log
 dist/
 tmp/
+
+# Local design references and QA captures may include internal source material.
+docs/source-*.png
+docs/implementation-*.png
+docs/design-qa-comparison.*

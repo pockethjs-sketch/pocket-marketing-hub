@@ -36,11 +36,13 @@
 
 ## API 단위
 
-- `GET /bootstrap`: 로그인 사용자가 볼 수 있는 고객사·프로젝트와 요약
-- `GET /project`: 프로젝트 업무·콘텐츠·승인·KPI 상세
-- `POST /mutate`: 행 단위 생성·수정·보관
-- `POST /sync`: 외부 채널 데이터 동기화
-- `GET /health`: 스키마 버전·백업·동기화 상태
+- `GET action=bootstrap`: 로그인 사용자가 볼 수 있는 고객사·프로젝트와 앱 셸 데이터
+- `GET action=project_overview`: 총괄 화면에 필요한 집계와 상위 항목
+- `GET action=tasks|contents|approvals|performance|files|activity`: 화면별 지연 조회
+- `POST action=mutate`: 행 단위 생성·수정·보관
+- `POST action=sync`: 외부 채널 데이터 동기화
+- `GET action=health`: 스키마 버전·백업·동기화 상태
 
 Apps Script 실제 배포 시 URL 경로가 아니라 `action` 파라미터로 라우팅하는 방식으로 구현합니다.
 
+총괄 화면에서 전체 업무·콘텐츠·성과 원본을 한 번에 반환하지 않는다. 화면별 projection과 페이지 처리를 사용해 초기 응답 크기와 고객사 노출 범위를 줄인다.
