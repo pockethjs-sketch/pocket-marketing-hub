@@ -13,8 +13,7 @@
 
 ## 데이터 원장
 
-- Google Sheets: https://docs.google.com/spreadsheets/d/1pvgGQqYeQ69N5w17rDdIUnaMI7qIwPLGXyfZd8a24ZA/edit
-- Spreadsheet ID: `1pvgGQqYeQ69N5w17rDdIUnaMI7qIwPLGXyfZd8a24ZA`
+- Google Sheets 원장: 내부 운영 문서(공개 저장소에는 링크와 ID를 기록하지 않음)
 - Schema version: `2026-08-25-v1`
 
 UND 프로젝트에는 제공된 90일 팀 트래커의 103개 업무와 22개 KPI 정의가 이관되어 있습니다. 무극은 실제 데이터와 섞이지 않도록 `is_demo=true`인 예시 고객사·프로젝트만 들어 있습니다.
@@ -35,4 +34,3 @@ UND 프로젝트에는 제공된 90일 팀 트래커의 103개 업무와 22개 K
 
 - [데이터 모델](docs/DATA_MODEL.md)
 - [저장·연동 원칙](docs/STORAGE_AND_SYNC.md)
-
