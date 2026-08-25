@@ -19,6 +19,14 @@ test("API URL이 없으면 설정 오류를 명확히 반환한다", async () =>
   );
 });
 
+test("로그인 비활성화 설정을 명시적으로 읽는다", () => {
+  const config = readApiConfig({
+    VITE_POCKET_API_MODE: "auto",
+    VITE_POCKET_LOGIN_ENABLED: "false",
+  });
+  assert.equal(config.loginEnabled, false);
+});
+
 test("API가 없을 때 쓰기는 저장 성공처럼 처리하지 않는다", async () => {
   const config = readApiConfig({ VITE_POCKET_API_MODE: "auto" });
   const source = createHubDataSource({ config });
@@ -96,6 +104,38 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
     assert.equal(calls[2].body.mutation.operation, "CREATE");
     assert.match(calls[2].body.mutation.mutationId, /^mut_/);
     assert.equal(JSON.stringify([...storageMap.values()]).includes("long-access-code"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("공개 조회 세션도 서버 발급 토큰만 sessionStorage에 저장한다", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const storageMap = new Map();
+  const storage = {
+    getItem: (key) => storageMap.get(key) || null,
+    setItem: (key, value) => storageMap.set(key, value),
+    removeItem: (key) => storageMap.delete(key),
+  };
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body);
+    return new Response(JSON.stringify({
+      ok: true,
+      generatedAt: "2026-08-25T10:00:00+09:00",
+      data: { token: "preview-session-token", expiresIn: 3600, user: { role: "CLIENT_VIEWER" } },
+    }), { status: 200 });
+  };
+
+  try {
+    const api = createHubApi(
+      { endpoint: "https://example.invalid/api", timeoutMs: 3000, credentials: "omit" },
+      { sessionStore: createSessionStore(storage) },
+    );
+    await api.previewSession();
+    assert.equal(calls[0].action, "preview_session");
+    assert.equal(api.getSession().token, "preview-session-token");
   } finally {
     globalThis.fetch = originalFetch;
   }

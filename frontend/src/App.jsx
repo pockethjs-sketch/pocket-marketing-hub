@@ -293,7 +293,9 @@ const blankPage = { status: "idle", data: null, error: null, resource: null, pro
 export function App() {
   const [{ source, error: configError }] = useState(sourceFactory);
   const [sourceState, setSourceState] = useState(() => source?.getState() || { mode: "live", phase: "error", error: configError });
-  const [session, setSession] = useState(() => source?.getSession() || null);
+  const [session, setSession] = useState(() => (
+    source?.config.loginEnabled ? source.getSession() : null
+  ));
   const [loginError, setLoginError] = useState(null);
   const [bootstrapState, setBootstrapState] = useState(blankPage);
   const [overviewState, setOverviewState] = useState(blankPage);
@@ -310,6 +312,7 @@ export function App() {
   const [saveNotice, setSaveNotice] = useState(null);
   const activeProjectIdRef = useRef(null);
   const bootstrapOverviewProjectRef = useRef(null);
+  const previewAttemptedRef = useRef(false);
   const live = Boolean(source);
   const compactViewport = useMediaQuery("(max-width: 900px)");
   const actorRole = bootstrapState.data?.actor?.role || "client";
@@ -323,8 +326,25 @@ export function App() {
 
   useEffect(() => source?.subscribe(setSourceState), [source]);
   useEffect(() => {
-    if (live && session && sourceState.user === null && sourceState.error?.code === "unauthorized") setSession(null);
-  }, [live, session, sourceState.user, sourceState.error]);
+    if (!source || source.config.loginEnabled || session || previewAttemptedRef.current) return undefined;
+    previewAttemptedRef.current = true;
+    const controller = new AbortController();
+    setLoginError(null);
+    source.previewSession({ signal: controller.signal })
+      .then(() => {
+        if (!controller.signal.aborted) setSession(source.getSession());
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setLoginError(error);
+      });
+    return () => controller.abort();
+  }, [source, session, retryKey]);
+  useEffect(() => {
+    if (live && session && sourceState.user === null && sourceState.error?.code === "unauthorized") {
+      if (!source.config.loginEnabled) setLoginError(sourceState.error);
+      setSession(null);
+    }
+  }, [live, session, source, sourceState.user, sourceState.error]);
   useEffect(() => {
     if (!saveNotice) return undefined;
     const timeout = window.setTimeout(() => setSaveNotice(null), 4500);
@@ -386,7 +406,10 @@ export function App() {
       }
     } catch (error) {
       if (signal?.aborted) return;
-      if (error.code === "unauthorized") setSession(null);
+      if (error.code === "unauthorized") {
+        if (!source.config.loginEnabled) setLoginError(error);
+        setSession(null);
+      }
       setBootstrapState({ status: "error", data: null, error });
     }
   }, [source]);
@@ -447,7 +470,17 @@ export function App() {
   };
 
   if (configError) return <ErrorState error={configError} title="연동 설정을 확인해 주세요." />;
-  if (live && !session) return <LoginScreen onLogin={handleLogin} error={loginError} loading={sourceState.action === "login" && sourceState.phase === "loading"} configured={source.config.hasEndpoint} />;
+  if (live && !session) {
+    if (!source.config.loginEnabled) {
+      if (loginError) return <ErrorState error={loginError} onRetry={() => {
+        previewAttemptedRef.current = false;
+        setLoginError(null);
+        setRetryKey((value) => value + 1);
+      }} title="공개 조회 화면을 연결하지 못했습니다." />;
+      return <LoadingState label="프로젝트 화면을 연결하는 중입니다." />;
+    }
+    return <LoginScreen onLogin={handleLogin} error={loginError} loading={sourceState.action === "login" && sourceState.phase === "loading"} configured={source.config.hasEndpoint} />;
+  }
   if (bootstrapState.status === "loading" || bootstrapState.status === "idle") return <LoadingState label="접근 가능한 프로젝트를 확인하는 중입니다." />;
   if (bootstrapState.status === "error") return <ErrorState error={bootstrapState.error} onRetry={() => setRetryKey((value) => value + 1)} title="프로젝트 목록을 불러오지 못했습니다." />;
   if (!bootstrapState.data?.clients.length || !activeProjectId) return <EmptyState title="배정된 프로젝트가 없습니다" description="관리자가 사용자 권한과 프로젝트 배정을 확인해야 합니다." />;
@@ -505,7 +538,7 @@ export function App() {
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
       <ProjectSidebar project={project} activeView={view} onView={setView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
       {sidebarOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setRetryKey((value) => value + 1)} onCreate={setCreateEntity} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setRetryKey((value) => value + 1)} onCreate={setCreateEntity} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
     </div>

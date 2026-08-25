@@ -60,6 +60,12 @@ export function createHubApi(config, options = {}) {
     return response;
   }
 
+  async function previewSession(options = {}) {
+    const response = await http.request("preview_session", { signal: options.signal });
+    sessionStore.write(response.data);
+    return response;
+  }
+
   async function read(resource, params = {}) {
     const action = READ_ACTIONS[resource];
     if (!action) {
@@ -111,6 +117,7 @@ export function createHubApi(config, options = {}) {
   return Object.freeze({
     read,
     login,
+    previewSession,
     logout: () => sessionStore.clear(),
     getSession: () => sessionStore.read(),
     bootstrap: (params) => read("bootstrap", params),

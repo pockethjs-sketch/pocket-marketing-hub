@@ -27,6 +27,9 @@ Apps Script의 `프로젝트 설정 → 스크립트 속성`에 입력합니다.
 | `SESSION_VERSION` | 기본 `1`; 전체 세션 폐기 시 증가 | 선택 |
 | `SESSION_TTL_SECONDS` | 기본 28800, 최대 43200 | 선택 |
 | `ALLOWED_EMAIL_DOMAINS` | 쉼표 구분 도메인 화이트리스트 | 선택 |
+| `PUBLIC_PREVIEW_ENABLED` | `true`일 때 로그인 없는 고객 조회 세션 발급 | 선택 |
+| `PUBLIC_PREVIEW_EMAIL` | `CLIENT_VIEWER`·`READ_ONLY` 전용 사용자 이메일 | 미리보기 사용 시 필수 |
+| `PUBLIC_PREVIEW_PROJECT_IDS` | 공개 조회를 허용할 프로젝트 ID 목록(쉼표 구분) | 미리보기 사용 시 필수 |
 
 Script Properties가 비어 있으면 `Secrets.gs`의 `MH_LOCAL_SECRETS`를 fallback으로 읽습니다.
 
@@ -54,6 +57,8 @@ Script Properties가 비어 있으면 `Secrets.gs`의 `MH_LOCAL_SECRETS`를 fall
 - 액세스 권한: 모든 사용자
 
 Web App 자체는 공개 URL이지만 데이터 API는 접근코드 로그인과 서명 세션 없이는 동작하지 않습니다. `/exec?action=health`는 데이터 없이 설정 상태만 반환합니다.
+
+로그인 UI를 임시로 끌 때도 관리자 계정을 공개하지 않습니다. `PUBLIC_PREVIEW_ENABLED=true`, `PUBLIC_PREVIEW_EMAIL`, `PUBLIC_PREVIEW_PROJECT_IDS`를 설정하면 `preview_session`이 해당 `CLIENT_VIEWER`의 짧은 서명 세션만 발급합니다. 허용 목록의 프로젝트는 `READ_ONLY`여야 하며, 이후 계정에 다른 프로젝트가 추가돼도 공개 범위에 포함되지 않습니다.
 
 운영 URL 예:
 

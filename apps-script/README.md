@@ -64,6 +64,16 @@ Apps Script ContentService 특성상 애플리케이션 오류도 HTTP 200으로
 
 성공 시 `data.token`, `data.expiresIn`, `data.user`가 반환됩니다. 토큰은 `localStorage`가 아니라 `sessionStorage`에 저장합니다.
 
+### 로그인 없는 공개 조회
+
+`PUBLIC_PREVIEW_ENABLED=true`일 때만 아래 요청으로 1시간짜리 `CLIENT_VIEWER` 세션을 발급합니다.
+
+```json
+{ "action": "preview_session" }
+```
+
+`PUBLIC_PREVIEW_EMAIL` 사용자는 반드시 `CLIENT_VIEWER` 역할이어야 하며, `PUBLIC_PREVIEW_PROJECT_IDS`에 적힌 프로젝트만 `READ_ONLY`로 공개됩니다. 일반 로그인과 서버 권한 검사는 그대로 유지되고, 허용 목록 밖 프로젝트는 해당 계정에 배정돼도 공개되지 않습니다.
+
 ### 읽기
 
 ```json

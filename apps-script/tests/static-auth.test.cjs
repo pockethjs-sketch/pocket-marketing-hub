@@ -70,15 +70,31 @@ context.MH_LOCAL_SECRETS = {
   ACCESS_CODE_PEPPER: 'different-test-pepper-longer-than-thirty-two-characters',
   ACCESS_ACCOUNTS_JSON: '{}',
   ENABLE_WRITES: 'false',
+  PUBLIC_PREVIEW_ENABLED: 'false',
+  PUBLIC_PREVIEW_EMAIL: 'preview@example.com',
+  PUBLIC_PREVIEW_PROJECT_IDS: 'PRJ-UND-90D-001',
 };
 context.mhActorByEmail_ = (email) => ({
   userId: 'USR-TEST',
   userRowVersion: 1,
   displayName: '테스트 사용자',
   email,
-  organization: 'POCKET',
-  role: 'POCKET_EDITOR',
-  memberships: [],
+  organization: email === 'preview@example.com' ? 'CLIENT' : 'POCKET',
+  role: email === 'preview@example.com' ? 'CLIENT_VIEWER' : 'POCKET_EDITOR',
+  memberships: email === 'preview@example.com' ? [{
+    client_id: 'CLT-UND',
+    project_id: 'PRJ-UND-90D-001',
+    permission_code: 'READ_ONLY',
+    status_code: 'ACTIVE',
+  }] : [],
+});
+context.mhFindRecord_ = (_sheet, _key, projectId) => ({
+  row: {
+    project_id: projectId,
+    client_id: 'CLT-UND',
+    client_view_enabled: true,
+    archived_at: '',
+  },
 });
 
 const email = 'operator@example.com';
@@ -86,6 +102,7 @@ const accessCode = 'long-private-random-code-1234567890';
 const digest = context.mhAccessCodeDigest_(email, accessCode);
 context.MH_LOCAL_SECRETS.ACCESS_ACCOUNTS_JSON = JSON.stringify({
   [email]: { access_code_hash: digest, enabled: true },
+  'preview@example.com': { access_code_hash: 'preview-account-enabled', enabled: true },
 });
 
 const login = context.mhLogin_({ email, accessCode });
@@ -99,8 +116,28 @@ context.MH_LOCAL_SECRETS.ACCESS_ACCOUNTS_JSON = JSON.stringify({
 assert.throws(() => context.mhResolveActor_({ auth: { sessionToken: login.token } }));
 context.MH_LOCAL_SECRETS.ACCESS_ACCOUNTS_JSON = JSON.stringify({
   [email]: { access_code_hash: digest, enabled: true },
+  'preview@example.com': { access_code_hash: 'preview-account-enabled', enabled: true },
 });
 assert.throws(() => context.mhVerifySessionToken_(login.token + 'tampered'));
+
+context.MH_LOCAL_SECRETS.PUBLIC_PREVIEW_ENABLED = 'true';
+const preview = context.mhPreviewSession_();
+assert.equal(preview.user.role, 'CLIENT_VIEWER');
+assert.equal(preview.expiresIn, 3600);
+const previewClaims = context.mhVerifySessionToken_(preview.token);
+assert.equal(previewClaims.sessionType, 'PUBLIC_PREVIEW');
+assert.deepEqual(Array.from(previewClaims.previewProjectIds), ['PRJ-UND-90D-001']);
+const previewActor = context.mhResolveActor_({ auth: { sessionToken: preview.token } });
+assert.equal(previewActor.role, 'CLIENT_VIEWER');
+assert.deepEqual(Array.from(previewActor.previewProjectIds), ['PRJ-UND-90D-001']);
+assert.throws(() => context.mhRequireProjectAccess_(previewActor, 'PRJ-NOT-PUBLIC', false));
+context.MH_LOCAL_SECRETS.PUBLIC_PREVIEW_PROJECT_IDS = 'PRJ-OTHER';
+assert.throws(() => context.mhResolveActor_({ auth: { sessionToken: preview.token } }));
+context.MH_LOCAL_SECRETS.PUBLIC_PREVIEW_PROJECT_IDS = '';
+assert.throws(() => context.mhPreviewSession_());
+context.MH_LOCAL_SECRETS.PUBLIC_PREVIEW_PROJECT_IDS = 'PRJ-UND-90D-001';
+context.MH_LOCAL_SECRETS.PUBLIC_PREVIEW_ENABLED = 'false';
+assert.throws(() => context.mhPreviewSession_());
 
 const clientActor = { role: 'CLIENT_VIEWER' };
 const teamActor = { role: 'EXECUTOR_EDITOR' };

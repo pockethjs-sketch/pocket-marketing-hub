@@ -35,6 +35,10 @@ function timeoutValue(value) {
   return Math.max(3000, Math.min(parsed, 60000));
 }
 
+function loginEnabledValue(value) {
+  return !["false", "0", "off", "disabled"].includes(String(value ?? "true").trim().toLowerCase());
+}
+
 export function readApiConfig(env = import.meta.env) {
   const modeValue = String(env?.VITE_POCKET_API_MODE || "auto").trim().toLowerCase();
   const mode = VALID_MODES.has(modeValue) ? modeValue : "auto";
@@ -55,5 +59,6 @@ export function readApiConfig(env = import.meta.env) {
     timeoutMs: timeoutValue(env?.VITE_POCKET_API_TIMEOUT_MS),
     credentials,
     hasEndpoint: Boolean(endpoint),
+    loginEnabled: loginEnabledValue(env?.VITE_POCKET_LOGIN_ENABLED),
   });
 }

@@ -36,6 +36,7 @@ jobs:
           VITE_POCKET_API_URL: ${{ vars.POCKET_API_URL }}
           VITE_POCKET_API_MODE: live
           VITE_POCKET_API_CREDENTIALS: omit
+          VITE_POCKET_LOGIN_ENABLED: false
         run: npm run build
 
       - name: Configure Pages

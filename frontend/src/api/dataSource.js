@@ -123,6 +123,32 @@ export function createHubDataSource(options = {}) {
     }
   }
 
+  async function previewSession(options = {}) {
+    if (!live) {
+      throw new HubApiError("API 주소가 설정되지 않았습니다.", {
+        code: "missing_api_url",
+        action: "preview_session",
+        retriable: false,
+      });
+    }
+    emit({ phase: "loading", action: "preview_session", error: null });
+    try {
+      const result = await live.previewSession(options);
+      emit({
+        mode: "live",
+        phase: "ready",
+        action: null,
+        error: null,
+        user: result.data.user,
+        lastSuccessfulAt: result.generatedAt || new Date().toISOString(),
+      });
+      return result;
+    } catch (error) {
+      emit({ phase: "error", action: null, error: publicApiError(error), user: null });
+      throw error;
+    }
+  }
+
   function logout() {
     live?.logout?.();
     emit({ phase: "idle", action: null, error: null, user: null, lastSuccessfulAt: null });
@@ -133,6 +159,7 @@ export function createHubDataSource(options = {}) {
     getState,
     subscribe,
     login,
+    previewSession,
     logout,
     getSession: () => live?.getSession?.() || null,
     load,

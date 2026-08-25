@@ -36,6 +36,73 @@ function mhLogin_(request) {
   };
 }
 
+function mhPreviewSession_() {
+  var enabled = String(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_ENABLED, 'false')).toLowerCase() === 'true';
+  if (!enabled) throw mhApiError_('forbidden', 'public_preview_disabled', 403);
+
+  var email = mhAsText_(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_EMAIL, '')).toLowerCase();
+  if (!email) throw mhApiError_('configuration_error', 'public_preview_email_missing', 500);
+  var actor = mhActorByEmail_(email);
+  var previewProjectIds = mhValidatedPreviewProjectIds_(actor);
+
+  return {
+    token: mhIssueSessionToken_(actor, 3600, {
+      sessionType: 'PUBLIC_PREVIEW',
+      previewProjectIds: previewProjectIds
+    }),
+    expiresIn: Math.min(mhSessionTtlSeconds_(), 3600),
+    user: {
+      userId: actor.userId,
+      displayName: actor.displayName,
+      role: actor.role,
+      organization: actor.organization
+    }
+  };
+}
+
+function mhConfiguredPreviewProjectIds_() {
+  var raw = mhAsText_(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_PROJECT_IDS, ''));
+  var parsed = mhParseJson_(raw, null);
+  var values = Array.isArray(parsed) ? parsed : raw.split(',');
+  var unique = {};
+  values.forEach(function (value) {
+    var projectId = mhAsText_(value);
+    if (projectId) unique[projectId] = true;
+  });
+  var projectIds = Object.keys(unique).sort();
+  if (!projectIds.length) {
+    throw mhApiError_('configuration_error', 'public_preview_project_ids_missing', 500);
+  }
+  return projectIds;
+}
+
+function mhValidatedPreviewProjectIds_(actor) {
+  if (actor.role !== 'CLIENT_VIEWER') {
+    throw mhApiError_('configuration_error', 'public_preview_must_be_client_viewer', 500);
+  }
+  if (!mhAccessCodeDigests_()[actor.email]) {
+    throw mhApiError_('configuration_error', 'public_preview_account_disabled', 500);
+  }
+  var projectIds = mhConfiguredPreviewProjectIds_();
+  projectIds.forEach(function (projectId) {
+    var project = mhFindRecord_(MH_SHEETS.PROJECTS, 'project_id', projectId).row;
+    if (!project || mhNonEmpty_(project.archived_at) || !mhAsBoolean_(project.client_view_enabled)) {
+      throw mhApiError_('configuration_error', 'public_preview_project_unavailable', 500);
+    }
+    var permission = mhPermissionForProject_(actor, project);
+    if (!permission || permission.permissionCode !== 'READ_ONLY') {
+      throw mhApiError_('configuration_error', 'public_preview_requires_read_only', 500);
+    }
+  });
+  return projectIds;
+}
+
+function mhSameTextSet_(left, right) {
+  var a = (left || []).map(mhAsText_).filter(Boolean).sort();
+  var b = (right || []).map(mhAsText_).filter(Boolean).sort();
+  return a.length === b.length && a.every(function (value, index) { return value === b[index]; });
+}
+
 function mhResolveActor_(request) {
   var sessionToken = request && request.auth
     ? mhAsText_(request.auth.sessionToken || request.auth.session_token)
@@ -49,6 +116,15 @@ function mhResolveActor_(request) {
   if (actor.userId !== mhAsText_(claims.userId) ||
       Number(actor.userRowVersion || 0) !== Number(claims.userRowVersion || 0)) {
     throw mhApiError_('unauthorized', 'session_user_changed', 401);
+  }
+  if (mhAsText_(claims.sessionType) === 'PUBLIC_PREVIEW') {
+    var enabled = String(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_ENABLED, 'false')).toLowerCase() === 'true';
+    if (!enabled) throw mhApiError_('unauthorized', 'public_preview_disabled', 401);
+    var currentProjectIds = mhValidatedPreviewProjectIds_(actor);
+    if (!mhSameTextSet_(claims.previewProjectIds, currentProjectIds)) {
+      throw mhApiError_('unauthorized', 'public_preview_scope_changed', 401);
+    }
+    actor.previewProjectIds = currentProjectIds;
   }
   return actor;
 }
@@ -128,8 +204,11 @@ function mhAccessCodeDigest_(email, accessCode) {
   return Utilities.base64EncodeWebSafe(signature).replace(/=+$/g, '');
 }
 
-function mhIssueSessionToken_(actor) {
+function mhIssueSessionToken_(actor, ttlOverrideSeconds, tokenOptions) {
   var now = Math.floor(Date.now() / 1000);
+  var ttl = Number(ttlOverrideSeconds || mhSessionTtlSeconds_());
+  if (!isFinite(ttl) || ttl < 900) ttl = mhSessionTtlSeconds_();
+  ttl = Math.min(Math.floor(ttl), MH_SESSION_TTL_MAX_SECONDS);
   var payload = {
     version: 1,
     sessionVersion: mhSessionVersion_(),
@@ -137,9 +216,13 @@ function mhIssueSessionToken_(actor) {
     userRowVersion: actor.userRowVersion,
     email: actor.email,
     issuedAt: now,
-    expiresAt: now + mhSessionTtlSeconds_(),
+    expiresAt: now + ttl,
     nonce: Utilities.getUuid()
   };
+  if (tokenOptions && tokenOptions.sessionType) {
+    payload.sessionType = mhAsText_(tokenOptions.sessionType);
+    payload.previewProjectIds = (tokenOptions.previewProjectIds || []).map(mhAsText_).filter(Boolean).sort();
+  }
   var encoded = mhBase64UrlEncodeText_(JSON.stringify(payload));
   return encoded + '.' + mhSignSessionPayload_(encoded);
 }
@@ -285,6 +368,9 @@ function mhPermissionForProject_(actor, project) {
 }
 
 function mhRequireProjectAccess_(actor, projectId, requireWrite) {
+  if (actor.previewProjectIds && actor.previewProjectIds.indexOf(mhAsText_(projectId)) < 0) {
+    throw mhApiError_('forbidden', 'preview_project_access_denied', 403);
+  }
   var found = mhFindRecord_(MH_SHEETS.PROJECTS, 'project_id', projectId).row;
   if (!found || mhNonEmpty_(found.archived_at)) throw mhApiError_('not_found', 'project_not_found', 404);
   if (actor.role === 'CLIENT_VIEWER' && !mhAsBoolean_(found.client_view_enabled)) {
@@ -308,6 +394,7 @@ function mhRequireProjectAccess_(actor, projectId, requireWrite) {
 
 function mhAccessibleProjects_(actor) {
   return mhActiveRows_(MH_SHEETS.PROJECTS).filter(function (project) {
+    if (actor.previewProjectIds && actor.previewProjectIds.indexOf(mhAsText_(project.project_id)) < 0) return false;
     if (actor.role === 'CLIENT_VIEWER' && !mhAsBoolean_(project.client_view_enabled)) return false;
     return !!mhPermissionForProject_(actor, project);
   });

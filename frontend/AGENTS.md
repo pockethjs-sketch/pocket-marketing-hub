@@ -19,6 +19,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Supplied project-plan HTML files are requirements references only. Do not copy their visible copy, brand palette, typography, or component anatomy into the live product UI.
 - Use a single normalized source and role-based projection. Client mode is read-only and must hide executor names and internal notes.
 - GitHub Pages and local production previews use the authenticated Apps Script API. Never add bundled demo customer or project data as a fallback.
+- Login UI is temporarily disabled through a server-issued `CLIENT_VIEWER` public preview session. Keep it read-only, pinned to an explicit server-side project allowlist, and reversible through configuration; never embed a manager credential or token in the frontend.
 - Treat `docs/INTEGRATION_STATUS.md` as the source of truth for connection claims. Never present controls as persisted until the server confirms the Sheet write.
 - Keep Sheet IDs, Apps Script URLs, API tokens, and customer data out of the public frontend and repository. All operational reads and writes must pass through a server-side authenticated, project-scoped API.
 - Preserve the `POCKET_ONLY` / `PROJECT_TEAM` / `CLIENT` visibility model for all new and migrated rows.

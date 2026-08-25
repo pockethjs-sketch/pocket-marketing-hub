@@ -108,6 +108,24 @@ function mhSetupDisableWrites() {
   return mhSetupSetWritesEnabled(false);
 }
 
+function mhSetupEnablePublicPreview() {
+  var email = mhAsText_(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_EMAIL, '')).toLowerCase();
+  if (!email) throw new Error('PUBLIC_PREVIEW_EMAIL을 먼저 설정하세요.');
+  var actor = mhActorByEmail_(email);
+  var projectIds = mhValidatedPreviewProjectIds_(actor);
+  PropertiesService.getScriptProperties().setProperties({
+    PUBLIC_PREVIEW_ENABLED: 'true',
+    PUBLIC_PREVIEW_EMAIL: email,
+    PUBLIC_PREVIEW_PROJECT_IDS: projectIds.join(',')
+  });
+  return { ok: true, enabled: true, email: email, projectIds: projectIds };
+}
+
+function mhSetupDisablePublicPreview() {
+  PropertiesService.getScriptProperties().setProperty('PUBLIC_PREVIEW_ENABLED', 'false');
+  return { ok: true, enabled: false };
+}
+
 function mhSetupDisableStagedAccount() {
   var properties = PropertiesService.getScriptProperties();
   var email = mhAsText_(properties.getProperty('SETUP_ACCOUNT_EMAIL')).toLowerCase();
@@ -175,6 +193,7 @@ function mhSetupValidate() {
     accessCodePepperConfigured: mhAsText_(mhSetting_(MH_PROPERTY_KEYS.ACCESS_CODE_PEPPER, '')).length >= 32,
     accountsConfigured: Object.keys(mhAccessCodeDigests_()).length,
     writesEnabled: String(mhSetting_(MH_PROPERTY_KEYS.ENABLE_WRITES, 'false')).toLowerCase() === 'true',
+    publicPreviewEnabled: String(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_ENABLED, 'false')).toLowerCase() === 'true',
     schemaValid: false
   };
   if (result.sheetConfigured) {

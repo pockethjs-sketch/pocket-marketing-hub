@@ -30,6 +30,9 @@ function doPost(e) {
     if (action === 'login') {
       return mhJsonOutput_(mhSuccess_(requestId, null, null, mhLogin_(request), mhRevision_()));
     }
+    if (action === 'preview_session') {
+      return mhJsonOutput_(mhSuccess_(requestId, null, null, mhPreviewSession_(), mhRevision_()));
+    }
     if (action === 'logout') {
       // Sessions are stateless. The client must delete its sessionStorage token.
       return mhJsonOutput_(mhSuccess_(requestId, null, null, { loggedOut: true }, mhRevision_()));
@@ -83,6 +86,9 @@ function mhHealth_() {
     status: hasSheet && hasSecret && hasPepper && hasAccounts ? 'READY' : 'SETUP_REQUIRED',
     backendVersion: MH_BACKEND_VERSION,
     authentication: 'SIGNED_SESSION',
+    publicPreviewEnabled: String(
+      mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_ENABLED, 'false')
+    ).toLowerCase() === 'true',
     writesEnabled: String(mhSetting_(MH_PROPERTY_KEYS.ENABLE_WRITES, 'false')).toLowerCase() === 'true'
   };
 }
