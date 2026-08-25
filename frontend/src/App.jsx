@@ -89,7 +89,7 @@ function ClientRail({ activeClient, onSelect, onOpenMobile }) {
             onClick={() => onSelect(client.id)}
             title={`${client.name} · ${client.descriptor}`}
           >
-            <span>{client.initials}</span>
+            <span className="client-name">{client.name}</span>
             <i className={`presence ${client.status}`} />
           </button>
         ))}

@@ -70,7 +70,7 @@ select:focus-visible {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 72px 248px minmax(0, 1fr);
+  grid-template-columns: 136px 248px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -98,7 +98,6 @@ select:focus-visible {
 }
 
 .brand-mark,
-.client-button,
 .rail-button {
   display: grid;
   width: 44px;
@@ -132,11 +131,24 @@ select:focus-visible {
   transition: background 160ms ease, color 160ms ease, border-radius 160ms ease;
 }
 
-.client-button span {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+.client-button {
+  display: flex;
+  width: 112px;
+  height: 40px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+}
+
+.client-button .client-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .client-button:hover,
@@ -153,7 +165,7 @@ select:focus-visible {
 
 .client-button.is-active::before {
   position: absolute;
-  left: -10px;
+  left: -12px;
   width: 3px;
   height: 24px;
   border-radius: 0 3px 3px 0;
@@ -163,11 +175,11 @@ select:focus-visible {
 
 .presence {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--rail);
+  right: 9px;
+  bottom: 14px;
+  width: 8px;
+  height: 8px;
+  border: 0;
   border-radius: 50%;
   background: #6c746d;
 }
@@ -1826,7 +1838,7 @@ select:focus-visible {
 
 @media (max-width: 900px) {
   .app-shell {
-    grid-template-columns: 58px minmax(0, 1fr);
+    grid-template-columns: 116px minmax(0, 1fr);
   }
 
   .client-rail {
@@ -1845,10 +1857,10 @@ select:focus-visible {
 
   .project-sidebar {
     position: fixed;
-    left: 58px;
+    left: 116px;
     z-index: 80;
     width: 248px;
-    transform: translateX(calc(-100% - 58px));
+    transform: translateX(calc(-100% - 116px));
     box-shadow: 20px 0 45px rgba(20, 24, 21, 0.18);
     transition: transform 180ms ease;
   }
@@ -1925,7 +1937,7 @@ select:focus-visible {
 
 @media (max-width: 680px) {
   .app-shell {
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: 96px minmax(0, 1fr);
   }
 
   .client-rail {
@@ -1933,14 +1945,26 @@ select:focus-visible {
   }
 
   .brand-mark,
-  .client-button,
   .rail-button {
     width: 40px;
     height: 40px;
   }
 
+  .client-button {
+    width: 82px;
+    padding-inline: 12px 20px;
+  }
+
+  .client-button.is-active::before {
+    left: -7px;
+  }
+
+  .presence {
+    right: 8px;
+  }
+
   .project-sidebar {
-    left: 52px;
+    left: 96px;
   }
 
   .topbar {

@@ -12,6 +12,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 - The visual target combines Pocket KPI's restrained operational chrome with UND's editorial typography, terracotta accent, olive secondary color, thin rules, and compact 3–7px radii.
 - The desktop shell uses a Discord-like client rail and a second project navigation column.
+- Client selectors in the rail are horizontal name buttons, never initials-only avatars. Preserve each client's own script and brand spelling (for example `UND`, `무극`).
 - Keep overview hierarchy to four primary signals, a 90-day phase strip, attention items, workstreams, and recent updates.
 - Use a single normalized source and role-based projection. Client mode is read-only and must hide executor names and internal notes.
 - Until authenticated server-side filtering exists, GitHub Pages uses only non-sensitive demo data and must state that the live Google Sheet is not connected.
