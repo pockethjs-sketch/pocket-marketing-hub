@@ -29,20 +29,20 @@
 
 ## 백업
 
-- Google Sheets 원본은 매일 별도 Drive 폴더에 복사한다.
-- 최소 30일 보관한다.
+- 실연동 전 원장 전체 백업본을 별도 Drive 파일로 생성했습니다.
+- 매일 자동 백업과 30일 보관은 다음 운영 안정화 범위이며 현재 자동화되지 않았습니다.
 - `15_활동로그`는 추가 전용으로 운영한다.
 - 원장 수정 전후 값을 로그에 남겨 복구 근거를 확보한다.
 
 ## API 단위
 
-- `GET action=bootstrap`: 로그인 사용자가 볼 수 있는 고객사·프로젝트와 앱 셸 데이터
-- `GET action=project_overview`: 총괄 화면에 필요한 집계와 상위 항목
-- `GET action=tasks|contents|approvals|performance|files|activity`: 화면별 지연 조회
+- `POST action=bootstrap`: 로그인 사용자가 볼 수 있는 고객사·프로젝트와 앱 셸 데이터
+- `POST action=project_overview`: 총괄 화면에 필요한 집계와 상위 항목
+- `POST action=tasks|contents|approvals|performance|files|activity`: 화면별 지연 조회
 - `POST action=mutate`: 행 단위 생성·수정·보관
-- `POST action=sync`: 외부 채널 데이터 동기화
-- `GET action=health`: 스키마 버전·백업·동기화 상태
+- `POST action=deep_health`: 관리자 전용 시트 접근·전체 스키마 검사
+- `GET action=health`: 공개 가능한 설정 상태와 백엔드 버전
 
-Apps Script 실제 배포 시 URL 경로가 아니라 `action` 파라미터로 라우팅하는 방식으로 구현합니다.
+Apps Script 실제 배포 시 모든 읽기·쓰기를 `Content-Type: text/plain` POST JSON으로 전송합니다. 이 방식은 GitHub Pages에서 커스텀 인증 헤더로 인한 CORS preflight를 피하면서 세션을 query string에 남기지 않습니다.
 
 총괄 화면에서 전체 업무·콘텐츠·성과 원본을 한 번에 반환하지 않는다. 화면별 projection과 페이지 처리를 사용해 초기 응답 크기와 고객사 노출 범위를 줄인다.

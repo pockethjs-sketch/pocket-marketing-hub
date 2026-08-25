@@ -91,7 +91,7 @@ try {
   await client.send("Runtime.enable");
   await client.send("Page.enable");
   await client.send("Log.enable");
-  await delay(900);
+  await delay(1200);
 
   assert(await evaluate(client, "document.querySelectorAll('.metric-card').length") === 4, "Overview metrics did not render");
   const clientLabels = await evaluate(client, "Array.from(document.querySelectorAll('.client-button')).map((button) => button.textContent.trim())");
@@ -102,20 +102,24 @@ try {
   assert(await evaluate(client, "location.hash") === "#tasks", "Task navigation did not update the view");
   assert(await evaluate(client, "document.querySelectorAll('.table-row').length") === 8, "Pocket task list count is incorrect");
 
-  await evaluate(client, "document.querySelector('.role-trigger').click()")
-  await evaluate(client, "Array.from(document.querySelectorAll('.role-menu button')).find((button) => button.textContent.includes('고객사')).click()")
-  await delay(120);
-  assert(await evaluate(client, "document.querySelectorAll('.table-row').length") === 7, "Client visibility filter is incorrect");
-  assert(await evaluate(client, "!document.body.textContent.includes('NS 마케팅')") === true, "Client view exposed executor identity");
+  assert(await evaluate(client, "Boolean(document.querySelector('.actor-badge'))") === true, "Server actor badge did not render");
+  assert(await evaluate(client, "document.querySelector('.role-trigger') === null") === true, "Demo role switcher must not render");
+  assert(await evaluate(client, "document.querySelector('.brand-mark') === null") === true, "Removed Pocket P logo returned");
+  assert(await evaluate(client, "document.querySelector('.sidebar-footer .icon-button') === null") === true, "Removed sidebar footer icon returned");
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('콘텐츠')).click()")
-  await evaluate(client, "Array.from(document.querySelectorAll('.view-actions button')).find((button) => button.textContent.includes('캘린더')).click()")
-  await delay(100);
-  assert(await evaluate(client, "Boolean(document.querySelector('.calendar-board'))") === true, "Content calendar toggle failed");
+  await delay(150);
+  assert(await evaluate(client, "document.querySelectorAll('.content-card').length") === 6, "Content records did not render");
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('성과')).click()")
-  await delay(100);
-  assert(await evaluate(client, "document.querySelectorAll('.kpi-card').length") === 6, "Performance KPI cards did not render");
+  await delay(350);
+  const kpiCount = await evaluate(client, "document.querySelectorAll('.kpi-card').length");
+  if (kpiCount !== 6) {
+    const performanceText = await evaluate(client, "document.querySelector('.content-canvas')?.innerText || ''");
+    console.error(`Performance debug (${kpiCount} cards): ${performanceText.slice(0, 800)}`);
+    console.error(JSON.stringify(client.events.filter((event) => event.method === "Runtime.exceptionThrown" || event.method === "Log.entryAdded").slice(-5), null, 2));
+  }
+  assert(kpiCount === 6, "Performance KPI cards did not render");
 
   await evaluate(client, "document.querySelectorAll('.client-button')[1].click()")
   await delay(100);
@@ -124,6 +128,7 @@ try {
   await client.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await client.send("Page.reload", { ignoreCache: true });
   await delay(700);
+  assert(await evaluate(client, "getComputedStyle(document.querySelector('.mobile-menu-button')).display !== 'none'") === true, "Mobile menu trigger is hidden");
   const mobileOverflow = await evaluate(client, "document.documentElement.scrollWidth > window.innerWidth");
   assert(mobileOverflow === false, "Mobile view has horizontal overflow");
 
@@ -143,7 +148,7 @@ try {
   assert(seriousEvents.length === 0, `Browser console contains ${seriousEvents.length} error/warning events`);
 
   client.close();
-  console.log("UI smoke test passed: navigation, role visibility, filters, calendar, KPI, client switch, mobile overflow, console.");
+  console.log("UI smoke test passed: data adapter, navigation, fixed actor role, filters, KPI, client switch, mobile overflow, console.");
 } finally {
   chrome.kill();
 }

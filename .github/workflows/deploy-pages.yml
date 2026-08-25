@@ -32,6 +32,10 @@ jobs:
 
       - name: Build
         working-directory: frontend
+        env:
+          VITE_POCKET_API_URL: ${{ vars.POCKET_API_URL }}
+          VITE_POCKET_API_MODE: live
+          VITE_POCKET_API_CREDENTIALS: omit
         run: npm run build
 
       - name: Configure Pages
@@ -55,4 +59,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

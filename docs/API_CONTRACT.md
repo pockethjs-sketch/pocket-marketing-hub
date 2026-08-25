@@ -1,6 +1,6 @@
 # 화면별 읽기 API 계약
 
-공개 GitHub Pages는 현재 비식별 데모 데이터를 사용합니다. 아래 계약은 실제 Google Sheets 원장을 연결할 때 Apps Script 또는 인증 프록시가 반환해야 할 최소 구조입니다.
+GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니다. 비식별 데모는 API 주소가 없는 로컬 UI 검증에만 사용합니다.
 
 ## 공통 응답
 
@@ -40,7 +40,15 @@
 | `files` | 자료 | 공개 범위가 허용된 파일 링크만 |
 | `activity` | 활동 | 안전한 요약 문장으로 투영한 이벤트만 |
 
-Apps Script에서는 URL 경로 대신 `?action=project_overview&project_id=...` 형태로 라우팅한다.
+Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `action`, `projectId`로 라우팅한다. 인증 세션도 query string이나 커스텀 헤더가 아니라 JSON 본문의 `auth.sessionToken`으로 전달한다.
+
+```json
+{
+  "action": "project_overview",
+  "auth": { "sessionToken": "signed-session" },
+  "projectId": "PRJ-..."
+}
+```
 
 ## 역할별 공개 단계
 
@@ -59,4 +67,3 @@ Apps Script에서는 URL 경로 대신 `?action=project_overview&project_id=...`
 - 목록 기본 30건, 최대 100건
 - 커서는 시트 행 번호가 아닌 `updated_at + immutable_id` 기반 불투명 토큰 사용
 - 캐시 키에 `user_id`, `role`, `project_id`, `visibility`, `dateRange`를 포함
-

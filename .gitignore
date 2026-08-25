@@ -3,9 +3,14 @@ Thumbs.db
 node_modules/
 .env
 .env.*
+!.env.example
+!**/.env.example
 *.log
 dist/
 tmp/
+.clasp.json
+Secrets.gs
+apps-script/.local-secrets.json
 
 # Local design references and QA captures may include internal source material.
 docs/source-*.png

@@ -1,0 +1,189 @@
+var MH_SPREADSHEET_CACHE = null;
+
+function mhSpreadsheet_() {
+  if (MH_SPREADSHEET_CACHE) return MH_SPREADSHEET_CACHE;
+  var spreadsheetId = mhSetting_(MH_PROPERTY_KEYS.SHEET_ID, '');
+  if (!spreadsheetId) {
+    throw mhApiError_('configuration_error', 'missing_spreadsheet_id', 500);
+  }
+  try {
+    MH_SPREADSHEET_CACHE = SpreadsheetApp.openById(spreadsheetId);
+    return MH_SPREADSHEET_CACHE;
+  } catch (error) {
+    throw mhApiError_('configuration_error', 'spreadsheet_unavailable', 500);
+  }
+}
+
+function mhSheet_(sheetName) {
+  var sheet = mhSpreadsheet_().getSheetByName(sheetName);
+  if (!sheet) throw mhApiError_('schema_mismatch', 'missing_sheet', 500);
+  return sheet;
+}
+
+function mhReadTable_(sheetName) {
+  var sheet = mhSheet_(sheetName);
+  var lastRow = sheet.getLastRow();
+  var lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1) throw mhApiError_('schema_mismatch', 'missing_headers', 500);
+  var values = sheet.getRange(1, 1, Math.max(lastRow, 1), lastColumn).getValues();
+  var headers = values[0].map(function (value) { return mhAsText_(value); });
+  if (!headers[0]) throw mhApiError_('schema_mismatch', 'missing_primary_header', 500);
+  var headerSeen = {};
+  headers.forEach(function (header) {
+    if (!header) return;
+    if (headerSeen[header]) throw mhApiError_('schema_mismatch', 'duplicate_header', 500);
+    headerSeen[header] = true;
+  });
+  var rows = [];
+  for (var rowIndex = 1; rowIndex < values.length; rowIndex += 1) {
+    if (!mhNonEmpty_(values[rowIndex][0])) continue;
+    var row = {};
+    headers.forEach(function (header, columnIndex) {
+      if (header) row[header] = values[rowIndex][columnIndex];
+    });
+    row.__rowNumber = rowIndex + 1;
+    rows.push(row);
+  }
+  return { sheet: sheet, headers: headers, rows: rows };
+}
+
+function mhActiveRows_(sheetName) {
+  return mhReadTable_(sheetName).rows.filter(function (row) {
+    return !mhNonEmpty_(row.archived_at);
+  });
+}
+
+function mhFindRecord_(sheetName, idField, id) {
+  var table = mhReadTable_(sheetName);
+  var target = mhAsText_(id);
+  var found = null;
+  for (var i = 0; i < table.rows.length; i += 1) {
+    if (mhAsText_(table.rows[i][idField]) === target) {
+      if (found) throw mhApiError_('schema_mismatch', 'duplicate_primary_key', 500);
+      found = table.rows[i];
+    }
+  }
+  return { table: table, row: found };
+}
+
+function mhHeaderIndex_(headers, field) {
+  var index = headers.indexOf(field);
+  if (index < 0) throw mhApiError_('schema_mismatch', 'missing_field', 500);
+  return index;
+}
+
+function mhAppendRecord_(sheetName, record) {
+  var table = mhReadTable_(sheetName);
+  var values = table.headers.map(function (header) {
+    return Object.prototype.hasOwnProperty.call(record, header) ? record[header] : '';
+  });
+  table.sheet.appendRow(values);
+  SpreadsheetApp.flush();
+  return record;
+}
+
+function mhUpdateRecord_(table, rowNumber, record) {
+  var range = table.sheet.getRange(rowNumber, 1, 1, table.headers.length);
+  var current = range.getValues()[0];
+  var formulas = range.getFormulas()[0];
+  table.headers.forEach(function (header, index) {
+    if (!Object.prototype.hasOwnProperty.call(record, header)) return;
+    var next = record[header];
+    var same = mhStableJson_(mhToIsoValue_(current[index])) === mhStableJson_(mhToIsoValue_(next));
+    if (same) return;
+    if (formulas[index]) throw mhApiError_('schema_mismatch', 'formula_field_is_server_read_only', 500);
+    table.sheet.getRange(rowNumber, index + 1).setValue(next);
+  });
+  SpreadsheetApp.flush();
+  return record;
+}
+
+function mhAssertHeaders_(sheetName, requiredHeaders) {
+  var headers = mhReadTable_(sheetName).headers;
+  var missing = requiredHeaders.filter(function (header) {
+    return headers.indexOf(header) < 0;
+  });
+  if (missing.length) throw mhApiError_('schema_mismatch', 'missing_required_headers', 500);
+}
+
+function mhSchemaCheck_() {
+  Object.keys(MH_SHEETS).forEach(function (key) { mhReadTable_(MH_SHEETS[key]); });
+  mhAssertHeaders_(MH_SHEETS.CLIENTS, ['client_id', 'display_name', 'status_code', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.USERS, ['user_id', 'email', 'role_code', 'status_code', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.MEMBERSHIPS, ['membership_id', 'user_id', 'client_id', 'project_id', 'permission_code', 'status_code', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.PROJECTS, ['project_id', 'client_id', 'project_name', 'client_view_enabled', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.CHANNELS, ['project_channel_id', 'client_id', 'project_id', 'channel_code', 'customer_visible', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.CONTENT_VERSIONS, ['content_version_id', 'content_id', 'client_id', 'project_id', 'version_no', 'file_url', 'copy_text', 'change_summary', 'status_code', 'created_at', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.TASK_DEPENDENCIES, ['dependency_id', 'client_id', 'project_id', 'predecessor_task_id', 'successor_task_id', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.KPI_DEFINITIONS, ['kpi_id', 'client_id', 'project_id', 'metric_code', 'metric_name', 'customer_visible', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.DAILY_PERFORMANCE, ['performance_id', 'client_id', 'project_id', 'performance_date', 'channel_code', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.KPI_ACTUALS, ['kpi_actual_id', 'kpi_id', 'client_id', 'project_id', 'period_start', 'period_end', 'actual_value', 'archived_at']);
+  Object.keys(MH_ENTITY_SPECS).forEach(function (entityType) {
+    var spec = MH_ENTITY_SPECS[entityType];
+    var required = [
+      spec.idField, 'client_id', 'project_id', 'created_at', 'updated_at',
+      'row_version', 'archived_at'
+    ].concat(spec.fields);
+    if (entityType === 'task') required.push('source_code');
+    if (entityType === 'approval') required.push('requested_by_user_id');
+    if (entityType === 'file') required.push('uploaded_by_user_id');
+    mhAssertHeaders_(spec.sheet, required);
+  });
+  mhAssertHeaders_(MH_SHEETS.ACTIVITY, [
+    'event_id', 'mutation_id', 'client_id', 'project_id', 'entity_type', 'entity_id', 'action_code',
+    'before_json', 'after_json', 'actor_user_id', 'actor_role_code',
+    'event_status_code', 'created_at'
+  ]);
+  mhAssertHeaders_(MH_SHEETS.SYNC_STATUS, ['sync_status_id', 'client_id', 'project_id', 'status_code', 'updated_at', 'archived_at']);
+  [
+    [MH_SHEETS.CLIENTS, 'client_id'], [MH_SHEETS.PROJECTS, 'project_id'],
+    [MH_SHEETS.USERS, 'user_id'], [MH_SHEETS.MEMBERSHIPS, 'membership_id'],
+    [MH_SHEETS.CHANNELS, 'project_channel_id'], [MH_SHEETS.TASKS, 'task_id'],
+    [MH_SHEETS.TASK_DEPENDENCIES, 'dependency_id'],
+    [MH_SHEETS.CONTENTS, 'content_id'], [MH_SHEETS.CONTENT_VERSIONS, 'content_version_id'],
+    [MH_SHEETS.APPROVALS, 'approval_id'], [MH_SHEETS.KPI_DEFINITIONS, 'kpi_id'],
+    [MH_SHEETS.DAILY_PERFORMANCE, 'performance_id'], [MH_SHEETS.KPI_ACTUALS, 'kpi_actual_id'],
+    [MH_SHEETS.FILES, 'file_id'], [MH_SHEETS.ACTIVITY, 'event_id'],
+    [MH_SHEETS.SYNC_STATUS, 'sync_status_id']
+  ].forEach(function (entry) { mhAssertUniqueKey_(entry[0], entry[1]); });
+  mhAssertUniqueMemberships_();
+  mhAssertTenantScopes_();
+  return true;
+}
+
+function mhAssertUniqueKey_(sheetName, idField) {
+  var seen = {};
+  mhReadTable_(sheetName).rows.forEach(function (row) {
+    var id = mhAsText_(row[idField]);
+    if (!id || seen[id]) throw mhApiError_('schema_mismatch', 'duplicate_or_empty_primary_key', 500);
+    seen[id] = true;
+  });
+}
+
+function mhAssertUniqueMemberships_() {
+  var seen = {};
+  mhActiveRows_(MH_SHEETS.MEMBERSHIPS).forEach(function (row) {
+    if (mhAsText_(row.status_code).toUpperCase() !== 'ACTIVE') return;
+    var key = [mhAsText_(row.user_id), mhAsText_(row.client_id), mhAsText_(row.project_id)].join('|');
+    if (seen[key]) throw mhApiError_('schema_mismatch', 'duplicate_active_membership', 500);
+    seen[key] = true;
+  });
+}
+
+function mhAssertTenantScopes_() {
+  var projects = {};
+  mhActiveRows_(MH_SHEETS.PROJECTS).forEach(function (row) {
+    projects[mhAsText_(row.client_id) + '|' + mhAsText_(row.project_id)] = true;
+  });
+  [
+    MH_SHEETS.CHANNELS, MH_SHEETS.TASKS, MH_SHEETS.TASK_DEPENDENCIES,
+    MH_SHEETS.CONTENTS, MH_SHEETS.CONTENT_VERSIONS, MH_SHEETS.APPROVALS, MH_SHEETS.KPI_DEFINITIONS,
+    MH_SHEETS.DAILY_PERFORMANCE, MH_SHEETS.KPI_ACTUALS, MH_SHEETS.FILES,
+    MH_SHEETS.ACTIVITY, MH_SHEETS.SYNC_STATUS
+  ].forEach(function (sheetName) {
+    mhActiveRows_(sheetName).forEach(function (row) {
+      var key = mhAsText_(row.client_id) + '|' + mhAsText_(row.project_id);
+      if (!projects[key]) throw mhApiError_('schema_mismatch', 'invalid_tenant_scope', 500);
+    });
+  });
+}
