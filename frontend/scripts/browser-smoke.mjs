@@ -94,6 +94,8 @@ try {
   await delay(900);
 
   assert(await evaluate(client, "document.querySelectorAll('.metric-card').length") === 4, "Overview metrics did not render");
+  const clientLabels = await evaluate(client, "Array.from(document.querySelectorAll('.client-button')).map((button) => button.textContent.trim())");
+  assert(JSON.stringify(clientLabels) === JSON.stringify(["UND", "무극"]), "Client rail must show full client names");
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('업무')).click()")
   await delay(120);
