@@ -68,9 +68,9 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
     setItem: (key, value) => storageMap.set(key, value),
     removeItem: (key) => storageMap.delete(key),
   };
-  globalThis.fetch = async (_url, options) => {
+  globalThis.fetch = async (url, options) => {
     const body = JSON.parse(options.body);
-    calls.push({ options, body });
+    calls.push({ url: String(url), options, body });
     const data = body.action === "login"
       ? { token: "session-token", expiresIn: 3600, user: { userId: "U-1", displayName: "포켓", role: "POCKET_MANAGER" } }
       : { currentUser: {}, clients: [], projects: [], channels: [] };
@@ -105,6 +105,7 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
     calls.forEach((call) => {
       assert.equal(call.options.method, "POST");
       assert.equal(call.options.headers["Content-Type"], "text/plain;charset=UTF-8");
+      assert.ok(new URL(call.url).searchParams.get("_mh"), "Apps Script redirect cache buster is required");
     });
     assert.equal(calls[0].body.email, "pocket@hub.local");
     assert.equal(calls[1].body.auth.sessionToken, "session-token");
@@ -152,6 +153,39 @@ test("workspace 조회는 project_snapshot 액션으로 프로젝트 범위를 �
     assert.equal(calls[1].projectId, "P-1");
     assert.equal(calls[1].limit, 200);
     assert.equal(calls[1].auth.sessionToken, "session-token");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("실행계획 조회는 선택한 계획 유형을 API에 전달한다", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const storageMap = new Map();
+  const storage = {
+    getItem: (key) => storageMap.get(key) || null,
+    setItem: (key, value) => storageMap.set(key, value),
+    removeItem: (key) => storageMap.delete(key),
+  };
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body);
+    const data = body.action === "login"
+      ? { token: "session-token", expiresIn: 3600, user: { userId: "U-1", role: "POCKET_MANAGER" } }
+      : { plan: {}, sections: [] };
+    return new Response(JSON.stringify({ ok: true, generatedAt: "2026-08-26T10:00:00+09:00", data }), { status: 200 });
+  };
+
+  try {
+    const api = createHubApi(
+      { endpoint: "https://example.invalid/api", timeoutMs: 3000, credentials: "omit" },
+      { sessionStore: createSessionStore(storage) },
+    );
+    await api.login({ account: "manager@example.com", accessCode: "access-code" });
+    await api.plan({ projectId: "P-1", planType: "INTERNAL" });
+    assert.equal(calls[1].action, "project_plan");
+    assert.equal(calls[1].projectId, "P-1");
+    assert.equal(calls[1].planType, "INTERNAL");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -377,7 +411,8 @@ test("project_snapshot을 탭별 캐시 뷰모델로 분해한다", () => {
   const views = workspaceViewModel({
     generatedAt: "2026-08-26T11:00:00+09:00",
     data: {
-      plan: { plan: { plan_id: "PLAN-1", title: "90일 계획" }, sections: [] },
+      plan: { plan: { plan_id: "PLAN-1", title: "고객 공유 계획" }, sections: [] },
+      internalPlan: { plan: { plan_id: "PLAN-2", title: "내부 실행 계획" }, sections: [] },
       tasks: { totalMatching: 1, items: [{ task_id: "T-1", title: "업무", status_code: "IN_PROGRESS" }] },
       contents: { totalMatching: 1, items: [{ content_id: "C-1", title: "콘텐츠", status_code: "PLANNED" }] },
       performance: { definitions: [], actuals: [], channels: [] },
@@ -386,8 +421,9 @@ test("project_snapshot을 탭별 캐시 뷰모델로 분해한다", () => {
     },
   });
 
-  assert.deepEqual(Object.keys(views).sort(), ["content", "files", "performance", "plan", "tasks"]);
-  assert.equal(views.plan.id, "PLAN-1");
+  assert.deepEqual(Object.keys(views).sort(), ["content", "files", "performance", "plan-client", "plan-internal", "tasks"]);
+  assert.equal(views["plan-client"].id, "PLAN-1");
+  assert.equal(views["plan-internal"].id, "PLAN-2");
   assert.equal(views.tasks.items[0].id, "T-1");
   assert.equal(views.content.items[0].id, "C-1");
   assert.equal(views.files.files.items[0].id, "F-1");

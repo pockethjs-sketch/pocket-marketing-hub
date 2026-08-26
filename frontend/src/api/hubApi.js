@@ -25,6 +25,7 @@ function scopeQuery(params = {}) {
     query: params.query,
     status: params.status,
     channel: params.channel,
+    planType: params.planType,
   };
 }
 

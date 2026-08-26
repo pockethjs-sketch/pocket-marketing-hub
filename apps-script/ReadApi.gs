@@ -40,6 +40,7 @@ function mhClientReadCacheKey_(action, request, actor, projectId) {
     filters: request.filters || null,
     startDate: request.startDate || request.start_date || null,
     endDate: request.endDate || request.end_date || null,
+    planType: request.planType || request.plan_type || null,
     query: request.query || null,
     limit: request.limit || null,
     cursor: request.cursor || null
@@ -90,15 +91,28 @@ function mhRememberClientRead_(action, request, actor, projectId, data) {
 function mhReadProjectPlan_(request, actor, project) {
   var projectId = mhAsText_(project.project_id);
   var clientId = mhAsText_(project.client_id);
+  var planType = mhNormalizeProjectPlanType_(request.planType || request.plan_type);
+  if (planType === 'INTERNAL' && actor.role === 'CLIENT_VIEWER') {
+    throw mhApiError_('forbidden', 'internal_plan_requires_project_team', 403);
+  }
+  var sourceCode = planType === 'INTERNAL'
+    ? 'INTERNAL_EXECUTION_PLAN'
+    : 'CLIENT_APPROVED_PLAN';
   var plans = mhProjectRows_(MH_SHEETS.PLANS, clientId, projectId, actor).filter(function (row) {
-    return mhAsText_(row.status_code).toUpperCase() === 'PUBLISHED';
+    return mhAsText_(row.status_code).toUpperCase() === 'PUBLISHED' &&
+      mhAsText_(row.source_code).toUpperCase() === sourceCode;
   }).sort(function (a, b) {
     var left = mhComparableDate_(a.effective_at);
     var right = mhComparableDate_(b.effective_at);
     if (left !== right) return left < right ? 1 : -1;
     return Number(b.row_version || 0) - Number(a.row_version || 0);
   });
-  if (!plans.length) return { project: mhPlanProjectProjection_(project), plan: null, sections: [] };
+  if (!plans.length) return {
+    project: mhPlanProjectProjection_(project),
+    planType: planType,
+    plan: null,
+    sections: []
+  };
 
   var plan = plans[0];
   var sections = mhProjectRows_(MH_SHEETS.PLAN_SECTIONS, clientId, projectId, actor).filter(function (row) {
@@ -118,15 +132,35 @@ function mhReadProjectPlan_(request, actor, project) {
     });
   });
 
+  var projectedPlan = mhNormalizeRow_(mhPick_(plan, [
+    'plan_id', 'version_label', 'title', 'summary', 'build_weeks',
+    'operation_months', 'monthly_output_target', 'initial_output_target',
+    'primary_goal', 'status_code', 'effective_at', 'updated_at'
+  ]));
+  projectedPlan.plan_type_code = planType;
   return {
     project: mhPlanProjectProjection_(project),
-    plan: mhNormalizeRow_(mhPick_(plan, [
-      'plan_id', 'version_label', 'title', 'summary', 'build_weeks',
-      'operation_months', 'monthly_output_target', 'initial_output_target',
-      'primary_goal', 'status_code', 'effective_at', 'updated_at'
-    ])),
+    planType: planType,
+    plan: projectedPlan,
     sections: sections
   };
+}
+
+function mhNormalizeProjectPlanType_(value) {
+  var normalized = mhAsText_(value || 'CLIENT_SHARE').toUpperCase();
+  if (normalized === 'CLIENT') normalized = 'CLIENT_SHARE';
+  if (normalized !== 'CLIENT_SHARE' && normalized !== 'INTERNAL') {
+    throw mhApiError_('invalid_request', 'invalid_plan_type', 400);
+  }
+  return normalized;
+}
+
+function mhPlanRequest_(request, planType) {
+  var result = {};
+  Object.keys(request || {}).forEach(function (key) { result[key] = request[key]; });
+  result.planType = planType;
+  delete result.plan_type;
+  return result;
 }
 
 /**
@@ -136,8 +170,13 @@ function mhReadProjectPlan_(request, actor, project) {
  * execution lets their full-table reads reuse mhReadTable_'s memory cache.
  */
 function mhReadProjectSnapshot_(request, actor, project) {
+  var clientPlan = mhReadProjectPlan_(mhPlanRequest_(request, 'CLIENT_SHARE'), actor, project);
+  var internalPlan = actor.role === 'CLIENT_VIEWER'
+    ? null
+    : mhReadProjectPlan_(mhPlanRequest_(request, 'INTERNAL'), actor, project);
   return {
-    plan: mhReadProjectPlan_(request, actor, project),
+    plan: clientPlan,
+    internalPlan: internalPlan,
     tasks: mhReadTasks_(request, actor, project),
     contents: mhReadContents_(request, actor, project),
     performance: mhReadPerformance_(request, actor, project),

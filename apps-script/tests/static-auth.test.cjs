@@ -260,7 +260,6 @@ assert.deepEqual(orderedTaskIds, ['TSK-01A', 'TSK-01B', 'TSK-02', 'TSK-54']);
 assert.equal(context.MH_READ_ACTIONS.project_snapshot, true);
 const snapshotCallOrder = [];
 const snapshotReaders = [
-  ['mhReadProjectPlan_', 'plan'],
   ['mhReadTasks_', 'tasks'],
   ['mhReadContents_', 'contents'],
   ['mhReadPerformance_', 'performance'],
@@ -268,8 +267,15 @@ const snapshotReaders = [
   ['mhReadActivity_', 'activity'],
 ];
 const originalSnapshotReaders = Object.fromEntries(snapshotReaders.map(([name]) => [name, context[name]]));
+const originalPlanReader = context.mhReadProjectPlan_;
 const snapshotActor = { userId: 'USR-SNAPSHOT', role: 'CLIENT_VIEWER' };
 const snapshotProject = { client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001' };
+context.mhReadProjectPlan_ = (request, actor, project) => {
+  assert.equal(actor, snapshotActor);
+  assert.equal(project, snapshotProject);
+  snapshotCallOrder.push(`plan:${request.planType}`);
+  return { resource: `plan:${request.planType}` };
+};
 snapshotReaders.forEach(([name, key]) => {
   context[name] = (request, actor, project) => {
     assert.equal(request.limit, 200);
@@ -284,13 +290,78 @@ const snapshot = JSON.parse(JSON.stringify(context.mhReadProjectSnapshot_(
   snapshotActor,
   snapshotProject,
 )));
-assert.deepEqual(snapshotCallOrder, snapshotReaders.map(([, key]) => key));
-assert.deepEqual(snapshot, Object.fromEntries(snapshotReaders.map(([, key]) => [key, { resource: key }])));
+assert.deepEqual(snapshotCallOrder, ['plan:CLIENT_SHARE', ...snapshotReaders.map(([, key]) => key)]);
+assert.deepEqual(snapshot, {
+  plan: { resource: 'plan:CLIENT_SHARE' },
+  internalPlan: null,
+  ...Object.fromEntries(snapshotReaders.map(([, key]) => [key, { resource: key }])),
+});
+context.mhReadProjectPlan_ = originalPlanReader;
 Object.entries(originalSnapshotReaders).forEach(([name, reader]) => { context[name] = reader; });
+
+assert.equal(context.mhNormalizeProjectPlanType_(), 'CLIENT_SHARE');
+assert.equal(context.mhNormalizeProjectPlanType_('client'), 'CLIENT_SHARE');
+assert.equal(context.mhNormalizeProjectPlanType_('INTERNAL'), 'INTERNAL');
+assert.throws(() => context.mhNormalizeProjectPlanType_('UNKNOWN'));
+assert.throws(() => context.mhReadProjectPlan_(
+  { planType: 'INTERNAL' },
+  { role: 'CLIENT_VIEWER' },
+  snapshotProject,
+));
+
+const originalProjectRows = context.mhProjectRows_;
+const planRows = [{
+  plan_id: 'PLAN-CLIENT', client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001',
+  source_code: 'CLIENT_APPROVED_PLAN', status_code: 'PUBLISHED', visibility_code: 'CLIENT',
+  effective_at: '2026-08-25', row_version: 1, title: '공유 계획',
+}, {
+  plan_id: 'PLAN-INTERNAL', client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001',
+  source_code: 'INTERNAL_EXECUTION_PLAN', status_code: 'PUBLISHED', visibility_code: 'PROJECT_TEAM',
+  effective_at: '2026-08-25', row_version: 1, title: '내부 계획',
+}];
+const sectionRows = [{
+  plan_section_id: 'SEC-TEAM', plan_id: 'PLAN-INTERNAL', source_code: 'INTERNAL_EXECUTION_PLAN',
+  status_code: 'PUBLISHED', visibility_code: 'PROJECT_TEAM', sort_order: 1,
+  section_code: 'S1', title: '실행 본문', body_html: '<p>팀 공개</p>',
+}, {
+  plan_section_id: 'SEC-POCKET', plan_id: 'PLAN-INTERNAL', source_code: 'INTERNAL_EXECUTION_PLAN',
+  status_code: 'PUBLISHED', visibility_code: 'POCKET_ONLY', sort_order: 2,
+  section_code: 'A1', title: '포켓 부록', body_html: '<p>포켓 전용</p>',
+}];
+context.mhProjectRows_ = (sheetName, _clientId, _projectId, actor) => {
+  const rows = sheetName === context.MH_SHEETS.PLANS ? planRows : sectionRows;
+  return rows.filter((row) => context.mhCanSeeRow_(actor, row));
+};
+const teamInternalPlan = JSON.parse(JSON.stringify(context.mhReadProjectPlan_(
+  { planType: 'INTERNAL' },
+  { role: 'EXECUTOR_EDITOR' },
+  snapshotProject,
+)));
+assert.equal(teamInternalPlan.plan.plan_id, 'PLAN-INTERNAL');
+assert.equal(teamInternalPlan.plan.plan_type_code, 'INTERNAL');
+assert.deepEqual(teamInternalPlan.sections.map((row) => row.plan_section_id), ['SEC-TEAM']);
+const pocketInternalPlan = JSON.parse(JSON.stringify(context.mhReadProjectPlan_(
+  { planType: 'INTERNAL' },
+  { role: 'POCKET_EDITOR' },
+  snapshotProject,
+)));
+assert.deepEqual(pocketInternalPlan.sections.map((row) => row.plan_section_id), ['SEC-TEAM', 'SEC-POCKET']);
+context.mhProjectRows_ = originalProjectRows;
+
+const clientPlanCacheKey = context.mhClientReadCacheKey_(
+  'project_plan', { planType: 'CLIENT_SHARE' }, snapshotActor, 'PRJ-UND-90D-001',
+);
+const internalPlanCacheKey = context.mhClientReadCacheKey_(
+  'project_plan', { planType: 'INTERNAL' }, snapshotActor, 'PRJ-UND-90D-001',
+);
+assert.notEqual(clientPlanCacheKey, internalPlanCacheKey);
 
 const readApiSource = fs.readFileSync(path.join(root, 'ReadApi.gs'), 'utf8');
 assert.match(readApiSource, /action === 'project_snapshot'\) data = mhReadProjectSnapshot_/);
 assert.match(fs.readFileSync(path.join(root, 'Router.gs'), 'utf8'), /if \(MH_READ_ACTIONS\[action\]\)/);
+assert.doesNotMatch(fs.readFileSync(path.join(root, 'Router.gs'), 'utf8'), /migrate_und_plan_variants_v2/);
+assert.match(fs.readFileSync(path.join(root, 'PlanMigrations.gs'), 'utf8'), /INTERNAL_EXECUTION_PLAN/);
+assert.match(fs.readFileSync(path.join(root, '..', '.gitignore'), 'utf8'), /UndInternalPlan\.generated\.gs/);
 const projectPlanReaderSource = readApiSource.slice(
   readApiSource.indexOf('function mhReadProjectPlan_'),
   readApiSource.indexOf('function mhReadProjectSnapshot_'),

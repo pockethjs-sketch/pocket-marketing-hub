@@ -47,6 +47,7 @@
 - UND 업무 템플릿 144개
 - UND KPI 정의 22개
 - UND 클라이언트 공유 실행계획 승인본 1개 / 섹션 10개
+- UND 내부 실행계획은 운영 원장에 설치했습니다. 본문 10개는 `PROJECT_TEAM`, 실행팀 부록 11개는 `POCKET_ONLY`로 분리하며, 공유용 10개와 합쳐 계획 2행·섹션 31행을 유지합니다.
 - 참조 HTML 3개
 - 데모 고객사·프로젝트 없음. 현재 활성 운영 범위는 UND 프로젝트이다.
 
@@ -85,6 +86,17 @@
 ## 클라이언트 공유 실행계획
 
 `17_실행계획`은 승인본의 버전·기간·목표를 저장하고 `18_실행계획섹션`은 실행 개요부터 미팅 결정사항까지 10개 섹션을 순서대로 저장합니다. 원본 HTML의 스크립트·스타일·SVG 장식은 저장 전에 제거하며, 서버와 브라우저가 본문 HTML을 각각 다시 정제합니다. 공개 행은 `visibility_code = CLIENT`, `source_code = CLIENT_APPROVED_PLAN`, `status_code = PUBLISHED`만 사용합니다. 실행계획은 읽기 전용이며 실제 진행률은 `06_업무`, 발행 실적은 `08_콘텐츠`에서 별도로 계산합니다.
+
+## 내부 실행계획
+
+내부 실행계획도 별도 JSON 셀이나 새 탭을 만들지 않고 `17_실행계획` / `18_실행계획섹션`에 같은 정규화 구조로 저장합니다. 계획 종류는 기존 `source_code`로 구분합니다.
+
+| 계획 종류 | source_code | 계획 공개 범위 | 섹션 공개 범위 |
+|---|---|---|---|
+| 클라이언트 공유용 | `CLIENT_APPROVED_PLAN` | `CLIENT` | `CLIENT` |
+| 내부 실행계획 | `INTERNAL_EXECUTION_PLAN` | `PROJECT_TEAM` | 본문 `PROJECT_TEAM`, 실행팀 부록 `POCKET_ONLY` |
+
+내부 원문을 Git에 커밋하지 않습니다. `scripts/generate-und-internal-plan.mjs`가 로컬 원문을 정제해 gitignored 임시 Apps Script 번들을 만들고, 관리자 마이그레이션으로 원장에 안정적인 ID를 upsert한 뒤 임시 번들은 배포 소스에서 제거했습니다. 고객 역할은 내부 계획을 요청할 수 없고 내부 계획 행 자체도 `mhCanSeeRow_` 공개 범위 검사를 거칩니다.
 
 ## 화면 데이터 매핑
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { getNavigationPresentation, nextDesktopNavigationLevel } from "../src/navigationState.js";
+import { parseViewLocation, viewLocationHash, viewResourceKey } from "../src/planNavigation.js";
 
 test("데스크톱 탐색은 메인 → 프로젝트 메뉴 → 전체 프로젝트 순서로 한 단계씩 열린다", () => {
   const mainOnly = getNavigationPresentation({ role: "client", desktopLevel: 0 });
@@ -42,4 +43,13 @@ test("작은 화면에서는 포켓·NS 계정도 임시 탐색 서랍을 사용
   assert.equal(navigation.isDrawerOpen, true);
   assert.equal(navigation.clientRailVisible, true);
   assert.equal(navigation.projectSidebarVisible, true);
+});
+
+test("실행계획 하위 화면은 URL과 캐시 키에서 서로 분리된다", () => {
+  assert.deepEqual(parseViewLocation("#plan/client"), { view: "plan", planVariant: "client" });
+  assert.deepEqual(parseViewLocation("#plan/internal"), { view: "plan", planVariant: "internal" });
+  assert.deepEqual(parseViewLocation("#plan"), { view: "plan", planVariant: "client" });
+  assert.equal(viewLocationHash("plan", "internal"), "plan/internal");
+  assert.equal(viewResourceKey("plan", "client"), "plan-client");
+  assert.equal(viewResourceKey("plan", "internal"), "plan-internal");
 });

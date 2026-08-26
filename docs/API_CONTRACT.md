@@ -35,7 +35,7 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 | `preview_overview` | 로그인 없는 첫 총괄 | 공개 허용 프로젝트의 총괄 projection; bootstrap과 병렬 호출 |
 | `bootstrap` | 앱 셸·고객사 레일 | 로그인 사용자가 볼 수 있는 고객사·프로젝트 요약만 |
 | `project_overview` | 총괄 현황 | 핵심 집계, 단계·분야 진행, 확인 항목, 최근 활동 상위 5개 |
-| `project_plan` | 실행계획 | 해당 프로젝트의 최신 PUBLISHED 승인본과 CLIENT 공개 섹션 10개 |
+| `project_plan` | 실행계획 | `planType=CLIENT_SHARE|INTERNAL`에 해당하는 최신 PUBLISHED 계획과 역할별 공개 섹션 |
 | `project_snapshot` | 후속 탭 사전 준비 | 실행계획·업무·콘텐츠·성과·자료·활동의 역할별 projection을 한 응답으로 묶음 |
 | `tasks` | 업무 | 필터된 업무 목록, 프로젝트 일정, 08_콘텐츠 발행 집계; 기본 30건·최대 200건 |
 | `contents` | 콘텐츠 | 최대 92일의 콘텐츠와 현재 버전·검수 상태 |
@@ -44,7 +44,7 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 | `files` | 자료 | 공개 범위가 허용된 파일 링크만 |
 | `activity` | 활동 | 안전한 요약 문장으로 투영한 이벤트만 |
 
-Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `action`, `projectId`로 라우팅한다. 인증 세션도 query string이나 커스텀 헤더가 아니라 JSON 본문의 `auth.sessionToken`으로 전달한다.
+Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `action`, `projectId`로 라우팅한다. 인증 세션도 query string이나 커스텀 헤더가 아니라 JSON 본문의 `auth.sessionToken`으로 전달한다. 프런트는 각 요청 URL에 데이터 의미와 무관한 `_mh` 난수를 붙여 만료된 Apps Script 302 리다이렉트가 재사용되는 것을 막는다.
 
 ```json
 {
@@ -66,11 +66,13 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 ### 실행계획 응답
 
-`project_plan`은 개별 fallback 조회와 `project_snapshot`의 실행계획 항목에 같은 reader를 사용합니다. `plan`에는 최신 승인본 메타데이터를, `sections`에는 `sort_order` 순서의 정제된 본문을 반환합니다. 원본 파일 링크·내부 원천 코드·편집 필드는 반환하지 않으며 고객은 이 action으로 저장할 수 없습니다. 계획 응답은 프로젝트·역할별로 최대 5분 캐시합니다.
+`project_plan`은 개별 fallback 조회와 `project_snapshot`의 실행계획 항목에 같은 reader를 사용합니다. 요청의 `planType`은 `CLIENT_SHARE` 또는 `INTERNAL`이며 생략하면 하위 호환을 위해 `CLIENT_SHARE`입니다. `plan`에는 최신 승인본 메타데이터와 파생 `plan_type_code`를, `sections`에는 `sort_order` 순서의 정제된 본문을 반환합니다. 원본 파일 링크·내부 원천 코드·편집 필드는 반환하지 않으며 고객은 이 action으로 저장할 수 없습니다. 계획 응답은 프로젝트·역할별로 최대 5분 캐시합니다.
+
+`CLIENT_VIEWER`가 `INTERNAL`을 요청하면 `403 internal_plan_requires_project_team`으로 거부합니다. 실행사는 내부 계획의 `PROJECT_TEAM` 본문만, 포켓 역할은 그 본문과 `POCKET_ONLY` 실행팀 부록을 함께 봅니다. 캐시 키에도 `planType`을 포함해 두 계획의 응답이 섞이지 않게 합니다.
 
 ### 프로젝트 스냅샷 응답
 
-`project_snapshot`은 첫 총괄 화면을 막지 않고 그 뒤에 실행되는 읽기 최적화 API입니다. `plan`, `tasks`, `contents`, `performance`, `files`, `activity`를 기존 reader 그대로 호출하므로 역할·프로젝트 권한, 공개 범위, 필드 제거, 기간·건수 제한은 개별 API와 동일합니다. `overview`는 첫 진입 시 이미 병렬 조회하므로 스냅샷에 중복 포함하지 않습니다. 스냅샷 실패 시 프런트는 필요한 탭의 개별 API를 다시 호출합니다.
+`project_snapshot`은 첫 총괄 화면을 막지 않고 그 뒤에 실행되는 읽기 최적화 API입니다. 하위 호환 `plan`에는 클라이언트 공유용 계획을, `internalPlan`에는 현재 역할이 내부 계획을 볼 수 있을 때만 내부 계획을 넣습니다. 고객 응답의 `internalPlan`은 `null`입니다. 이외 `tasks`, `contents`, `performance`, `files`, `activity`는 기존 reader 그대로 호출하므로 역할·프로젝트 권한, 공개 범위, 필드 제거, 기간·건수 제한은 개별 API와 동일합니다. `overview`는 첫 진입 시 이미 병렬 조회하므로 스냅샷에 중복 포함하지 않습니다. 스냅샷 실패 시 프런트는 필요한 탭의 개별 API를 다시 호출합니다.
 
 ### 업무 응답
 

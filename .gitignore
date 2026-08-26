@@ -11,6 +11,7 @@ tmp/
 .clasp.json
 Secrets.gs
 apps-script/.local-secrets.json
+apps-script/UndInternalPlan.generated.gs
 
 # Local design references and QA captures may include internal source material.
 docs/source-*.png

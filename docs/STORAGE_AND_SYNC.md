@@ -48,7 +48,8 @@
 - `POST action=preview_overview`: 공개 허용 프로젝트의 첫 총괄을 bootstrap과 병렬 조회
 - `POST action=bootstrap`: 로그인 사용자가 볼 수 있는 고객사·프로젝트·채널
 - `POST action=project_overview`: 총괄 화면에 필요한 집계와 상위 항목
-- `POST action=project_snapshot`: 실행계획·업무·콘텐츠·성과·자료·활동을 한 실행에서 조회해 후속 탭 캐시 구성
+- `POST action=project_plan`: `planType=CLIENT_SHARE|INTERNAL`로 계획 종류를 고르고, 서버 역할에 허용된 섹션만 조회
+- `POST action=project_snapshot`: 클라이언트 공유 계획과 허용 시 내부 계획, 업무·콘텐츠·성과·자료·활동을 한 실행에서 조회해 후속 탭 캐시 구성
 - `POST action=tasks|contents|approvals|performance|files|activity`: 화면별 지연 조회
 - `POST action=mutate`: 행 단위 생성·수정·보관
 - `POST action=deep_health`: 관리자 전용 시트 접근·전체 스키마 검사

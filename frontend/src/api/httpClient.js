@@ -59,6 +59,10 @@ export function createHttpClient(config) {
   async function request(action, options = {}) {
     const method = "POST";
     const url = new URL(config.endpoint);
+    // Apps Script responds through a short-lived googleusercontent redirect.
+    // A unique query value prevents browsers/proxies from reusing an expired
+    // 302 target, which otherwise appears as an intermittent 404/timeout.
+    url.searchParams.set("_mh", `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
 
     const controller = new AbortController();
     const detachAbort = attachAbort(options.signal, controller);

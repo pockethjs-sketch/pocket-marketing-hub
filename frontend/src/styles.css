@@ -3530,6 +3530,74 @@ table tbody tr:hover {
   font-size: 10px;
 }
 
+.project-nav-tree {
+  position: relative;
+}
+
+.project-nav-tree > button .nav-tree-chevron {
+  color: var(--muted-light);
+  transition: transform 150ms ease;
+}
+
+.project-nav-tree.is-expanded > button .nav-tree-chevron {
+  transform: rotate(180deg);
+}
+
+.project-nav-children {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 6px 20px;
+  padding-left: 12px;
+}
+
+.project-nav-children::before {
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  left: 4px;
+  width: 1px;
+  background: #dbe3ec;
+  content: "";
+}
+
+.project-nav .project-nav-children button {
+  position: relative;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  min-height: 32px;
+  margin: 0;
+  padding: 6px 8px 6px 2px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.project-nav .project-nav-children button.is-active::before {
+  display: none;
+}
+
+.nav-child-branch {
+  width: 9px;
+  height: 7px;
+  margin-top: -5px;
+  border-bottom: 1px solid #dbe3ec;
+}
+
+.project-nav .project-nav-children button:disabled {
+  background: transparent;
+  color: #a7b0bd;
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.project-nav .project-nav-children button:disabled:hover {
+  background: transparent;
+  color: #a7b0bd;
+}
+
+.nav-child-lock {
+  color: #a7b0bd;
+}
+
 .phase-number {
   border-color: #bfdbfe;
   background: var(--accent-soft);

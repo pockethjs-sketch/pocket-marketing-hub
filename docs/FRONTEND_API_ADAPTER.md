@@ -12,7 +12,7 @@
 | `previewOverview` | `preview_overview` | 공개 첫 총괄을 bootstrap과 병렬 조회 |
 | `bootstrap` | `bootstrap` | 인증 사용자의 고객사·프로젝트·채널 탐색 정보 |
 | `overview` | `project_overview` | 선택 프로젝트 총괄 현황 |
-| `plan` | `project_plan` | 최신 클라이언트 공유 실행계획 승인본 |
+| `plan` | `project_plan` | `planType=CLIENT_SHARE|INTERNAL` 계획; 내부 계획은 프로젝트팀 이상만 허용 |
 | `tasks` | `tasks` | 업무 목록 |
 | `contents` | `contents` | 콘텐츠 목록 |
 | `performance` | `performance` | KPI·성과 |
@@ -66,7 +66,7 @@ await source.mutate({
 });
 ```
 
-프런트가 `mutation_id`를 생략하면 UUID를 생성합니다. 서버는 이 ID의 멱등성, 로그인 사용자 권한, `row_version`, 허용 필드, 참조 무결성을 반드시 검증해야 합니다. `Content-Type: text/plain`을 사용해 Apps Script 계열 엔드포인트의 불필요한 CORS preflight를 피하지만, 이것은 인증을 대신하지 않습니다.
+프런트가 `mutation_id`를 생략하면 UUID를 생성합니다. 서버는 이 ID의 멱등성, 로그인 사용자 권한, `row_version`, 허용 필드, 참조 무결성을 반드시 검증해야 합니다. `Content-Type: text/plain`을 사용해 Apps Script 계열 엔드포인트의 불필요한 CORS preflight를 피하지만, 이것은 인증을 대신하지 않습니다. 모든 호출에는 `_mh` 난수를 붙여 Google의 만료된 `googleusercontent` 리다이렉트가 브라우저·프록시에서 재사용되지 않게 합니다.
 
 ## App.jsx 연결 순서
 

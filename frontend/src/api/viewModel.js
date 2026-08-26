@@ -478,6 +478,7 @@ export function workspaceViewModel(envelope, fallbackProject) {
   const result = {};
   const overview = workspaceValue(data, "overview", "project_overview");
   const plan = workspaceValue(data, "plan", "project_plan");
+  const internalPlan = workspaceValue(data, "internalPlan", "internal_plan");
   const tasks = workspaceValue(data, "tasks");
   const contents = workspaceValue(data, "contents", "content");
   const performance = workspaceValue(data, "performance");
@@ -485,7 +486,8 @@ export function workspaceViewModel(envelope, fallbackProject) {
   const activity = workspaceValue(data, "activity", "activities");
 
   if (overview !== undefined) result.overview = overviewViewModel(workspaceEnvelope(envelope, overview), fallbackProject);
-  if (plan !== undefined) result.plan = planViewModel(workspaceEnvelope(envelope, plan));
+  if (plan !== undefined) result["plan-client"] = planViewModel(workspaceEnvelope(envelope, plan));
+  if (internalPlan !== undefined) result["plan-internal"] = planViewModel(workspaceEnvelope(envelope, internalPlan));
   if (tasks !== undefined) result.tasks = tasksViewModel(workspaceEnvelope(envelope, tasks));
   if (contents !== undefined) result.content = contentsViewModel(workspaceEnvelope(envelope, contents));
   if (performance !== undefined) result.performance = performanceViewModel(workspaceEnvelope(envelope, performance));

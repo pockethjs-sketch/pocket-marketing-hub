@@ -42,10 +42,17 @@ import {
   workspaceViewModel,
 } from "./api/index.js";
 import { getNavigationPresentation, nextDesktopNavigationLevel } from "./navigationState.js";
+import {
+  DEFAULT_PLAN_VARIANT,
+  PLAN_VARIANTS,
+  parseViewLocation,
+  viewLocationHash,
+  viewResourceKey,
+} from "./planNavigation.js";
 
 const navItems = [
   { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
-  { id: "plan", label: "실행계획", icon: BookOpenText },
+  { id: "plan", label: "실행계획", icon: BookOpenText, children: Object.values(PLAN_VARIANTS) },
   { id: "tasks", label: "업무", icon: ClipboardCheck },
   { id: "content", label: "콘텐츠", icon: GalleryHorizontalEnd },
   { id: "performance", label: "성과", icon: BarChart3 },
@@ -151,12 +158,37 @@ function ClientRail({ clients, activeClient, onSelect, visible }) {
   );
 }
 
-function ProjectSidebar({ project, activeView, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
+function ProjectSidebar({ project, activeView, activePlanVariant, role, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
+  const [planExpanded, setPlanExpanded] = useState(activeView === "plan");
+
+  useEffect(() => {
+    if (activeView === "plan") setPlanExpanded(true);
+  }, [activeView]);
+
+  const visiblePlanChildren = Object.values(PLAN_VARIANTS);
+
   return (
     <aside id="project-navigation" className={`project-sidebar ${open ? "is-open" : ""}`} aria-label="프로젝트 탐색" aria-hidden={!visible}>
       <div className="sidebar-header"><div><p className="eyebrow">{project.clientName}</p><h1>{project.name}</h1></div><div className="sidebar-header-actions"><button className="icon-button mobile-close" onClick={onClose} aria-label="메뉴 닫기"><X size={17} /></button></div></div>
       <div className="project-switcher"><div><span className="project-dot" /><strong>{project.status}</strong></div><ChevronDown size={15} /></div>
-      <nav className="project-nav"><p className="nav-label">프로젝트</p>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>; })}</nav>
+      <nav className="project-nav"><p className="nav-label">프로젝트</p>{navItems.map((item) => {
+        const Icon = item.icon;
+        if (item.id !== "plan") return <button key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
+        return <div key={item.id} className={`project-nav-tree ${planExpanded ? "is-expanded" : ""}`}>
+          <button type="button" className={activeView === "plan" ? "is-active" : ""} onClick={() => {
+            if (activeView !== "plan") onView("plan", DEFAULT_PLAN_VARIANT);
+            setPlanExpanded((current) => activeView === "plan" ? !current : true);
+          }} aria-expanded={planExpanded}>
+            <Icon size={17} strokeWidth={1.8} /><span>{item.label}</span><ChevronDown className="nav-tree-chevron" size={14} />
+          </button>
+          {planExpanded && <div className="project-nav-children">
+            {visiblePlanChildren.map((child) => {
+              const locked = role === "client" && child.id === "internal";
+              return <button key={child.id} type="button" className={activeView === "plan" && activePlanVariant === child.id ? "is-active" : ""} onClick={() => { if (!locked) { onView("plan", child.id); onClose(); } }} aria-current={activeView === "plan" && activePlanVariant === child.id ? "page" : undefined} aria-disabled={locked} disabled={locked} title={locked ? "프로젝트 팀 전용 실행계획입니다." : undefined}><span className="nav-child-branch" aria-hidden="true" /><span>{child.label}</span>{locked && <LockKeyhole className="nav-child-lock" size={12} />}</button>;
+            })}
+          </div>}
+        </div>;
+      })}</nav>
       <div className="sidebar-section"><p className="nav-label">현재 단계</p><div className="phase-brief"><div className="phase-number">{project.phase?.slice(0, 2) || "-"}</div><div><strong>{project.phase}</strong><span>{project.period}</span></div></div></div>
       <div className="sidebar-footer"><div><strong>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</strong><span>{formatSyncTime(sourceState.lastSuccessfulAt)}</span></div></div>
     </aside>
@@ -654,7 +686,7 @@ function sanitizePlanHtml(value) {
   return root.innerHTML;
 }
 
-function PlanView({ plan, project }) {
+function PlanView({ plan, project, planVariant }) {
   const sections = plan.sections || [];
   const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id || "");
 
@@ -666,9 +698,11 @@ function PlanView({ plan, project }) {
   const safeBodyHtml = useMemo(() => sanitizePlanHtml(activeSection?.bodyHtml), [activeSection?.bodyHtml]);
   const planProjectName = plan.title || plan.project?.project_name || plan.project?.projectName || plan.project?.name || project.name;
 
+  const isInternal = planVariant === "internal";
+
   return <div className="view-stack plan-view">
     <section className="plan-summary panel">
-      <div className="plan-summary-copy"><span>90일 실행계획</span><h2>{planProjectName}</h2><p>{plan.summary || "합의된 실행 범위와 단계별 계획을 한 화면에서 확인합니다."}</p></div>
+      <div className="plan-summary-copy"><span>{isInternal ? "내부 실행계획" : "클라이언트 공유용"}</span><h2>{planProjectName}</h2><p>{plan.summary || (isInternal ? "실행 담당자가 사용하는 세부 범위와 단계별 계획을 확인합니다." : "고객사와 합의한 실행 범위와 단계별 계획을 확인합니다.")}</p></div>
       <dl><div><dt>계획 구간</dt><dd>{sections.length}개 섹션</dd></div><div><dt>기준 버전</dt><dd>{plan.sourceVersion || "현재 승인본"}</dd></div><div><dt>최근 반영</dt><dd>{plan.updatedAtLabel}</dd></div></dl>
     </section>
     {sections.length ? <section className="plan-layout">
@@ -680,15 +714,15 @@ function PlanView({ plan, project }) {
         <header><div><span>{activeSection?.code || "실행계획"}</span><h3>{activeSection?.title}</h3></div><small>{sections.findIndex((section) => section.id === activeSection?.id) + 1} / {sections.length}</small></header>
         <div className="plan-document-body" dangerouslySetInnerHTML={{ __html: safeBodyHtml }} />
       </article>
-    </section> : <EmptyState title="공유된 실행계획이 없습니다" description="클라이언트 공유용 승인본이 등록되면 이곳에 표시됩니다." />}
+    </section> : <EmptyState title={isInternal ? "등록된 내부 실행계획이 없습니다" : "공유된 실행계획이 없습니다"} description={isInternal ? "내부 실행계획이 등록되면 이곳에 표시됩니다." : "클라이언트 공유용 승인본이 등록되면 이곳에 표시됩니다."} />}
   </div>;
 }
 
-function AppContent({ view, project, role, search, setView, pageState, onRetry, onCreate, onTaskUpdate, onProjectUpdate, canWrite }) {
+function AppContent({ view, planVariant, project, role, search, setView, pageState, onRetry, onCreate, onTaskUpdate, onProjectUpdate, canWrite }) {
   if (pageState.status === "loading" && !pageState.data) return <LoadingState />;
   if (pageState.status === "error" && !pageState.data) return <ErrorState error={pageState.error} onRetry={onRetry} />;
   const data = pageState.data || {};
-  if (view === "plan") return <PlanView plan={data} project={project} />;
+  if (view === "plan") return <PlanView plan={data} project={project} planVariant={planVariant} />;
   if (view === "tasks") return <TasksView role={role} query={search} taskPage={{ ...data, project: data.project || { id: project.id, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion } }} onCreate={onCreate} onUpdate={onTaskUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} />;
   if (view === "content") return <ContentView role={role} query={search} contents={data.items || []} onCreate={onCreate} canWrite={canWrite} />;
   if (view === "performance") return <PerformanceView performance={data} />;
@@ -743,8 +777,9 @@ export function App() {
   const [resourceState, setResourceState] = useState(blankPage);
   const [activeClient, setActiveClient] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
-  const initialView = typeof window !== "undefined" && navItems.some((item) => item.id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : "overview";
-  const [view, setView] = useState(initialView);
+  const initialLocation = typeof window !== "undefined" ? parseViewLocation(window.location.hash) : { view: "overview", planVariant: DEFAULT_PLAN_VARIANT };
+  const [view, setView] = useState(initialLocation.view);
+  const [planVariant, setPlanVariant] = useState(initialLocation.planVariant);
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopNavigationLevel, setDesktopNavigationLevel] = useState(0);
@@ -753,7 +788,7 @@ export function App() {
   const [createEntity, setCreateEntity] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
   const activeProjectIdRef = useRef(null);
-  const activeViewRef = useRef(view);
+  const activeViewRef = useRef(viewResourceKey(view, planVariant));
   const pageRefreshKeyRef = useRef(pageRefreshKey);
   const initializationRequestRef = useRef(null);
   const resourceCacheRef = useRef(new Map());
@@ -769,8 +804,14 @@ export function App() {
     desktopLevel: desktopNavigationLevel,
     drawerOpen: sidebarOpen,
   });
-  activeViewRef.current = view;
+  const authorizedPlanVariant = actorRole === "client" && planVariant === "internal" ? DEFAULT_PLAN_VARIANT : planVariant;
+  const activeResource = viewResourceKey(view, authorizedPlanVariant);
+  activeViewRef.current = activeResource;
   pageRefreshKeyRef.current = pageRefreshKey;
+
+  useEffect(() => {
+    if (actorRole === "client" && planVariant === "internal") setPlanVariant(DEFAULT_PLAN_VARIANT);
+  }, [actorRole, planVariant]);
 
   useEffect(() => source?.subscribe(setSourceState), [source]);
   useEffect(() => {
@@ -933,9 +974,9 @@ export function App() {
         if (views.overview) {
           setOverviewState({ status: "ready", data: views.overview, error: null, resource: "overview", projectId, refreshKey: pageRefreshKey });
         }
-        const currentView = activeViewRef.current;
-        if (currentView !== "overview" && views[currentView]) {
-          setResourceState({ status: "ready", data: views[currentView], error: null, resource: currentView, projectId, refreshKey: pageRefreshKey });
+        const currentResource = activeViewRef.current;
+        if (currentResource !== "overview" && views[currentResource]) {
+          setResourceState({ status: "ready", data: views[currentResource], error: null, resource: currentResource, projectId, refreshKey: pageRefreshKey });
         }
         return views;
       })
@@ -948,7 +989,7 @@ export function App() {
 
   useEffect(() => {
     if (!source || !activeProjectId || view === "overview" || bootstrapState.status !== "ready") return undefined;
-    const cacheKey = `${activeProjectId}:${view}`;
+    const cacheKey = `${activeProjectId}:${activeResource}`;
     const cached = resourceCacheRef.current.get(cacheKey) || null;
     const cachedState = cached?.state || null;
     const cacheIsFresh = Boolean(
@@ -958,14 +999,14 @@ export function App() {
     );
     if (cachedState) setResourceState(cachedState);
     if (cacheIsFresh) return undefined;
-    if (!cachedState) setResourceState({ status: "loading", data: null, error: null, resource: view, projectId: activeProjectId, refreshKey: pageRefreshKey });
+    if (!cachedState) setResourceState({ status: "loading", data: null, error: null, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey });
     const params = { projectId: activeProjectId, limit: 200 };
     const requestKey = `${cacheKey}:${pageRefreshKey}`;
     const requestEpoch = resourceCacheEpochRef.current;
     let request = resourceRequestRef.current.get(requestKey);
     if (!request) {
       const fallback = () => {
-        if (view === "plan") return source.plan(params).then(planViewModel);
+        if (view === "plan") return source.plan({ ...params, planType: PLAN_VARIANTS[authorizedPlanVariant].apiValue }).then(planViewModel);
         if (view === "tasks") return source.tasks(params).then(tasksViewModel);
         if (view === "content") return source.contents(params).then(contentsViewModel);
         if (view === "performance") return source.performance(params).then(performanceViewModel);
@@ -974,7 +1015,7 @@ export function App() {
       };
       request = workspaceFirstRequest(
         workspaceRequestRef.current.get(`${activeProjectId}:${pageRefreshKey}`),
-        view,
+        activeResource,
         fallback,
       );
       resourceRequestRef.current.set(requestKey, request);
@@ -984,7 +1025,7 @@ export function App() {
     }
     let active = true;
     request.then((data) => {
-      const nextState = { status: "ready", data, error: null, resource: view, projectId: activeProjectId, refreshKey: pageRefreshKey };
+      const nextState = { status: "ready", data, error: null, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey };
       const currentCache = resourceCacheRef.current.get(cacheKey);
       if (resourceCacheEpochRef.current === requestEpoch && (!currentCache || currentCache.refreshKey <= pageRefreshKey)) {
         resourceCacheRef.current.set(cacheKey, { state: nextState, cachedAt: Date.now(), refreshKey: pageRefreshKey });
@@ -993,12 +1034,15 @@ export function App() {
     }).catch((error) => {
       if (!active) return;
       if (error.code === "unauthorized") setSession(null);
-      if (!cachedState) setResourceState({ status: "error", data: null, error, resource: view, projectId: activeProjectId, refreshKey: pageRefreshKey });
+      if (!cachedState) setResourceState({ status: "error", data: null, error, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey });
     });
     return () => { active = false; };
-  }, [source, activeProjectId, view, bootstrapState.status, pageRefreshKey]);
+  }, [source, activeProjectId, view, authorizedPlanVariant, activeResource, bootstrapState.status, pageRefreshKey]);
 
-  useEffect(() => { if (window.location.hash.slice(1) !== view) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${view}`); }, [view]);
+  useEffect(() => {
+    const nextHash = viewLocationHash(view, planVariant);
+    if (window.location.hash.slice(1) !== nextHash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${nextHash}`);
+  }, [view, planVariant]);
 
   const handleLogin = async (credentials) => {
     setLoginError(null);
@@ -1050,12 +1094,12 @@ export function App() {
   const role = actor?.role || "client";
   const cachedPageForView = view === "overview"
     ? null
-    : resourceCacheRef.current.get(`${activeProjectId}:${view}`)?.state || null;
+    : resourceCacheRef.current.get(`${activeProjectId}:${activeResource}`)?.state || null;
   const currentPage = view === "overview"
     ? overviewState.projectId === activeProjectId ? overviewState : { ...blankPage, status: "loading", resource: "overview", projectId: activeProjectId }
-    : resourceState.resource === view && resourceState.projectId === activeProjectId
+    : resourceState.resource === activeResource && resourceState.projectId === activeProjectId
       ? resourceState
-      : cachedPageForView || { ...blankPage, status: "loading", resource: view, projectId: activeProjectId };
+      : cachedPageForView || { ...blankPage, status: "loading", resource: activeResource, projectId: activeProjectId };
   const taskCount = view === "tasks" && resourceState.resource === "tasks" ? Number(resourceState.data?.total || 0) : Number(project.metrics?.[0]?.value?.replace?.(/\D/g, "") || 0);
   const canWrite = live && ["ADMIN", "EDIT"].includes(project.permissionCode);
   const connectionReady = live && Boolean(sourceState.lastSuccessfulAt);
@@ -1140,6 +1184,11 @@ export function App() {
     if (!navigation.usesDrawer) setDesktopNavigationLevel(2);
   };
 
+  const navigateToView = (nextView, nextPlanVariant = planVariant) => {
+    if (nextView === "plan") setPlanVariant(nextPlanVariant);
+    setView(nextView);
+  };
+
   const toggleNavigation = () => {
     if (navigation.usesDrawer) {
       setSidebarOpen((current) => !current);
@@ -1151,9 +1200,9 @@ export function App() {
   return (
     <div className={`app-shell ${navigation.shellCollapsed ? "is-navigation-collapsed" : ""} ${navigation.clientRailCollapsed ? "is-client-rail-collapsed" : ""} ${navigation.projectSidebarCollapsed ? "is-project-sidebar-collapsed" : ""} ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""}`}>
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
-      <ProjectSidebar project={project} activeView={view} onView={setView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
+      <ProjectSidebar project={project} activeView={view} activePlanVariant={authorizedPlanVariant} role={role} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
     </div>
