@@ -16,7 +16,6 @@ import {
   FolderOpen,
   GalleryHorizontalEnd,
   LayoutDashboard,
-  Link2,
   ListFilter,
   LoaderCircle,
   LockKeyhole,
@@ -158,7 +157,7 @@ function ClientRail({ clients, activeClient, onSelect, visible }) {
   );
 }
 
-function ProjectSidebar({ project, activeView, activePlanVariant, role, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
+function ProjectSidebar({ project, activeView, activePlanVariant, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
   const [planExpanded, setPlanExpanded] = useState(activeView === "plan");
 
   useEffect(() => {
@@ -183,8 +182,7 @@ function ProjectSidebar({ project, activeView, activePlanVariant, role, onView, 
           </button>
           {planExpanded && <div className="project-nav-children">
             {visiblePlanChildren.map((child) => {
-              const locked = role === "client" && child.id === "internal";
-              return <button key={child.id} type="button" className={activeView === "plan" && activePlanVariant === child.id ? "is-active" : ""} onClick={() => { if (!locked) { onView("plan", child.id); onClose(); } }} aria-current={activeView === "plan" && activePlanVariant === child.id ? "page" : undefined} aria-disabled={locked} disabled={locked} title={locked ? "프로젝트 팀 전용 실행계획입니다." : undefined}><span className="nav-child-branch" aria-hidden="true" /><span>{child.label}</span>{locked && <LockKeyhole className="nav-child-lock" size={12} />}</button>;
+              return <button key={child.id} type="button" className={activeView === "plan" && activePlanVariant === child.id ? "is-active" : ""} onClick={() => { onView("plan", child.id); onClose(); }} aria-current={activeView === "plan" && activePlanVariant === child.id ? "page" : undefined}><span className="nav-child-branch" aria-hidden="true" /><span>{child.label}</span></button>;
             })}
           </div>}
         </div>;
@@ -236,7 +234,7 @@ function CreateButton({ children, entityType, onOpen, enabled }) {
 
 const createFormOptions = {
   phase: [["P0", "구축"], ["M1", "운영 1개월차"], ["M2", "운영 2개월차"], ["M3", "운영 3개월차"]],
-  stream: [["YOUTUBE", "유튜브"], ["INSTAGRAM", "인스타그램"], ["SEO", "SEO"], ["COMMON", "공통"]],
+  stream: [["MKT", "마케팅"], ["DSN", "디자인"], ["VID", "영상"]],
   channel: [["YOUTUBE", "유튜브"], ["INSTAGRAM", "인스타그램"], ["NAVER_BLOG", "네이버 블로그"], ["WEBSITE", "자사몰"]],
   format: [["LONG_FORM", "롱폼"], ["SHORT_FORM", "숏폼"], ["FEED", "피드"], ["REELS", "릴스"], ["ARTICLE", "아티클"]],
 };
@@ -247,7 +245,7 @@ function FormSelect({ label, value, onChange, options }) {
 
 function CreateRecordModal({ entityType, role, onClose, onSubmit }) {
   const [fields, setFields] = useState(() => entityType === "task" ? {
-    title: "", phase_code: "M1", workstream_code: "COMMON", status_code: "NOT_STARTED", priority_code: "NORMAL", due_date: "", visibility_code: "PROJECT_TEAM",
+    title: "", phase_code: "M1", workstream_code: "MKT", status_code: "NOT_STARTED", priority_code: "NORMAL", due_date: "", visibility_code: role === "client" ? "CLIENT" : "PROJECT_TEAM",
   } : entityType === "content" ? {
     title: "", channel_code: "INSTAGRAM", format_code: "FEED", status_code: "DRAFT", planned_date: "", visibility_code: "PROJECT_TEAM",
   } : {
@@ -412,12 +410,18 @@ function trackerDdayLabel(value) {
 
 function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone, memberOptions }) {
   const [expanded, setExpanded] = useState(false);
+  const [title, setTitle] = useState(task.title || "");
   const [note, setNote] = useState(task.description || "");
   const [assignee, setAssignee] = useState(task.assignee || "");
+  const [dueDate, setDueDate] = useState(task.dueDate || "");
+  const [priority, setPriority] = useState(task.priorityCode || "NORMAL");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  useEffect(() => setTitle(task.title || ""), [task.title]);
   useEffect(() => setNote(task.description || ""), [task.description]);
   useEffect(() => setAssignee(task.assignee || ""), [task.assignee]);
+  useEffect(() => setDueDate(task.dueDate || ""), [task.dueDate]);
+  useEffect(() => setPriority(task.priorityCode || "NORMAL"), [task.priorityCode]);
 
   const saveFields = async (fields) => {
     if (!canWrite || !onUpdate) return;
@@ -449,26 +453,23 @@ function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone, memberOptions 
       <ChevronDown className="tracker-row-chevron" size={15} />
     </div>
     {expanded && <div className="tracker-task-detail">
-      <div className="tracker-detail-meta">
-        <span><strong>업무 ID</strong>{task.sourceTaskId || task.id}</span>
-        <span><strong>구분</strong>{task.parent}</span>
-        <span><strong>마감</strong>{task.due}</span>
-        {task.contractLinked && <span className="is-contract"><Link2 size={13} /><strong>계약 연계</strong></span>}
-      </div>
       {role !== "client" && task.planNote && <div className="tracker-plan-note"><strong>계획 기준</strong><p>{task.planNote}</p></div>}
       {role === "client" && task.customerStatus && <div className="tracker-client-status"><strong>공유 진행 메모</strong><p>{task.customerStatus}</p></div>}
-      {role !== "client" && <div className="tracker-task-edit">
+      {canWrite && <div className="tracker-task-edit">
         <div><span>상태</span><div className="tracker-status-actions">{trackerStatusOptions.map(([code, label]) => <button key={code} type="button" disabled={!canWrite || saving} className={task.statusCode === code || (code === "DONE" && task.statusCode === "COMPLETED") ? "is-active" : ""} onClick={() => saveFields({ status_code: code })}>{label}</button>)}</div></div>
+        <label className="tracker-owner-edit"><span>업무명</span><input value={title} disabled={saving} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
+        <label className="tracker-owner-edit"><span>마감일</span><input type="date" value={dueDate} disabled={saving} onChange={(event) => setDueDate(event.target.value)} /></label>
+        <label className="tracker-owner-edit"><span>우선순위</span><select value={priority} disabled={saving} onChange={(event) => setPriority(event.target.value)}><option value="LOW">낮음</option><option value="NORMAL">보통</option><option value="HIGH">높음</option><option value="CRITICAL">긴급</option></select></label>
         <label className="tracker-owner-edit"><span>담당자</span><select value={assignee} disabled={!canWrite || saving} onChange={(event) => setAssignee(event.target.value)}><option value="">담당자 미정</option>{assignee && !memberOptions.some((member) => member.userId === assignee) && <option value={assignee}>{task.assigneeName || assignee} · 비활성</option>}{memberOptions.map((member) => <option key={member.userId} value={member.userId}>{member.displayName}{member.organization ? ` · ${member.organization}` : ""}</option>)}</select></label>
         <label><span>업무 메모</span><textarea rows="3" value={note} disabled={!canWrite || saving} onChange={(event) => setNote(event.target.value)} placeholder="진행 내용이나 다음 액션을 기록하세요" /></label>
-        <div className="tracker-edit-footer">{error ? <span className="tracker-save-error"><AlertCircle size={14} />{error.message || "저장하지 못했습니다."}</span> : <span>{canWrite ? "저장 시 Google Sheets 업무 원장에 반영됩니다." : "읽기 전용입니다."}</span>}<button className="primary-button" type="button" disabled={!canWrite || saving || (note === (task.description || "") && assignee === (task.assignee || ""))} onClick={() => { const fields = { description: note }; if (assignee !== (task.assignee || "")) fields.assignee_user_id = assignee; saveFields(fields); }}>{saving ? <><LoaderCircle size={14} className="spin" /> 저장 중</> : "변경 저장"}</button></div>
+        <div className="tracker-edit-footer">{error ? <span className="tracker-save-error"><AlertCircle size={14} />{error.message || "저장하지 못했습니다."}</span> : <span>저장 시 Google Sheets 업무 원장에 반영됩니다.</span>}<button className="primary-button" type="button" disabled={saving || !title.trim() || (title === (task.title || "") && note === (task.description || "") && assignee === (task.assignee || "") && dueDate === (task.dueDate || "") && priority === (task.priorityCode || "NORMAL"))} onClick={() => { const fields = { title, description: note, due_date: dueDate, priority_code: priority }; if (assignee !== (task.assignee || "")) fields.assignee_user_id = assignee; saveFields(fields); }}>{saving ? <><LoaderCircle size={14} className="spin" /> 저장 중</> : "변경 저장"}</button></div>
       </div>}
     </div>}
   </article>;
 }
 
 function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProjectUpdate }) {
-  const editable = Boolean(canWrite && role !== "client");
+  const editable = Boolean(canWrite);
   const canEditProject = Boolean(canWrite && role === "pocket");
   const memberOptions = taskPage.members || [];
   const memberNameById = Object.fromEntries(memberOptions.map((member) => [member.userId, member.displayName]));
@@ -479,7 +480,7 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   const currentPhaseLabel = currentSchedule?.label || "전체";
   const tasks = (taskPage.items || []).map((task) => {
     const calculatedDue = trackerTaskDue(task, schedule);
-    const withAssignee = { ...task, assigneeName: memberNameById[task.assignee] || task.assignee || "" };
+    const withAssignee = { ...task, status: task.statusCode === "CANCELLED" ? "취소" : task.status, assigneeName: memberNameById[task.assignee] || task.assignee || "" };
     return calculatedDue ? { ...withAssignee, dueDate: `${calculatedDue.getFullYear()}-${String(calculatedDue.getMonth() + 1).padStart(2, "0")}-${String(calculatedDue.getDate()).padStart(2, "0")}`, due: `${trackerTaskDueLabel(calculatedDue)} · ${trackerDdayLabel(calculatedDue)}` } : withAssignee;
   });
   const [phase, setPhase] = useState(currentPhaseLabel);
@@ -507,26 +508,39 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   const streams = ["전체", ...orderedValues(tasks.map((task) => task.stream), streamOrder)];
   const categories = ["전체", ...orderedValues(tasks.map((task) => task.parent), [])];
   const isDone = (task) => task.status === "완료";
+  const isCancelled = (task) => task.statusCode === "CANCELLED";
   const isInProgress = (task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode);
   const isOnHold = (task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode);
-  const completion = (items) => items.length ? Math.round(items.filter(isDone).length / items.length * 100) : 0;
+  const countableTasks = (items) => items.filter((task) => !isCancelled(task));
+  const completion = (items) => {
+    const countable = countableTasks(items);
+    return countable.length ? Math.round(countable.filter(isDone).length / countable.length * 100) : 0;
+  };
+  const streamGroup = (task) => ["MKT", "YOUTUBE", "INSTAGRAM", "SEO"].includes(task.streamCode) ? "마케팅" : task.streamCode === "DSN" ? "디자인" : task.streamCode === "VID" ? "영상" : task.stream;
   const publishingByPhase = Object.fromEntries((taskPage.publishing?.phases || []).map((item) => [item.phaseCode, item]));
   const phaseStats = phases.slice(1).map((name) => {
     const items = tasks.filter((task) => task.phase === name);
+    const countable = countableTasks(items);
     const definition = trackerPhaseDefinitions.find((item) => item.label === name);
     const phaseSchedule = schedule.find((item) => item.label === name);
     const output = publishingByPhase[definition?.code];
     const outputProgress = output?.target?.total ? Math.min(100, Math.round(output.actual.total / output.target.total * 100)) : null;
-    return { code: definition?.code || name, name, total: items.length, done: items.filter(isDone).length, progress: completion(items), period: phaseSchedule?.period || "일정 미정", output, outputProgress };
+    return { code: definition?.code || name, name, total: countable.length, done: countable.filter(isDone).length, progress: completion(items), period: phaseSchedule?.period || "일정 미정", output, outputProgress };
   });
   const streamStats = streams.slice(1).map((name) => {
     const items = tasks.filter((task) => task.stream === name);
-    return { name, total: items.length, done: items.filter(isDone).length, progress: completion(items) };
+    const countable = countableTasks(items);
+    return { name, total: countable.length, done: countable.filter(isDone).length, progress: completion(items) };
+  });
+  const primaryStreamStats = ["마케팅", "디자인", "영상"].map((name) => {
+    const items = tasks.filter((task) => streamGroup(task) === name);
+    const countable = countableTasks(items);
+    return { name, total: countable.length, done: countable.filter(isDone).length, progress: completion(items) };
   });
   const alertMatches = (task, key) => {
     if (key === "전체") return true;
+    if (isCancelled(task)) return false;
     if (key === "보류") return isOnHold(task);
-    if (key === "계약") return task.contractLinked && !isDone(task);
     const due = trackerDate(task.dueDate);
     if (!due || isDone(task)) return false;
     const days = Math.ceil((due.getTime() - now.getTime()) / 86400000);
@@ -538,12 +552,12 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
     { key: "지연", label: "기한 지연", count: tasks.filter((task) => alertMatches(task, "지연")).length, detail: "마감일 경과" },
     { key: "임박", label: "3일 내 마감", count: tasks.filter((task) => alertMatches(task, "임박")).length, detail: "우선 확인" },
     { key: "보류", label: "보류·차단", count: tasks.filter((task) => alertMatches(task, "보류")).length, detail: "진행 조건 확인" },
-    { key: "계약", label: "계약 연계 미완료", count: tasks.filter((task) => alertMatches(task, "계약")).length, detail: "검수 기준 포함" },
   ];
+  const visibleAlerts = alerts.filter((item) => item.count > 0);
   const globalNeedle = String(query || "").trim().toLowerCase();
   const localNeedle = localQuery.trim().toLowerCase();
   const visibleTasks = useMemo(() => tasks.filter((task) => (phase === "전체" || task.phase === phase)
-    && (stream === "전체" || task.stream === stream)
+    && (stream === "전체" || streamGroup(task) === stream)
     && (category === "전체" || task.parent === category)
     && (!hideDone || !isDone(task))
     && alertMatches(task, alertFilter)
@@ -554,10 +568,13 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
     tasks: visibleTasks.filter((task) => task.stream === item.name),
   })).filter((item) => item.tasks.length);
   const overallDone = tasks.filter(isDone).length;
-  const overallInProgress = tasks.filter(isInProgress).length;
-  const overallOnHold = tasks.filter(isOnHold).length;
-  const overallWaiting = Math.max(0, tasks.length - overallDone - overallInProgress - overallOnHold);
+  const overallCancelled = tasks.filter(isCancelled).length;
+  const overallCountable = tasks.length - overallCancelled;
+  const overallInProgress = tasks.filter((task) => !isCancelled(task) && isInProgress(task)).length;
+  const overallOnHold = tasks.filter((task) => !isCancelled(task) && isOnHold(task)).length;
+  const overallWaiting = Math.max(0, overallCountable - overallDone - overallInProgress - overallOnHold);
   const overallProgress = completion(tasks);
+  const hasPartialTaskData = Number(taskPage.total || 0) > tasks.length;
   const streamColor = { 마케팅: "#22bc7e", 디자인: "#3b82f6", 영상: "#7c9a32", 공통: "#77837d", 유튜브: "#ff4d4f", 인스타그램: "#d946ef", SEO: "#f59e0b" };
   const phaseDay = currentSchedule?.end ? Math.ceil((currentSchedule.end.getTime() - now.getTime()) / 86400000) : null;
   const resetFilters = () => { setPhase("전체"); setStream("전체"); setCategory("전체"); setHideDone(false); setLocalQuery(""); setAlertFilter("전체"); };
@@ -575,50 +592,54 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   };
 
   return <div className="view-stack tracker-view">
-    <ViewHeader eyebrow="업무 관리" title="업무" description={role === "client" ? "공개된 업무의 일정과 진행 상태를 확인합니다." : "프로젝트 업무를 단계와 담당 분야별로 추적합니다."}>
-      {role !== "client" && <CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton>}
+    <ViewHeader eyebrow="업무 관리" title="업무" description="90일 진행 흐름과 실행 항목을 한 화면에서 관리합니다.">
+      <CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton>
     </ViewHeader>
 
-    <section className="tracker-schedule panel" aria-label="90일 운영 일정">
-      <div className="tracker-schedule-intro"><span>90일 운영 일정</span>{canEditProject ? <div className="tracker-start-date-editor"><label><span>착수일</span><input type="date" value={startDateDraft} disabled={startDateSaving} onChange={(event) => { setStartDateDraft(event.target.value); setStartDateError(""); }} /></label><button type="button" disabled={startDateSaving || !startDateDraft || startDateDraft === (taskPage.project?.startDate || "")} onClick={saveProjectStartDate}>{startDateSaving ? "저장 중" : "저장"}</button></div> : <strong>{taskPage.project?.startDate ? `${trackerDateLabel(taskPage.project.startDate)} 시작` : "착수일 미설정"}</strong>}{phaseDay !== null && <em>{phaseDay > 0 ? `D-${phaseDay}` : phaseDay === 0 ? "D-DAY" : `D+${Math.abs(phaseDay)}`}</em>}{startDateError && <small className="tracker-start-date-error" role="alert">{startDateError}</small>}</div>
-      <div className="tracker-schedule-phases">{schedule.map((item) => <button type="button" key={item.code} className={phase === item.label || (phase === "전체" && currentSchedule?.code === item.code) ? "is-active" : ""} onClick={() => setPhase(phase === item.label ? "전체" : item.label)}><span>{item.code}</span><strong>{item.label}</strong><small>{item.period}</small></button>)}</div>
-    </section>
-
-    <section className="tracker-progress panel" aria-label="전체 업무 진척률">
-      <div className="tracker-progress-value"><strong>{overallProgress}</strong><span>%</span></div>
-      <div className="tracker-progress-body">
-        <div><span>전체 업무 진척률</span><strong>{overallDone} / {tasks.length} 완료</strong></div>
-        <div className="tracker-stacked-progress" aria-label={`완료 ${overallDone}, 진행 ${overallInProgress}, 보류 ${overallOnHold}, 미착수 ${overallWaiting}`}><i className="is-done" style={{ width: `${tasks.length ? overallDone / tasks.length * 100 : 0}%` }} /><i className="is-progress" style={{ width: `${tasks.length ? overallInProgress / tasks.length * 100 : 0}%` }} /><i className="is-hold" style={{ width: `${tasks.length ? overallOnHold / tasks.length * 100 : 0}%` }} /></div>
-        <div className="tracker-status-counts"><span><i className="is-done" />완료 <strong>{overallDone}</strong></span><span><i className="is-progress" />진행 <strong>{overallInProgress}</strong></span><span><i className="is-hold" />보류 <strong>{overallOnHold}</strong></span><span><i className="is-wait" />미착수 <strong>{overallWaiting}</strong></span><em>업데이트 {formatSyncTime(taskPage.generatedAt)}</em></div>
+    <section className="tracker-control-panel panel" aria-label="업무 요약 및 90일 진행 흐름">
+      <div className="tracker-control-top">
+        <div className="tracker-overall-summary">
+          <span>전체 진척</span>
+          <strong>{overallProgress}<small>%</small></strong>
+          <p>{overallDone} / {overallCountable} 완료</p>
+        </div>
+        <div className="tracker-overall-body">
+          <div className="tracker-stacked-progress" aria-label={`완료 ${overallDone}, 진행 ${overallInProgress}, 보류 ${overallOnHold}, 미착수 ${overallWaiting}`}><i className="is-done" style={{ width: `${overallCountable ? overallDone / overallCountable * 100 : 0}%` }} /><i className="is-progress" style={{ width: `${overallCountable ? overallInProgress / overallCountable * 100 : 0}%` }} /><i className="is-hold" style={{ width: `${overallCountable ? overallOnHold / overallCountable * 100 : 0}%` }} /></div>
+          <div className="tracker-status-counts"><span><i className="is-done" />완료 <strong>{overallDone}</strong></span><span><i className="is-progress" />진행 <strong>{overallInProgress}</strong></span><span><i className="is-hold" />보류 <strong>{overallOnHold}</strong></span><span><i className="is-wait" />미착수 <strong>{overallWaiting}</strong></span>{overallCancelled > 0 && <span><i className="is-cancelled" />취소 <strong>{overallCancelled}</strong></span>}<em>업데이트 {formatSyncTime(taskPage.generatedAt)}</em></div>
+          {visibleAlerts.length > 0 && <div className="tracker-alert-chips" aria-label="확인 필요 업무">{visibleAlerts.map((item) => <button type="button" key={item.key} className={alertFilter === item.key ? "is-active" : ""} onClick={() => setAlertFilter(alertFilter === item.key ? "전체" : item.key)}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div>}
+          {hasPartialTaskData && <div className="tracker-data-warning"><AlertCircle size={13} />전체 {taskPage.total}건 중 {tasks.length}건만 불러왔습니다.</div>}
+        </div>
+        <div className="tracker-schedule-intro">
+          <span>90일 운영</span>
+          {canEditProject ? <div className="tracker-start-date-editor"><label><span>착수일</span><input type="date" value={startDateDraft} disabled={startDateSaving} onChange={(event) => { setStartDateDraft(event.target.value); setStartDateError(""); }} /></label><button type="button" disabled={startDateSaving || !startDateDraft || startDateDraft === (taskPage.project?.startDate || "")} onClick={saveProjectStartDate}>{startDateSaving ? "저장 중" : "저장"}</button></div> : <strong>{taskPage.project?.startDate ? `${trackerDateLabel(taskPage.project.startDate)} 시작` : "착수일 미설정"}</strong>}
+          {phaseDay !== null && <em>{phaseDay > 0 ? `D-${phaseDay}` : phaseDay === 0 ? "D-DAY" : `D+${Math.abs(phaseDay)}`}</em>}
+          {startDateError && <small className="tracker-start-date-error" role="alert">{startDateError}</small>}
+        </div>
       </div>
-    </section>
-
-    <section className="tracker-alert-grid" aria-label="확인 필요 업무">{alerts.map((item) => <button type="button" key={item.key} className={alertFilter === item.key ? "is-active" : ""} onClick={() => setAlertFilter(alertFilter === item.key ? "전체" : item.key)}><span>{item.label}</span><strong>{item.count}</strong><small>{item.detail}</small></button>)}</section>
-
-    <section className="tracker-phase-grid" aria-label="단계별 업무 진척률">
-      {phaseStats.map((item) => <button key={item.name} type="button" className={phase === item.name ? "is-active" : ""} onClick={() => setPhase(phase === item.name ? "전체" : item.name)}>
-        <div><strong>{item.name}</strong><span>{item.progress}%</span></div><p>{item.period}</p>
+      <div className="tracker-flow-heading"><span>진행 흐름</span><small>단계를 누르면 실행 목록이 필터됩니다.</small></div>
+      <div className="tracker-schedule-phases">{phaseStats.map((item) => <button type="button" key={item.code} className={phase === item.name ? "is-active" : phase === "전체" && currentSchedule?.code === item.code ? "is-current" : ""} onClick={() => setPhase(phase === item.name ? "전체" : item.name)}>
+        <span>{item.code}<em>{item.progress}%</em></span><strong>{item.name}</strong><small>{item.period}</small>
         <ProgressBar value={item.progress} color="var(--accent)" />
-        <small>업무 {item.done} / {item.total}{item.outputProgress !== null ? ` · 산출물 ${item.output?.actual?.total || 0} / ${item.output?.target?.total || 0}` : " · 산출물 연결 전"}</small>
-      </button>)}
+        <small>{item.done} / {item.total} 완료{item.outputProgress !== null ? ` · 산출물 ${item.output?.actual?.total || 0}/${item.output?.target?.total || 0}` : ""}</small>
+      </button>)}</div>
     </section>
 
-    <section className="tracker-team-grid" aria-label="분야별 업무 진척률">
-      {streamStats.map((item) => <button key={item.name} type="button" className={stream === item.name ? "is-active" : ""} onClick={() => setStream(stream === item.name ? "전체" : item.name)} style={{ "--team-color": streamColor[item.name] || "var(--accent)" }}>
-        <div className="tracker-team-title"><span /><strong>{item.name}</strong><em>{item.progress}%</em></div>
-        <ProgressBar value={item.progress} color={streamColor[item.name] || "var(--accent)"} />
-        <small>{item.done} / {item.total} 완료</small>
-      </button>)}
+    <section className="tracker-execution" aria-label="실행 업무 목록">
+      <div className="tracker-list-toolbar panel">
+        <div className="tracker-stream-tabs" aria-label="업무 분야 필터">
+          <button type="button" className={stream === "전체" ? "is-active" : ""} onClick={() => setStream("전체")}><span>전체</span><strong>{overallCountable}</strong></button>
+          {primaryStreamStats.map((item) => <button type="button" key={item.name} className={stream === item.name ? "is-active" : ""} onClick={() => setStream(item.name)} style={{ "--team-color": streamColor[item.name] || "var(--accent)" }}><span>{item.name}</span><strong>{item.done}/{item.total}</strong></button>)}
+        </div>
+        <div className="tracker-filter"><ListFilter size={15} /><select aria-label="업무 구분" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="tracker-inline-search"><Search size={14} /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="업무 검색" /></label><label className="tracker-hide-done"><input type="checkbox" checked={hideDone} onChange={(event) => setHideDone(event.target.checked)} />완료 숨김</label><button className="tracker-filter-reset" type="button" onClick={resetFilters}>초기화</button><span className="result-count">{visibleTasks.length}건</span></div>
+      </div>
+
+      {groupedTasks.length ? <div className="tracker-task-groups">{groupedTasks.map((group) => <section className="tracker-task-group panel" key={group.name} style={{ "--team-color": streamColor[group.name] || "var(--accent)" }}>
+        <header><div><span className="tracker-team-dot" /><h3>{group.name}</h3></div><strong>{group.tasks.filter(isDone).length} / {group.tasks.length}</strong></header>
+        <div>{group.tasks.map((task) => <TrackerTaskRow key={task.id} task={task} role={role} canWrite={editable} onUpdate={onUpdate} isDone={isDone(task)} memberOptions={memberOptions} />)}</div>
+      </section>)}</div> : <EmptyState title="조건에 맞는 업무가 없습니다" description="필터를 바꾸거나 원장에 업무를 등록해 주세요." />}
     </section>
 
-    <section className="tracker-publishing panel" aria-label="단계별 콘텐츠 발행 현황"><div className="panel-heading"><div><h3>콘텐츠 발행 현황</h3><p>콘텐츠 원장의 게시 완료 건을 단계별 계획과 비교합니다.</p></div><span className="panel-note">자동 집계</span></div>{taskPage.publishing?.phases?.length ? <div className="tracker-publishing-grid">{taskPage.publishing.phases.map((item) => <article key={item.phaseCode}><header><strong>{item.phase}</strong><span>{item.actual.total} / {item.target.total}</span></header><ProgressBar value={item.target.total ? Math.min(100, Math.round(item.actual.total / item.target.total * 100)) : 0} color="var(--accent)" /><div><span>롱폼 {item.actual.longForm}/{item.target.longForm}</span><span>숏폼 {item.actual.shortForm}/{item.target.shortForm}</span><span>인스타 {item.actual.instagram}/{item.target.instagram}</span><span>블로그 {item.actual.blog}/{item.target.blog}</span></div></article>)}</div> : <div className="tracker-publishing-empty">콘텐츠 원장 집계가 연결되면 단계별 발행량이 표시됩니다.</div>}</section>
-
-    <div className="filter-bar tracker-filter"><ListFilter size={16} /><div className="segmented-control">{phases.map((item) => <button key={item} className={phase === item ? "is-active" : ""} onClick={() => setPhase(item)}>{item}</button>)}</div><select aria-label="업무 분야" value={stream} onChange={(event) => setStream(event.target.value)}>{streams.map((item) => <option key={item}>{item}</option>)}</select><select aria-label="업무 구분" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="tracker-inline-search"><Search size={14} /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="업무 검색" /></label><label className="tracker-hide-done"><input type="checkbox" checked={hideDone} onChange={(event) => setHideDone(event.target.checked)} />완료 숨김</label><button className="tracker-filter-reset" type="button" onClick={resetFilters}>초기화</button><span className="result-count">{visibleTasks.length}건 표시</span></div>
-
-    {groupedTasks.length ? <div className="tracker-task-groups">{groupedTasks.map((group) => <section className="tracker-task-group panel" key={group.name} style={{ "--team-color": streamColor[group.name] || "var(--accent)" }}>
-      <header><div><span className="tracker-team-dot" /><h3>{group.name}</h3></div><strong>{group.tasks.filter(isDone).length} / {group.tasks.length}</strong></header>
-      <div>{group.tasks.map((task) => <TrackerTaskRow key={task.id} task={task} role={role} canWrite={editable} onUpdate={onUpdate} isDone={isDone(task)} memberOptions={memberOptions} />)}</div>
-    </section>)}</div> : <EmptyState title="조건에 맞는 업무가 없습니다" description="필터를 바꾸거나 원장에 업무를 등록해 주세요." />}
+    <section className="tracker-publishing panel" aria-label="단계별 콘텐츠 발행 현황"><div className="panel-heading"><div><h3>콘텐츠 발행 현황</h3></div><span className="panel-note">자동 집계</span></div>{taskPage.publishing?.phases?.length ? <div className="tracker-publishing-grid">{taskPage.publishing.phases.map((item) => <article key={item.phaseCode}><header><strong>{item.phase}</strong><span>{item.actual.total} / {item.target.total}</span></header><ProgressBar value={item.target.total ? Math.min(100, Math.round(item.actual.total / item.target.total * 100)) : 0} color="var(--accent)" /><div><span>롱폼 {item.actual.longForm}/{item.target.longForm}</span><span>숏폼 {item.actual.shortForm}/{item.target.shortForm}</span><span>인스타 {item.actual.instagram}/{item.target.instagram}</span><span>블로그 {item.actual.blog}/{item.target.blog}</span></div></article>)}</div> : <div className="tracker-publishing-empty">콘텐츠 원장 집계가 연결되면 표시됩니다.</div>}</section>
   </div>;
 }
 
@@ -686,6 +707,14 @@ function sanitizePlanHtml(value) {
   return root.innerHTML;
 }
 
+function isRecentPlanSection(value, now = Date.now()) {
+  if (!value) return false;
+  const updatedAt = new Date(value).getTime();
+  if (!Number.isFinite(updatedAt)) return false;
+  const age = now - updatedAt;
+  return age >= 0 && age <= 24 * 60 * 60 * 1000;
+}
+
 function PlanView({ plan, project, planVariant }) {
   const sections = plan.sections || [];
   const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id || "");
@@ -695,6 +724,7 @@ function PlanView({ plan, project, planVariant }) {
   }, [sections, activeSectionId]);
 
   const activeSection = sections.find((section) => section.id === activeSectionId) || sections[0] || null;
+  const activeSectionIsNew = isRecentPlanSection(activeSection?.updatedAt);
   const safeBodyHtml = useMemo(() => sanitizePlanHtml(activeSection?.bodyHtml), [activeSection?.bodyHtml]);
   const planProjectName = plan.title || plan.project?.project_name || plan.project?.projectName || plan.project?.name || project.name;
 
@@ -708,10 +738,10 @@ function PlanView({ plan, project, planVariant }) {
     {sections.length ? <section className="plan-layout">
       <nav className="plan-section-nav panel" aria-label="실행계획 목차">
         <span>목차</span>
-        {sections.map((section, index) => <button key={section.id} type="button" className={section.id === activeSection?.id ? "is-active" : ""} onClick={() => setActiveSectionId(section.id)} aria-current={section.id === activeSection?.id ? "page" : undefined}><i>{section.code || String(index + 1).padStart(2, "0")}</i><strong>{section.title}</strong></button>)}
+        {sections.map((section, index) => <button key={section.id} type="button" className={section.id === activeSection?.id ? "is-active" : ""} onClick={() => setActiveSectionId(section.id)} aria-current={section.id === activeSection?.id ? "page" : undefined}><i>{section.code || String(index + 1).padStart(2, "0")}</i><strong>{section.title}</strong>{isRecentPlanSection(section.updatedAt) && <span className="plan-new-badge" title="24시간 이내 변경된 섹션">신규</span>}</button>)}
       </nav>
       <article className="plan-document panel">
-        <header><div><span>{activeSection?.code || "실행계획"}</span><h3>{activeSection?.title}</h3></div><small>{sections.findIndex((section) => section.id === activeSection?.id) + 1} / {sections.length}</small></header>
+        <header><div><span>{activeSection?.code || "실행계획"}</span><h3>{activeSection?.title}{activeSectionIsNew && <span className="plan-new-badge" title="24시간 이내 변경된 섹션">신규</span>}</h3></div><small>{sections.findIndex((section) => section.id === activeSection?.id) + 1} / {sections.length}</small></header>
         <div className="plan-document-body" dangerouslySetInnerHTML={{ __html: safeBodyHtml }} />
       </article>
     </section> : <EmptyState title={isInternal ? "등록된 내부 실행계획이 없습니다" : "공유된 실행계획이 없습니다"} description={isInternal ? "내부 실행계획이 등록되면 이곳에 표시됩니다." : "클라이언트 공유용 승인본이 등록되면 이곳에 표시됩니다."} />}
@@ -804,14 +834,10 @@ export function App() {
     desktopLevel: desktopNavigationLevel,
     drawerOpen: sidebarOpen,
   });
-  const authorizedPlanVariant = actorRole === "client" && planVariant === "internal" ? DEFAULT_PLAN_VARIANT : planVariant;
+  const authorizedPlanVariant = planVariant;
   const activeResource = viewResourceKey(view, authorizedPlanVariant);
   activeViewRef.current = activeResource;
   pageRefreshKeyRef.current = pageRefreshKey;
-
-  useEffect(() => {
-    if (actorRole === "client" && planVariant === "internal") setPlanVariant(DEFAULT_PLAN_VARIANT);
-  }, [actorRole, planVariant]);
 
   useEffect(() => source?.subscribe(setSourceState), [source]);
   useEffect(() => {
@@ -1102,6 +1128,7 @@ export function App() {
       : cachedPageForView || { ...blankPage, status: "loading", resource: activeResource, projectId: activeProjectId };
   const taskCount = view === "tasks" && resourceState.resource === "tasks" ? Number(resourceState.data?.total || 0) : Number(project.metrics?.[0]?.value?.replace?.(/\D/g, "") || 0);
   const canWrite = live && ["ADMIN", "EDIT"].includes(project.permissionCode);
+  const canWriteTasks = canWrite || (live && source.config.loginEnabled === false);
   const connectionReady = live && Boolean(sourceState.lastSuccessfulAt);
 
   const createRecord = async (entityType, fields) => {
@@ -1121,7 +1148,7 @@ export function App() {
   };
 
   const updateTask = async (task, fields) => {
-    if (!canWrite || role === "client") {
+    if (!canWriteTasks) {
       const readOnlyError = new Error("이 계정은 업무를 수정할 권한이 없습니다.");
       readOnlyError.code = "forbidden";
       throw readOnlyError;
@@ -1200,9 +1227,9 @@ export function App() {
   return (
     <div className={`app-shell ${navigation.shellCollapsed ? "is-navigation-collapsed" : ""} ${navigation.clientRailCollapsed ? "is-client-rail-collapsed" : ""} ${navigation.projectSidebarCollapsed ? "is-project-sidebar-collapsed" : ""} ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""}`}>
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
-      <ProjectSidebar project={project} activeView={view} activePlanVariant={authorizedPlanVariant} role={role} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
+      <ProjectSidebar project={project} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} canWrite={view === "tasks" ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
     </div>

@@ -361,6 +361,7 @@ export function planViewModel(envelope) {
       title: String(section.title || `실행계획 ${index + 1}`).trim(),
       order: Number.isFinite(Number(section.order ?? section.sortOrder ?? section.sort_order)) ? Number(section.order ?? section.sortOrder ?? section.sort_order) : index + 1,
       bodyHtml: String(section.bodyHtml || section.body_html || ""),
+      updatedAt: section.updatedAt || section.updated_at || null,
     }))
     .sort((left, right) => left.order - right.order || left.title.localeCompare(right.title, "ko"));
 

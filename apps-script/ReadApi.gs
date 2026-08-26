@@ -92,13 +92,21 @@ function mhReadProjectPlan_(request, actor, project) {
   var projectId = mhAsText_(project.project_id);
   var clientId = mhAsText_(project.client_id);
   var planType = mhNormalizeProjectPlanType_(request.planType || request.plan_type);
-  if (planType === 'INTERNAL' && actor.role === 'CLIENT_VIEWER') {
+  var publicInternalPlan = planType === 'INTERNAL' &&
+    actor.role === 'CLIENT_VIEWER' && MH_PUBLIC_INTERNAL_PLAN_ENABLED;
+  if (planType === 'INTERNAL' && actor.role === 'CLIENT_VIEWER' && !publicInternalPlan) {
     throw mhApiError_('forbidden', 'internal_plan_requires_project_team', 403);
+  }
+  var planReader = actor;
+  if (publicInternalPlan) {
+    planReader = {};
+    Object.keys(actor || {}).forEach(function (key) { planReader[key] = actor[key]; });
+    planReader.role = 'POCKET_EDITOR';
   }
   var sourceCode = planType === 'INTERNAL'
     ? 'INTERNAL_EXECUTION_PLAN'
     : 'CLIENT_APPROVED_PLAN';
-  var plans = mhProjectRows_(MH_SHEETS.PLANS, clientId, projectId, actor).filter(function (row) {
+  var plans = mhProjectRows_(MH_SHEETS.PLANS, clientId, projectId, planReader).filter(function (row) {
     return mhAsText_(row.status_code).toUpperCase() === 'PUBLISHED' &&
       mhAsText_(row.source_code).toUpperCase() === sourceCode;
   }).sort(function (a, b) {
@@ -115,7 +123,7 @@ function mhReadProjectPlan_(request, actor, project) {
   };
 
   var plan = plans[0];
-  var sections = mhProjectRows_(MH_SHEETS.PLAN_SECTIONS, clientId, projectId, actor).filter(function (row) {
+  var sections = mhProjectRows_(MH_SHEETS.PLAN_SECTIONS, clientId, projectId, planReader).filter(function (row) {
     return mhAsText_(row.plan_id) === mhAsText_(plan.plan_id) &&
       mhAsText_(row.status_code).toUpperCase() === 'PUBLISHED';
   }).sort(function (a, b) {
@@ -171,9 +179,7 @@ function mhPlanRequest_(request, planType) {
  */
 function mhReadProjectSnapshot_(request, actor, project) {
   var clientPlan = mhReadProjectPlan_(mhPlanRequest_(request, 'CLIENT_SHARE'), actor, project);
-  var internalPlan = actor.role === 'CLIENT_VIEWER'
-    ? null
-    : mhReadProjectPlan_(mhPlanRequest_(request, 'INTERNAL'), actor, project);
+  var internalPlan = mhReadProjectPlan_(mhPlanRequest_(request, 'INTERNAL'), actor, project);
   return {
     plan: clientPlan,
     internalPlan: internalPlan,
@@ -658,6 +664,8 @@ function mhProjectTask_(row, actor) {
       'description', 'plan_note', 'responsible_org_code', 'assignee_user_id',
       'reviewer_org_code', 'blocker_reason', 'source_code'
     ]);
+  } else if (MH_PUBLIC_TASK_WRITES_ENABLED) {
+    fields = fields.concat(['description', 'assignee_user_id']);
   }
   var projected = mhNormalizeRow_(mhPick_(row, fields));
   projected.contract_linked = mhNonEmpty_(row.plan_note);

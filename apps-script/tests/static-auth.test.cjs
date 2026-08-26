@@ -290,10 +290,10 @@ const snapshot = JSON.parse(JSON.stringify(context.mhReadProjectSnapshot_(
   snapshotActor,
   snapshotProject,
 )));
-assert.deepEqual(snapshotCallOrder, ['plan:CLIENT_SHARE', ...snapshotReaders.map(([, key]) => key)]);
+assert.deepEqual(snapshotCallOrder, ['plan:CLIENT_SHARE', 'plan:INTERNAL', ...snapshotReaders.map(([, key]) => key)]);
 assert.deepEqual(snapshot, {
   plan: { resource: 'plan:CLIENT_SHARE' },
-  internalPlan: null,
+  internalPlan: { resource: 'plan:INTERNAL' },
   ...Object.fromEntries(snapshotReaders.map(([, key]) => [key, { resource: key }])),
 });
 context.mhReadProjectPlan_ = originalPlanReader;
@@ -303,11 +303,6 @@ assert.equal(context.mhNormalizeProjectPlanType_(), 'CLIENT_SHARE');
 assert.equal(context.mhNormalizeProjectPlanType_('client'), 'CLIENT_SHARE');
 assert.equal(context.mhNormalizeProjectPlanType_('INTERNAL'), 'INTERNAL');
 assert.throws(() => context.mhNormalizeProjectPlanType_('UNKNOWN'));
-assert.throws(() => context.mhReadProjectPlan_(
-  { planType: 'INTERNAL' },
-  { role: 'CLIENT_VIEWER' },
-  snapshotProject,
-));
 
 const originalProjectRows = context.mhProjectRows_;
 const planRows = [{
@@ -346,6 +341,12 @@ const pocketInternalPlan = JSON.parse(JSON.stringify(context.mhReadProjectPlan_(
   snapshotProject,
 )));
 assert.deepEqual(pocketInternalPlan.sections.map((row) => row.plan_section_id), ['SEC-TEAM', 'SEC-POCKET']);
+const previewInternalPlan = JSON.parse(JSON.stringify(context.mhReadProjectPlan_(
+  { planType: 'INTERNAL' },
+  { role: 'CLIENT_VIEWER' },
+  snapshotProject,
+)));
+assert.deepEqual(previewInternalPlan.sections.map((row) => row.plan_section_id), ['SEC-TEAM', 'SEC-POCKET']);
 context.mhProjectRows_ = originalProjectRows;
 
 const clientPlanCacheKey = context.mhClientReadCacheKey_(

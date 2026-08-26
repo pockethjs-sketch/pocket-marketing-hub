@@ -16,6 +16,9 @@ function mhHandleMutation_(request, actor) {
       (spec.operations && spec.operations.indexOf(operation) < 0) || !projectId) {
     throw mhApiError_('invalid_request', 'invalid_mutation_shape', 400);
   }
+  if (actor.role === 'CLIENT_VIEWER' && entityType === 'task' && MH_PUBLIC_TASK_WRITES_ENABLED) {
+    actor.allowPreviewTaskWrite = true;
+  }
   var requestHash = mhMutationRequestHash_(entityType, operation, projectId, mutation, actor.userId);
 
   var lock = LockService.getScriptLock();

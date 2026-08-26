@@ -438,7 +438,10 @@ function mhRequireProjectAccess_(actor, projectId, requireWrite) {
       mhSetting_(MH_PROPERTY_KEYS.ENABLE_WRITES, 'false')
     ).toLowerCase() === 'true';
     if (!writesEnabled) throw mhApiError_('forbidden', 'writes_disabled', 403);
-    if (actor.role === 'CLIENT_VIEWER' || !MH_WRITE_PERMISSIONS[permission.permissionCode]) {
+    var previewTaskWrite = actor.role === 'CLIENT_VIEWER' && actor.allowPreviewTaskWrite === true &&
+      MH_PUBLIC_TASK_WRITES_ENABLED;
+    if ((!previewTaskWrite && actor.role === 'CLIENT_VIEWER') ||
+        (!previewTaskWrite && !MH_WRITE_PERMISSIONS[permission.permissionCode])) {
       throw mhApiError_('forbidden', 'write_access_denied', 403);
     }
   }
