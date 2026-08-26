@@ -162,6 +162,13 @@ try {
   assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") !== "none", "Second reveal did not open the all-project rail");
   await capture(client, "03-all-projects.png");
 
+  await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('실행계획')).click()")
+  assert(await waitFor(client, "document.querySelectorAll('.plan-section-nav button').length === 10 && document.querySelector('.plan-document-body')?.innerText.trim().length > 0", readyTimeout), "Client execution plan did not render");
+  assert(countApiAction(client.events, "project_plan") === 1, "Execution plan must be lazy-loaded once");
+  await evaluate(client, "document.querySelectorAll('.plan-section-nav button')[9].click()")
+  assert(await evaluate(client, "document.querySelector('.plan-document header h3').textContent.includes('미팅 기록')"), "Execution plan section navigation failed");
+  await capture(client, "04-execution-plan.png");
+
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('업무')).click()")
   assert(await evaluate(client, "location.hash") === "#tasks", "Task navigation did not update the view");
   assert(await waitFor(client, "document.querySelectorAll('.tracker-task-group article').length > 0", readyTimeout), "Task rows did not render after task-tab entry");

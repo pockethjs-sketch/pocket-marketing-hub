@@ -17,6 +17,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Client selectors in the rail are horizontal name buttons, never initials-only avatars. Preserve each client's own script and brand spelling (for example `UND`, `무극`).
 - Keep overview hierarchy to four primary signals, a compact monthly/week flow, attention items, channel progress, and recent updates.
 - The `업무` view mirrors the supplied 90-day team-tracker information structure: overall completion, phase progress, workstream progress, phase/workstream filters, and grouped task checklists. Keep the active PandaRank-inspired Pocket visual system; do not reuse the reference file's editorial styling.
+- The `실행계획` view is the native, client-readable projection of the approved client-share 90-day plan. Keep it read-only, load it only when entered, use a compact section navigator, sanitize all rendered HTML, and discard the source file's visual styling.
 - Supplied project-plan HTML files are requirements references only. Do not copy their visible copy, brand palette, typography, or component anatomy into the live product UI.
 - Use a single normalized source and role-based projection. Client mode is read-only and must hide executor names and internal notes.
 - GitHub Pages and local production previews use the authenticated Apps Script API. Never add bundled demo customer or project data as a fallback.

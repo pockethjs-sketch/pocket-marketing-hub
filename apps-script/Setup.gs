@@ -169,7 +169,7 @@ function mhSetupMigrateVisibilityCodes() {
 function mhSetupProtectApiManagedSheets() {
   var names = [
     MH_SHEETS.TASKS, MH_SHEETS.CONTENTS, MH_SHEETS.APPROVALS,
-    MH_SHEETS.FILES, MH_SHEETS.ACTIVITY
+    MH_SHEETS.FILES, MH_SHEETS.ACTIVITY, MH_SHEETS.PLANS, MH_SHEETS.PLAN_SECTIONS
   ];
   names.forEach(function (name) {
     var sheet = mhSheet_(name);

@@ -8,6 +8,7 @@ function mhHandleRead_(action, request, actor) {
   if (cached.hit) return { scope: scope, data: cached.data };
   var data = null;
   if (action === 'project_overview') data = mhReadOverview_(request, actor, access.project);
+  else if (action === 'project_plan') data = mhReadProjectPlan_(request, actor, access.project);
   else if (action === 'tasks') data = mhReadTasks_(request, actor, access.project);
   else if (action === 'contents') data = mhReadContents_(request, actor, access.project);
   else if (action === 'approvals') data = mhReadApprovals_(request, actor, access.project);
@@ -59,9 +60,68 @@ function mhRememberClientRead_(action, request, actor, projectId, data) {
     CacheService.getScriptCache().put(
       mhClientReadCacheKey_(action, request, actor, projectId),
       serialized,
-      MH_CLIENT_READ_CACHE_TTL_SECONDS
+      action === 'project_plan' ? 300 : MH_CLIENT_READ_CACHE_TTL_SECONDS
     );
   } catch (ignored) {}
+}
+
+function mhReadProjectPlan_(request, actor, project) {
+  mhEnsureUndClientPlanInstalled_();
+  var projectId = mhAsText_(project.project_id);
+  var clientId = mhAsText_(project.client_id);
+  var plans = mhProjectRows_(MH_SHEETS.PLANS, clientId, projectId, actor).filter(function (row) {
+    return mhAsText_(row.status_code).toUpperCase() === 'PUBLISHED';
+  }).sort(function (a, b) {
+    var left = mhComparableDate_(a.effective_at);
+    var right = mhComparableDate_(b.effective_at);
+    if (left !== right) return left < right ? 1 : -1;
+    return Number(b.row_version || 0) - Number(a.row_version || 0);
+  });
+  if (!plans.length) return { project: mhPlanProjectProjection_(project), plan: null, sections: [] };
+
+  var plan = plans[0];
+  var sections = mhProjectRows_(MH_SHEETS.PLAN_SECTIONS, clientId, projectId, actor).filter(function (row) {
+    return mhAsText_(row.plan_id) === mhAsText_(plan.plan_id) &&
+      mhAsText_(row.status_code).toUpperCase() === 'PUBLISHED';
+  }).sort(function (a, b) {
+    return Number(a.sort_order || 0) - Number(b.sort_order || 0);
+  }).map(function (row) {
+    return mhNormalizeRow_({
+      plan_section_id: row.plan_section_id,
+      section_code: row.section_code,
+      nav_label: row.nav_label,
+      title: row.title,
+      body_html: mhSafeClientPlanHtml_(row.body_html),
+      sort_order: row.sort_order,
+      updated_at: row.updated_at
+    });
+  });
+
+  return {
+    project: mhPlanProjectProjection_(project),
+    plan: mhNormalizeRow_(mhPick_(plan, [
+      'plan_id', 'version_label', 'title', 'summary', 'build_weeks',
+      'operation_months', 'monthly_output_target', 'initial_output_target',
+      'primary_goal', 'status_code', 'effective_at', 'updated_at'
+    ])),
+    sections: sections
+  };
+}
+
+function mhPlanProjectProjection_(project) {
+  return mhNormalizeRow_(mhPick_(project, [
+    'project_id', 'client_id', 'project_name', 'phase_code', 'start_date', 'end_date'
+  ]));
+}
+
+function mhSafeClientPlanHtml_(value) {
+  return String(value || '')
+    .replace(/<(script|style|iframe|object|embed|form|input|button)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(script|style|iframe|object|embed|form|input|button)\b[^>]*\/?\s*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\sstyle\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\shref\s*=\s*(["'])\s*javascript:[\s\S]*?\1/gi, '')
+    .replace(/\shref\s*=\s*(["'])(?!#|https:\/\/)[\s\S]*?\1/gi, '');
 }
 
 function mhPreviewBootstrap_(request) {

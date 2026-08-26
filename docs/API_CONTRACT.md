@@ -35,6 +35,7 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 | `preview_overview` | 로그인 없는 첫 총괄 | 공개 허용 프로젝트의 총괄 projection; bootstrap과 병렬 호출 |
 | `bootstrap` | 앱 셸·고객사 레일 | 로그인 사용자가 볼 수 있는 고객사·프로젝트 요약만 |
 | `project_overview` | 총괄 현황 | 핵심 집계, 단계·분야 진행, 확인 항목, 최근 활동 상위 5개 |
+| `project_plan` | 실행계획 | 해당 프로젝트의 최신 PUBLISHED 승인본과 CLIENT 공개 섹션 10개 |
 | `tasks` | 업무 | 필터된 업무 목록, 프로젝트 일정, 08_콘텐츠 발행 집계; 기본 30건·최대 200건 |
 | `contents` | 콘텐츠 | 최대 92일의 콘텐츠와 현재 버전·검수 상태 |
 | `approvals` | 검수 현황 | 공개 허용된 현재 검수 상태만 |
@@ -61,6 +62,10 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 - `CLIENT`: 고객사가 볼 수 있는 일정·결과·승인·성과
 
 고객 응답에는 실행사명, 내부 담당자 ID, 차단 사유, 내부 메모, 원가, 변경 전후 JSON을 포함하지 않는다.
+
+### 실행계획 응답
+
+`project_plan`은 계획 화면에 들어갈 때만 지연 조회합니다. `plan`에는 최신 승인본 메타데이터를, `sections`에는 `sort_order` 순서의 정제된 본문을 반환합니다. 원본 파일 링크·내부 원천 코드·편집 필드는 반환하지 않으며 고객은 이 action으로 저장할 수 없습니다. 계획 응답은 프로젝트·역할별로 최대 5분 캐시합니다.
 
 ### 업무 응답
 

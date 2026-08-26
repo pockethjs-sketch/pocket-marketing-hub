@@ -12,6 +12,7 @@
 | `previewOverview` | `preview_overview` | 공개 첫 총괄을 bootstrap과 병렬 조회 |
 | `bootstrap` | `bootstrap` | 인증 사용자의 고객사·프로젝트·채널 탐색 정보 |
 | `overview` | `project_overview` | 선택 프로젝트 총괄 현황 |
+| `plan` | `project_plan` | 최신 클라이언트 공유 실행계획 승인본 |
 | `tasks` | `tasks` | 업무 목록 |
 | `contents` | `contents` | 콘텐츠 목록 |
 | `performance` | `performance` | KPI·성과 |
@@ -72,7 +73,7 @@ await source.mutate({
 1. 로그인 없는 앱 부팅은 `previewBootstrap()`과 `previewOverview()`를 병렬 실행해 탐색 정보와 첫 총괄을 함께 준비합니다.
 2. 유효한 저장 세션 또는 로그인 상태에서는 `bootstrap()`으로 최소 탐색 정보만 받습니다.
 3. 로그인 사용자는 탐색 화면 뒤 `overview()`를 조회하고, 공개 첫 진입은 병렬 응답을 그대로 사용해 두 번째 직렬 대기를 없앱니다.
-4. 업무·콘텐츠·성과·자료 탭 진입 시 해당 화면 action을 지연 조회합니다.
+4. 실행계획·업무·콘텐츠·성과·자료 탭 진입 시 해당 화면 action을 지연 조회합니다.
 5. 화면에 `loading`, `error`, 마지막 성공 시각을 표시합니다.
 6. 추가·수정 버튼은 서버 성공 응답을 받은 뒤에만 화면을 확정합니다.
 7. 저장 후 영향받은 화면 데이터와 활동로그를 다시 조회합니다.

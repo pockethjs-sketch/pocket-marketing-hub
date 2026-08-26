@@ -10,6 +10,7 @@ export {
   contentsViewModel,
   filesViewModel,
   overviewViewModel,
+  planViewModel,
   performanceViewModel,
   tasksViewModel,
 } from "./viewModel.js";

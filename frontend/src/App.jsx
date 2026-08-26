@@ -4,6 +4,7 @@ import {
   AlertCircle,
   ArrowRight,
   BarChart3,
+  BookOpenText,
   CalendarDays,
   Check,
   ChevronDown,
@@ -35,6 +36,7 @@ import {
   createHubDataSource,
   filesViewModel,
   overviewViewModel,
+  planViewModel,
   performanceViewModel,
   tasksViewModel,
 } from "./api/index.js";
@@ -42,6 +44,7 @@ import { getNavigationPresentation } from "./navigationState.js";
 
 const navItems = [
   { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
+  { id: "plan", label: "실행계획", icon: BookOpenText },
   { id: "tasks", label: "업무", icon: ClipboardCheck },
   { id: "content", label: "콘텐츠", icon: GalleryHorizontalEnd },
   { id: "performance", label: "성과", icon: BarChart3 },
@@ -606,10 +609,85 @@ function FilesView({ role, files, activities, onCreate, canWrite }) {
   return <div className="view-stack"><ViewHeader eyebrow="자료 관리" title="자료·활동" description="공유 자료와 Google Sheets 변경 이력을 확인합니다.">{role !== "client" && <CreateButton entityType="file" onOpen={onCreate} enabled={canWrite}>자료 등록</CreateButton>}</ViewHeader><section className="overview-grid file-grid"><div className="panel"><div className="panel-heading"><div><h3>최근 자료</h3></div><FileText size={17} /></div>{files.length ? <div className="file-list">{files.map((file) => <a key={file.id} href={file.url || undefined} target={file.url ? "_blank" : undefined} rel="noreferrer" className={!file.url ? "is-disabled" : ""}><span className="file-icon"><FileText size={17} /></span><span><strong>{file.title}</strong><small>{file.type} · {file.date}</small></span><i>{file.visibility}</i><ArrowRight size={14} /></a>)}</div> : <EmptyState title="등록된 자료가 없습니다" description="파일 링크가 원장에 등록되면 표시됩니다." />}</div><div className="panel"><div className="panel-heading"><div><h3>활동 기록</h3></div><Activity size={17} /></div>{activities.length ? <div className="activity-timeline">{activities.map((item) => <article key={item.id}><span /><div><strong>{item.title}</strong><p>{item.meta}</p>{role !== "client" && item.internalMeta && <small>{item.internalMeta}</small>}</div></article>)}</div> : <EmptyState title="활동 기록이 없습니다" description="웹과 원장의 변경 이력이 표시됩니다." />}</div></section></div>;
 }
 
+const PLAN_ALLOWED_TAGS = new Set([
+  "a", "article", "b", "blockquote", "br", "dd", "div", "dl", "dt", "em", "figcaption", "figure",
+  "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "li", "ol", "p", "section", "small", "span",
+  "strong", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
+]);
+const PLAN_BLOCKED_TAGS = new Set(["script", "style", "iframe", "object", "embed", "form", "input", "button", "textarea", "select", "option", "svg", "math"]);
+
+function sanitizePlanHtml(value) {
+  if (!value || typeof window === "undefined" || typeof window.DOMParser !== "function") return "";
+  const documentNode = new window.DOMParser().parseFromString(`<div>${String(value)}</div>`, "text/html");
+  const root = documentNode.body.firstElementChild;
+  if (!root) return "";
+
+  Array.from(root.querySelectorAll("*")).forEach((element) => {
+    const tagName = element.tagName.toLowerCase();
+    if (PLAN_BLOCKED_TAGS.has(tagName)) {
+      element.remove();
+      return;
+    }
+    if (!PLAN_ALLOWED_TAGS.has(tagName)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      return;
+    }
+
+    Array.from(element.attributes).forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      const allowedTableAttribute = ["colspan", "rowspan", "scope"].includes(name);
+      if (tagName === "a" && name === "href") {
+        const href = attribute.value.trim();
+        if (!/^(https?:|mailto:|#)/i.test(href)) element.removeAttribute(attribute.name);
+        return;
+      }
+      if (tagName === "a" && name === "target") {
+        if (attribute.value !== "_blank") element.removeAttribute(attribute.name);
+        return;
+      }
+      if (!allowedTableAttribute) element.removeAttribute(attribute.name);
+    });
+    if (tagName === "a" && element.getAttribute("target") === "_blank") element.setAttribute("rel", "noopener noreferrer");
+  });
+
+  return root.innerHTML;
+}
+
+function PlanView({ plan, project }) {
+  const sections = plan.sections || [];
+  const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id || "");
+
+  useEffect(() => {
+    if (!sections.some((section) => section.id === activeSectionId)) setActiveSectionId(sections[0]?.id || "");
+  }, [sections, activeSectionId]);
+
+  const activeSection = sections.find((section) => section.id === activeSectionId) || sections[0] || null;
+  const safeBodyHtml = useMemo(() => sanitizePlanHtml(activeSection?.bodyHtml), [activeSection?.bodyHtml]);
+  const planProjectName = plan.title || plan.project?.project_name || plan.project?.projectName || plan.project?.name || project.name;
+
+  return <div className="view-stack plan-view">
+    <section className="plan-summary panel">
+      <div className="plan-summary-copy"><span>90일 실행계획</span><h2>{planProjectName}</h2><p>{plan.summary || "합의된 실행 범위와 단계별 계획을 한 화면에서 확인합니다."}</p></div>
+      <dl><div><dt>계획 구간</dt><dd>{sections.length}개 섹션</dd></div><div><dt>기준 버전</dt><dd>{plan.sourceVersion || "현재 승인본"}</dd></div><div><dt>최근 반영</dt><dd>{plan.updatedAtLabel}</dd></div></dl>
+    </section>
+    {sections.length ? <section className="plan-layout">
+      <nav className="plan-section-nav panel" aria-label="실행계획 목차">
+        <span>목차</span>
+        {sections.map((section, index) => <button key={section.id} type="button" className={section.id === activeSection?.id ? "is-active" : ""} onClick={() => setActiveSectionId(section.id)} aria-current={section.id === activeSection?.id ? "page" : undefined}><i>{section.code || String(index + 1).padStart(2, "0")}</i><strong>{section.title}</strong></button>)}
+      </nav>
+      <article className="plan-document panel">
+        <header><div><span>{activeSection?.code || "실행계획"}</span><h3>{activeSection?.title}</h3></div><small>{sections.findIndex((section) => section.id === activeSection?.id) + 1} / {sections.length}</small></header>
+        <div className="plan-document-body" dangerouslySetInnerHTML={{ __html: safeBodyHtml }} />
+      </article>
+    </section> : <EmptyState title="공유된 실행계획이 없습니다" description="클라이언트 공유용 승인본이 등록되면 이곳에 표시됩니다." />}
+  </div>;
+}
+
 function AppContent({ view, project, role, search, setView, pageState, onRetry, onCreate, onTaskUpdate, onProjectUpdate, canWrite }) {
   if (pageState.status === "loading" && !pageState.data) return <LoadingState />;
   if (pageState.status === "error" && !pageState.data) return <ErrorState error={pageState.error} onRetry={onRetry} />;
   const data = pageState.data || {};
+  if (view === "plan") return <PlanView plan={data} project={project} />;
   if (view === "tasks") return <TasksView role={role} query={search} taskPage={{ ...data, project: data.project || { id: project.id, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion } }} onCreate={onCreate} onUpdate={onTaskUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} />;
   if (view === "content") return <ContentView role={role} query={search} contents={data.items || []} onCreate={onCreate} canWrite={canWrite} />;
   if (view === "performance") return <PerformanceView performance={data} />;
@@ -806,6 +884,7 @@ export function App() {
     const requestEpoch = resourceCacheEpochRef.current;
     let request = resourceRequestRef.current.get(requestKey);
     if (!request) {
+      if (view === "plan") request = source.plan(params).then(planViewModel);
       if (view === "tasks") request = source.tasks(params).then(tasksViewModel);
       if (view === "content") request = source.contents(params).then(contentsViewModel);
       if (view === "performance") request = source.performance(params).then(performanceViewModel);

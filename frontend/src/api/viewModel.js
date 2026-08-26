@@ -351,6 +351,31 @@ export function tasksViewModel(envelope) {
   };
 }
 
+export function planViewModel(envelope) {
+  const data = envelope?.data || {};
+  const plan = data.plan || {};
+  const sections = (Array.isArray(data.sections) ? data.sections : [])
+    .map((section, index) => ({
+      id: String(section.id || section.planSectionId || section.plan_section_id || section.code || section.sectionCode || section.section_code || `section-${index + 1}`),
+      code: String(section.navLabel || section.nav_label || section.code || section.sectionCode || section.section_code || "").trim(),
+      title: String(section.title || `실행계획 ${index + 1}`).trim(),
+      order: Number.isFinite(Number(section.order ?? section.sortOrder ?? section.sort_order)) ? Number(section.order ?? section.sortOrder ?? section.sort_order) : index + 1,
+      bodyHtml: String(section.bodyHtml || section.body_html || ""),
+    }))
+    .sort((left, right) => left.order - right.order || left.title.localeCompare(right.title, "ko"));
+
+  return {
+    project: data.project || null,
+    id: String(plan.planId || plan.plan_id || "").trim(),
+    title: String(plan.title || "").trim(),
+    summary: String(plan.summary || "").trim(),
+    sourceVersion: String(data.sourceVersion || plan.versionLabel || plan.version_label || "").trim(),
+    updatedAt: data.updatedAt || plan.updatedAt || plan.updated_at || envelope?.generatedAt || null,
+    updatedAtLabel: relativeTimestamp(data.updatedAt || plan.updatedAt || plan.updated_at || envelope?.generatedAt),
+    sections,
+  };
+}
+
 export function contentsViewModel(envelope) {
   const data = envelope?.data || {};
   return {

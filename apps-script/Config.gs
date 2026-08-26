@@ -5,9 +5,9 @@
  * This file is safe to keep in a public repository.
  */
 
-var MH_CONTRACT_VERSION = '2026-08-26-team-tracker-v4';
-var MH_SCHEMA_VERSION = '2026-08-26-v2';
-var MH_BACKEND_VERSION = '2026-08-26-read-cache-v11';
+var MH_CONTRACT_VERSION = '2026-08-26-client-plan-v5';
+var MH_SCHEMA_VERSION = '2026-08-26-v3';
+var MH_BACKEND_VERSION = '2026-08-26-client-plan-v13';
 
 var MH_PROPERTY_KEYS = {
   SHEET_ID: 'SHEET_ID',
@@ -40,7 +40,9 @@ var MH_SHEETS = {
   KPI_ACTUALS: '13_KPI실적',
   FILES: '14_파일링크',
   ACTIVITY: '15_활동로그',
-  SYNC_STATUS: '16_동기화상태'
+  SYNC_STATUS: '16_동기화상태',
+  PLANS: '17_실행계획',
+  PLAN_SECTIONS: '18_실행계획섹션'
 };
 
 var MH_VISIBILITY_LEVEL = {
@@ -71,6 +73,7 @@ var MH_INTERACTIVE_ROLES = {
 var MH_READ_ACTIONS = {
   bootstrap: true,
   project_overview: true,
+  project_plan: true,
   tasks: true,
   contents: true,
   approvals: true,

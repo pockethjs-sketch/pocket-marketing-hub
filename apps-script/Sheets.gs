@@ -218,6 +218,17 @@ function mhSchemaCheck_() {
     'event_status_code', 'created_at'
   ]);
   mhAssertHeaders_(MH_SHEETS.SYNC_STATUS, ['sync_status_id', 'client_id', 'project_id', 'status_code', 'updated_at', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.PLANS, [
+    'plan_id', 'client_id', 'project_id', 'version_label', 'title', 'summary',
+    'build_weeks', 'operation_months', 'monthly_output_target', 'initial_output_target',
+    'primary_goal', 'status_code', 'effective_at', 'visibility_code', 'source_code',
+    'created_at', 'updated_at', 'row_version', 'archived_at'
+  ]);
+  mhAssertHeaders_(MH_SHEETS.PLAN_SECTIONS, [
+    'plan_section_id', 'plan_id', 'client_id', 'project_id', 'section_code',
+    'nav_label', 'title', 'body_html', 'sort_order', 'status_code',
+    'visibility_code', 'source_code', 'created_at', 'updated_at', 'row_version', 'archived_at'
+  ]);
   [
     [MH_SHEETS.CLIENTS, 'client_id'], [MH_SHEETS.PROJECTS, 'project_id'],
     [MH_SHEETS.USERS, 'user_id'], [MH_SHEETS.MEMBERSHIPS, 'membership_id'],
@@ -227,7 +238,8 @@ function mhSchemaCheck_() {
     [MH_SHEETS.APPROVALS, 'approval_id'], [MH_SHEETS.KPI_DEFINITIONS, 'kpi_id'],
     [MH_SHEETS.DAILY_PERFORMANCE, 'performance_id'], [MH_SHEETS.KPI_ACTUALS, 'kpi_actual_id'],
     [MH_SHEETS.FILES, 'file_id'], [MH_SHEETS.ACTIVITY, 'event_id'],
-    [MH_SHEETS.SYNC_STATUS, 'sync_status_id']
+    [MH_SHEETS.SYNC_STATUS, 'sync_status_id'], [MH_SHEETS.PLANS, 'plan_id'],
+    [MH_SHEETS.PLAN_SECTIONS, 'plan_section_id']
   ].forEach(function (entry) { mhAssertUniqueKey_(entry[0], entry[1]); });
   mhAssertUniqueMemberships_();
   mhAssertTenantScopes_();
@@ -262,7 +274,7 @@ function mhAssertTenantScopes_() {
     MH_SHEETS.CHANNELS, MH_SHEETS.TASKS, MH_SHEETS.TASK_DEPENDENCIES,
     MH_SHEETS.CONTENTS, MH_SHEETS.CONTENT_VERSIONS, MH_SHEETS.APPROVALS, MH_SHEETS.KPI_DEFINITIONS,
     MH_SHEETS.DAILY_PERFORMANCE, MH_SHEETS.KPI_ACTUALS, MH_SHEETS.FILES,
-    MH_SHEETS.ACTIVITY, MH_SHEETS.SYNC_STATUS
+    MH_SHEETS.ACTIVITY, MH_SHEETS.SYNC_STATUS, MH_SHEETS.PLANS, MH_SHEETS.PLAN_SECTIONS
   ].forEach(function (sheetName) {
     mhActiveRows_(sheetName).forEach(function (row) {
       var key = mhAsText_(row.client_id) + '|' + mhAsText_(row.project_id);
