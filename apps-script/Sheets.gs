@@ -1,7 +1,7 @@
 var MH_SPREADSHEET_CACHE = null;
 var MH_TABLE_MEMORY_CACHE = {};
 var MH_FORCE_FRESH_TABLES = false;
-var MH_TABLE_CACHE_TTL_SECONDS = 45;
+var MH_TABLE_CACHE_TTL_SECONDS = 180;
 var MH_TABLE_CACHE_MAX_BYTES = 90000;
 
 function mhTableCacheKey_(sheetName) {

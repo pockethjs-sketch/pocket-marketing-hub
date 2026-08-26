@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const zlib = require('node:zlib');
 
 const root = path.resolve(__dirname, '..');
 const sourceFiles = fs.readdirSync(root)
@@ -14,8 +15,22 @@ new vm.Script(allSource, { filename: 'apps-script-bundle.gs' });
 
 const scriptProperties = {};
 const cache = new Map();
+const cacheTtls = new Map();
 const toWebSafe = (buffer) => Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
 const fromWebSafe = (text) => Buffer.from(String(text).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+const asBuffer = (value) => {
+  if (Buffer.isBuffer(value)) return value;
+  if (value && typeof value.getBytes === 'function') return Buffer.from(value.getBytes());
+  if (Array.isArray(value) || ArrayBuffer.isView(value)) return Buffer.from(value);
+  return Buffer.from(String(value ?? ''), 'utf8');
+};
+const makeBlob = (value) => {
+  const buffer = asBuffer(value);
+  return {
+    getBytes: () => [...buffer],
+    getDataAsString: () => buffer.toString('utf8'),
+  };
+};
 
 const context = {
   console,
@@ -41,7 +56,10 @@ const context = {
   CacheService: {
     getScriptCache: () => ({
       get: (key) => cache.get(key) || null,
-      put: (key, value) => cache.set(key, String(value)),
+      put: (key, value, ttl) => {
+        cache.set(key, String(value));
+        cacheTtls.set(key, Number(ttl || 0));
+      },
       remove: (key) => cache.delete(key),
     }),
   },
@@ -50,9 +68,13 @@ const context = {
     DigestAlgorithm: { SHA_256: 'SHA_256' },
     computeHmacSha256Signature: (value, key) => [...crypto.createHmac('sha256', String(key)).update(String(value)).digest()],
     computeDigest: (_algorithm, value) => [...crypto.createHash('sha256').update(String(value)).digest()],
+    base64Encode: (value) => asBuffer(value).toString('base64'),
+    base64Decode: (value) => [...Buffer.from(String(value), 'base64')],
     base64EncodeWebSafe: (value) => toWebSafe(typeof value === 'string' ? Buffer.from(value) : value),
     base64DecodeWebSafe: (value) => [...fromWebSafe(value)],
-    newBlob: (bytes) => ({ getDataAsString: () => Buffer.from(bytes).toString('utf8') }),
+    newBlob: (value) => makeBlob(value),
+    gzip: (value) => makeBlob(zlib.gzipSync(asBuffer(value))),
+    ungzip: (value) => makeBlob(zlib.gunzipSync(asBuffer(value))),
     getUuid: () => crypto.randomUUID(),
     formatDate: (date) => new Date(date).toISOString(),
   },
@@ -231,6 +253,81 @@ const orderedTaskIds = Array.from(context.mhSortTaskRows_([
   { task_id: 'TSK-01A', sort_order: 1 },
 ])).map((row) => row.task_id);
 assert.deepEqual(orderedTaskIds, ['TSK-01A', 'TSK-01B', 'TSK-02', 'TSK-54']);
+
+// Project snapshots must preserve the existing role-aware readers instead of
+// bypassing their visibility projections. They run in one execution so the
+// table-level memory cache is shared across all six resources.
+assert.equal(context.MH_READ_ACTIONS.project_snapshot, true);
+const snapshotCallOrder = [];
+const snapshotReaders = [
+  ['mhReadProjectPlan_', 'plan'],
+  ['mhReadTasks_', 'tasks'],
+  ['mhReadContents_', 'contents'],
+  ['mhReadPerformance_', 'performance'],
+  ['mhReadFiles_', 'files'],
+  ['mhReadActivity_', 'activity'],
+];
+const originalSnapshotReaders = Object.fromEntries(snapshotReaders.map(([name]) => [name, context[name]]));
+const snapshotActor = { userId: 'USR-SNAPSHOT', role: 'CLIENT_VIEWER' };
+const snapshotProject = { client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001' };
+snapshotReaders.forEach(([name, key]) => {
+  context[name] = (request, actor, project) => {
+    assert.equal(request.limit, 200);
+    assert.equal(actor, snapshotActor);
+    assert.equal(project, snapshotProject);
+    snapshotCallOrder.push(key);
+    return { resource: key };
+  };
+});
+const snapshot = JSON.parse(JSON.stringify(context.mhReadProjectSnapshot_(
+  { limit: 200 },
+  snapshotActor,
+  snapshotProject,
+)));
+assert.deepEqual(snapshotCallOrder, snapshotReaders.map(([, key]) => key));
+assert.deepEqual(snapshot, Object.fromEntries(snapshotReaders.map(([, key]) => [key, { resource: key }])));
+Object.entries(originalSnapshotReaders).forEach(([name, reader]) => { context[name] = reader; });
+
+const readApiSource = fs.readFileSync(path.join(root, 'ReadApi.gs'), 'utf8');
+assert.match(readApiSource, /action === 'project_snapshot'\) data = mhReadProjectSnapshot_/);
+assert.match(fs.readFileSync(path.join(root, 'Router.gs'), 'utf8'), /if \(MH_READ_ACTIONS\[action\]\)/);
+const projectPlanReaderSource = readApiSource.slice(
+  readApiSource.indexOf('function mhReadProjectPlan_'),
+  readApiSource.indexOf('function mhReadProjectSnapshot_'),
+);
+assert.doesNotMatch(projectPlanReaderSource, /mhEnsureUndClientPlanInstalled_/);
+assert.equal(context.MH_CLIENT_READ_CACHE_TTL_SECONDS, 120);
+assert.equal(context.mhClientReadCacheTtl_('project_overview'), 120);
+assert.equal(context.mhClientReadCacheTtl_('project_plan'), 300);
+assert.equal(context.mhClientReadCacheTtl_('project_snapshot'), 300);
+assert.match(fs.readFileSync(path.join(root, 'Sheets.gs'), 'utf8'), /MH_TABLE_CACHE_TTL_SECONDS\s*=\s*180/);
+
+// The combined snapshot is commonly larger than CacheService's raw per-key
+// budget. Verify that the client cache compresses it and restores the same
+// projection without changing its 300-second read-only TTL.
+const cacheActor = { userId: 'USR-CACHE', role: 'CLIENT_VIEWER' };
+const largeSnapshot = {
+  tasks: Array.from({ length: 1500 }, (_, index) => ({
+    id: `TSK-${index}`,
+    title: '반복 가능한 공개 업무 데이터',
+    status: index % 2 ? 'IN_PROGRESS' : 'DONE',
+  })),
+};
+const snapshotCacheRequest = { limit: 200 };
+const snapshotCacheKey = context.mhClientReadCacheKey_(
+  'project_snapshot', snapshotCacheRequest, cacheActor, 'PRJ-UND-90D-001',
+);
+context.mhRememberClientRead_(
+  'project_snapshot', snapshotCacheRequest, cacheActor, 'PRJ-UND-90D-001', largeSnapshot,
+);
+assert.match(cache.get(snapshotCacheKey), /^z:/);
+assert.equal(cacheTtls.get(snapshotCacheKey), 300);
+const cachedSnapshot = context.mhCachedClientRead_(
+  'project_snapshot', snapshotCacheRequest, cacheActor, 'PRJ-UND-90D-001',
+);
+assert.equal(cachedSnapshot.hit, true);
+assert.deepEqual(JSON.parse(JSON.stringify(cachedSnapshot.data)), largeSnapshot);
+
 assert.deepEqual(Array.from(context.MH_ENTITY_SPECS.project.operations), ['UPDATE']);
 assert.deepEqual(Array.from(context.MH_ENTITY_SPECS.project.fields), ['start_date']);
 const mutationSource = fs.readFileSync(path.join(root, 'Mutations.gs'), 'utf8');

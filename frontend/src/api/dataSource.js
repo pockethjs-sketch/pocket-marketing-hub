@@ -217,6 +217,7 @@ export function createHubDataSource(options = {}) {
     getSession: () => live?.getSession?.() || null,
     load,
     bootstrap: (params) => load("bootstrap", params),
+    workspace: (params) => load("workspace", params),
     overview: (params) => load("overview", params),
     plan: (params) => load("plan", params),
     tasks: (params) => load("tasks", params),

@@ -5,9 +5,9 @@
  * This file is safe to keep in a public repository.
  */
 
-var MH_CONTRACT_VERSION = '2026-08-26-client-plan-v5';
+var MH_CONTRACT_VERSION = '2026-08-26-project-snapshot-v6';
 var MH_SCHEMA_VERSION = '2026-08-26-v3';
-var MH_BACKEND_VERSION = '2026-08-26-client-plan-v13';
+var MH_BACKEND_VERSION = '2026-08-26-project-snapshot-v14';
 
 var MH_PROPERTY_KEYS = {
   SHEET_ID: 'SHEET_ID',
@@ -74,6 +74,7 @@ var MH_READ_ACTIONS = {
   bootstrap: true,
   project_overview: true,
   project_plan: true,
+  project_snapshot: true,
   tasks: true,
   contents: true,
   approvals: true,

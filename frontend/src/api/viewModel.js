@@ -452,3 +452,48 @@ export function activityListViewModel(envelope) {
     generatedAt: envelope?.generatedAt || null,
   };
 }
+
+function workspaceEnvelope(envelope, value) {
+  const nested = value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "data")
+    ? value
+    : { data: value };
+  return {
+    ...nested,
+    generatedAt: nested.generatedAt || envelope?.generatedAt || null,
+  };
+}
+
+function workspaceValue(data, ...keys) {
+  const key = keys.find((candidate) => Object.prototype.hasOwnProperty.call(data, candidate));
+  return key === undefined ? undefined : data[key];
+}
+
+/**
+ * Normalize a project_snapshot response into the same per-view models used by
+ * the existing lazy endpoints. Missing keys are deliberately ignored so a
+ * staged/partial backend response can still warm the views it contains.
+ */
+export function workspaceViewModel(envelope, fallbackProject) {
+  const data = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
+  const result = {};
+  const overview = workspaceValue(data, "overview", "project_overview");
+  const plan = workspaceValue(data, "plan", "project_plan");
+  const tasks = workspaceValue(data, "tasks");
+  const contents = workspaceValue(data, "contents", "content");
+  const performance = workspaceValue(data, "performance");
+  const files = workspaceValue(data, "files");
+  const activity = workspaceValue(data, "activity", "activities");
+
+  if (overview !== undefined) result.overview = overviewViewModel(workspaceEnvelope(envelope, overview), fallbackProject);
+  if (plan !== undefined) result.plan = planViewModel(workspaceEnvelope(envelope, plan));
+  if (tasks !== undefined) result.tasks = tasksViewModel(workspaceEnvelope(envelope, tasks));
+  if (contents !== undefined) result.content = contentsViewModel(workspaceEnvelope(envelope, contents));
+  if (performance !== undefined) result.performance = performanceViewModel(workspaceEnvelope(envelope, performance));
+  if (files !== undefined || activity !== undefined) {
+    result.files = {
+      files: filesViewModel(workspaceEnvelope(envelope, files || {})),
+      activities: activityListViewModel(workspaceEnvelope(envelope, activity || {})),
+    };
+  }
+  return result;
+}

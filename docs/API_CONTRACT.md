@@ -7,8 +7,8 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 ```json
 {
   "ok": true,
-  "contractVersion": "2026-08-26-fast-bootstrap-v3",
-  "schemaVersion": "2026-08-25-v1",
+  "contractVersion": "2026-08-26-project-snapshot-v6",
+  "schemaVersion": "2026-08-26-v3",
   "revision": "rev_20260826_144001",
   "generatedAt": "2026-08-25T10:30:01+09:00",
   "requestId": "req_xxx",
@@ -36,6 +36,7 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 | `bootstrap` | 앱 셸·고객사 레일 | 로그인 사용자가 볼 수 있는 고객사·프로젝트 요약만 |
 | `project_overview` | 총괄 현황 | 핵심 집계, 단계·분야 진행, 확인 항목, 최근 활동 상위 5개 |
 | `project_plan` | 실행계획 | 해당 프로젝트의 최신 PUBLISHED 승인본과 CLIENT 공개 섹션 10개 |
+| `project_snapshot` | 후속 탭 사전 준비 | 실행계획·업무·콘텐츠·성과·자료·활동의 역할별 projection을 한 응답으로 묶음 |
 | `tasks` | 업무 | 필터된 업무 목록, 프로젝트 일정, 08_콘텐츠 발행 집계; 기본 30건·최대 200건 |
 | `contents` | 콘텐츠 | 최대 92일의 콘텐츠와 현재 버전·검수 상태 |
 | `approvals` | 검수 현황 | 공개 허용된 현재 검수 상태만 |
@@ -65,7 +66,11 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 ### 실행계획 응답
 
-`project_plan`은 계획 화면에 들어갈 때만 지연 조회합니다. `plan`에는 최신 승인본 메타데이터를, `sections`에는 `sort_order` 순서의 정제된 본문을 반환합니다. 원본 파일 링크·내부 원천 코드·편집 필드는 반환하지 않으며 고객은 이 action으로 저장할 수 없습니다. 계획 응답은 프로젝트·역할별로 최대 5분 캐시합니다.
+`project_plan`은 개별 fallback 조회와 `project_snapshot`의 실행계획 항목에 같은 reader를 사용합니다. `plan`에는 최신 승인본 메타데이터를, `sections`에는 `sort_order` 순서의 정제된 본문을 반환합니다. 원본 파일 링크·내부 원천 코드·편집 필드는 반환하지 않으며 고객은 이 action으로 저장할 수 없습니다. 계획 응답은 프로젝트·역할별로 최대 5분 캐시합니다.
+
+### 프로젝트 스냅샷 응답
+
+`project_snapshot`은 첫 총괄 화면을 막지 않고 그 뒤에 실행되는 읽기 최적화 API입니다. `plan`, `tasks`, `contents`, `performance`, `files`, `activity`를 기존 reader 그대로 호출하므로 역할·프로젝트 권한, 공개 범위, 필드 제거, 기간·건수 제한은 개별 API와 동일합니다. `overview`는 첫 진입 시 이미 병렬 조회하므로 스냅샷에 중복 포함하지 않습니다. 스냅샷 실패 시 프런트는 필요한 탭의 개별 API를 다시 호출합니다.
 
 ### 업무 응답
 
@@ -120,6 +125,7 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 - `preview_bootstrap`·`bootstrap`: 10KB 이하 권장, 총괄·목록 원문 포함 금지
 - `preview_overview`: 첫 진입 병렬 조회 전용이며 쓰기 세션이나 내부 필드를 반환하지 않음
+- `project_snapshot`: 후속 탭 준비 전용이며 각 하위 reader의 목록 제한을 유지하고, 서버 캐시에는 90KB 초과 시 gzip으로 저장
 - 일반 응답: 200KB 이하 권장
 - 목록 기본 30건, 최대 200건
 - 커서는 시트 행 번호가 아닌 `updated_at + immutable_id` 기반 불투명 토큰 사용

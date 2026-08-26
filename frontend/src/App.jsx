@@ -39,6 +39,7 @@ import {
   planViewModel,
   performanceViewModel,
   tasksViewModel,
+  workspaceViewModel,
 } from "./api/index.js";
 import { getNavigationPresentation, nextDesktopNavigationLevel } from "./navigationState.js";
 
@@ -696,7 +697,38 @@ function AppContent({ view, project, role, search, setView, pageState, onRetry, 
 }
 
 const blankPage = { status: "idle", data: null, error: null, resource: null, projectId: null };
-const RESOURCE_CACHE_TTL_MS = 60_000;
+const RESOURCE_CACHE_TTL_MS = 10 * 60_000;
+const WORKSPACE_FALLBACK_DELAY_MS = 4_000;
+
+function workspaceFirstRequest(workspaceRequest, resource, fallback) {
+  if (!workspaceRequest) return fallback();
+  let fallbackRequest = null;
+  const runFallback = () => {
+    if (!fallbackRequest) fallbackRequest = fallback();
+    return fallbackRequest;
+  };
+  return new Promise((resolve, reject) => {
+    let fallbackStarted = false;
+    const startFallback = () => {
+      if (fallbackStarted) return;
+      fallbackStarted = true;
+      runFallback().then(resolve, reject);
+    };
+    const timer = window.setTimeout(startFallback, WORKSPACE_FALLBACK_DELAY_MS);
+    workspaceRequest.then((views) => {
+      if (views && Object.prototype.hasOwnProperty.call(views, resource)) {
+        window.clearTimeout(timer);
+        resolve(views[resource]);
+        return;
+      }
+      window.clearTimeout(timer);
+      startFallback();
+    }, () => {
+      window.clearTimeout(timer);
+      startFallback();
+    });
+  });
+}
 
 export function App() {
   const [{ source, error: configError }] = useState(sourceFactory);
@@ -721,9 +753,12 @@ export function App() {
   const [createEntity, setCreateEntity] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
   const activeProjectIdRef = useRef(null);
+  const activeViewRef = useRef(view);
+  const pageRefreshKeyRef = useRef(pageRefreshKey);
   const initializationRequestRef = useRef(null);
   const resourceCacheRef = useRef(new Map());
   const resourceRequestRef = useRef(new Map());
+  const workspaceRequestRef = useRef(new Map());
   const resourceCacheEpochRef = useRef(0);
   const live = Boolean(source);
   const compactViewport = useMediaQuery("(max-width: 900px)");
@@ -734,6 +769,8 @@ export function App() {
     desktopLevel: desktopNavigationLevel,
     drawerOpen: sidebarOpen,
   });
+  activeViewRef.current = view;
+  pageRefreshKeyRef.current = pageRefreshKey;
 
   useEffect(() => source?.subscribe(setSourceState), [source]);
   useEffect(() => {
@@ -777,6 +814,7 @@ export function App() {
     resourceCacheEpochRef.current += 1;
     resourceCacheRef.current.clear();
     resourceRequestRef.current.clear();
+    workspaceRequestRef.current.clear();
     return data;
   }, []);
 
@@ -867,6 +905,48 @@ export function App() {
   }, [source, activeProjectId, view, bootstrapState.status, bootstrapState.data, overviewState.status, overviewState.projectId, pageRefreshKey]);
 
   useEffect(() => {
+    if (!source || !activeProjectId || bootstrapState.status !== "ready") return undefined;
+    const overviewPending = view === "overview" && !(
+      overviewState.status === "ready" && overviewState.projectId === activeProjectId
+    );
+    if (overviewPending) return undefined;
+
+    const requestKey = `${activeProjectId}:${pageRefreshKey}`;
+    if (workspaceRequestRef.current.has(requestKey)) return undefined;
+    const projectId = activeProjectId;
+    const requestEpoch = resourceCacheEpochRef.current;
+    const baseProject = bootstrapState.data.projects[projectId] || null;
+    const request = source.workspace({ projectId, limit: 200 })
+      .then((envelope) => {
+        if (resourceCacheEpochRef.current !== requestEpoch || pageRefreshKeyRef.current !== pageRefreshKey) return null;
+        const views = workspaceViewModel(envelope, baseProject);
+        const cachedAt = Date.now();
+        Object.entries(views).forEach(([resource, data]) => {
+          const nextState = { status: "ready", data, error: null, resource, projectId, refreshKey: pageRefreshKey };
+          const cacheKey = `${projectId}:${resource}`;
+          const currentCache = resourceCacheRef.current.get(cacheKey);
+          if (!currentCache || currentCache.refreshKey <= pageRefreshKey) {
+            resourceCacheRef.current.set(cacheKey, { state: nextState, cachedAt, refreshKey: pageRefreshKey });
+          }
+        });
+        if (activeProjectIdRef.current !== projectId) return views;
+        if (views.overview) {
+          setOverviewState({ status: "ready", data: views.overview, error: null, resource: "overview", projectId, refreshKey: pageRefreshKey });
+        }
+        const currentView = activeViewRef.current;
+        if (currentView !== "overview" && views[currentView]) {
+          setResourceState({ status: "ready", data: views[currentView], error: null, resource: currentView, projectId, refreshKey: pageRefreshKey });
+        }
+        return views;
+      })
+      // Snapshot warming is an optimization only. Unsupported/staged servers
+      // and transient failures keep using the existing per-tab request path.
+      .catch(() => null);
+    workspaceRequestRef.current.set(requestKey, request);
+    return undefined;
+  }, [source, activeProjectId, view, bootstrapState.status, bootstrapState.data, overviewState.status, overviewState.projectId, pageRefreshKey]);
+
+  useEffect(() => {
     if (!source || !activeProjectId || view === "overview" || bootstrapState.status !== "ready") return undefined;
     const cacheKey = `${activeProjectId}:${view}`;
     const cached = resourceCacheRef.current.get(cacheKey) || null;
@@ -884,11 +964,19 @@ export function App() {
     const requestEpoch = resourceCacheEpochRef.current;
     let request = resourceRequestRef.current.get(requestKey);
     if (!request) {
-      if (view === "plan") request = source.plan(params).then(planViewModel);
-      if (view === "tasks") request = source.tasks(params).then(tasksViewModel);
-      if (view === "content") request = source.contents(params).then(contentsViewModel);
-      if (view === "performance") request = source.performance(params).then(performanceViewModel);
-      if (view === "files") request = Promise.all([source.files(params), source.activity(params)]).then(([files, activity]) => ({ files: filesViewModel(files), activities: activityListViewModel(activity) }));
+      const fallback = () => {
+        if (view === "plan") return source.plan(params).then(planViewModel);
+        if (view === "tasks") return source.tasks(params).then(tasksViewModel);
+        if (view === "content") return source.contents(params).then(contentsViewModel);
+        if (view === "performance") return source.performance(params).then(performanceViewModel);
+        if (view === "files") return Promise.all([source.files(params), source.activity(params)]).then(([files, activity]) => ({ files: filesViewModel(files), activities: activityListViewModel(activity) }));
+        return Promise.reject(new Error(`Unsupported resource: ${view}`));
+      };
+      request = workspaceFirstRequest(
+        workspaceRequestRef.current.get(`${activeProjectId}:${pageRefreshKey}`),
+        view,
+        fallback,
+      );
       resourceRequestRef.current.set(requestKey, request);
       request.finally(() => {
         if (resourceRequestRef.current.get(requestKey) === request) resourceRequestRef.current.delete(requestKey);
@@ -931,6 +1019,7 @@ export function App() {
     resourceCacheEpochRef.current += 1;
     resourceCacheRef.current.clear();
     resourceRequestRef.current.clear();
+    workspaceRequestRef.current.clear();
     setCreateEntity(null);
     setSaveNotice(null);
   };

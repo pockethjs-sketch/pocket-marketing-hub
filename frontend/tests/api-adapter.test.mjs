@@ -7,7 +7,7 @@ import { OfflineMutationError } from "../src/api/errors.js";
 import { HubApiError } from "../src/api/errors.js";
 import { createHubApi } from "../src/api/hubApi.js";
 import { createSessionStore } from "../src/api/session.js";
-import { bootstrapViewModel, overviewViewModel, tasksViewModel } from "../src/api/viewModel.js";
+import { bootstrapViewModel, overviewViewModel, tasksViewModel, workspaceViewModel } from "../src/api/viewModel.js";
 
 test("API URL이 없으면 설정 오류를 명확히 반환한다", async () => {
   const config = readApiConfig({ VITE_POCKET_API_MODE: "auto" });
@@ -118,6 +118,40 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
     assert.equal(calls[3].body.mutation.expectedRowVersion, 7);
     assert.deepEqual(calls[3].body.mutation.fields, { start_date: "2026-09-07" });
     assert.equal(JSON.stringify([...storageMap.values()]).includes("long-access-code"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("workspace 조회는 project_snapshot 액션으로 프로젝트 범위를 전달한다", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const storageMap = new Map();
+  const storage = {
+    getItem: (key) => storageMap.get(key) || null,
+    setItem: (key, value) => storageMap.set(key, value),
+    removeItem: (key) => storageMap.delete(key),
+  };
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body);
+    const data = body.action === "login"
+      ? { token: "session-token", expiresIn: 3600, user: { userId: "U-1", role: "CLIENT_VIEWER" } }
+      : { plan: {}, tasks: { items: [] }, contents: { items: [] }, performance: {}, files: { items: [] }, activity: { items: [] } };
+    return new Response(JSON.stringify({ ok: true, generatedAt: "2026-08-26T10:00:00+09:00", data }), { status: 200 });
+  };
+
+  try {
+    const api = createHubApi(
+      { endpoint: "https://example.invalid/api", timeoutMs: 3000, credentials: "omit" },
+      { sessionStore: createSessionStore(storage) },
+    );
+    await api.login({ account: "client@example.com", accessCode: "access-code" });
+    await api.workspace({ projectId: "P-1", limit: 200 });
+    assert.equal(calls[1].action, "project_snapshot");
+    assert.equal(calls[1].projectId, "P-1");
+    assert.equal(calls[1].limit, 200);
+    assert.equal(calls[1].auth.sessionToken, "session-token");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -337,4 +371,25 @@ test("Sheets 응답을 Pocket 화면 뷰모델로 변환한다", () => {
   assert.equal(taskPage.project.rowVersion, 7);
   assert.equal(taskPage.publishing.phases[0].target.total, 26);
   assert.equal(taskPage.publishing.phases[0].actual.total, 7);
+});
+
+test("project_snapshot을 탭별 캐시 뷰모델로 분해한다", () => {
+  const views = workspaceViewModel({
+    generatedAt: "2026-08-26T11:00:00+09:00",
+    data: {
+      plan: { plan: { plan_id: "PLAN-1", title: "90일 계획" }, sections: [] },
+      tasks: { totalMatching: 1, items: [{ task_id: "T-1", title: "업무", status_code: "IN_PROGRESS" }] },
+      contents: { totalMatching: 1, items: [{ content_id: "C-1", title: "콘텐츠", status_code: "PLANNED" }] },
+      performance: { definitions: [], actuals: [], channels: [] },
+      files: { totalMatching: 1, items: [{ file_id: "F-1", title: "자료" }] },
+      activity: { items: [{ event_id: "E-1", summary: "자료 변경", created_at: "2026-08-26T10:00:00+09:00" }] },
+    },
+  });
+
+  assert.deepEqual(Object.keys(views).sort(), ["content", "files", "performance", "plan", "tasks"]);
+  assert.equal(views.plan.id, "PLAN-1");
+  assert.equal(views.tasks.items[0].id, "T-1");
+  assert.equal(views.content.items[0].id, "C-1");
+  assert.equal(views.files.files.items[0].id, "F-1");
+  assert.equal(views.files.activities.items[0].id, "E-1");
 });

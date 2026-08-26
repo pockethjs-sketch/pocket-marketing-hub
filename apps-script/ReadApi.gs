@@ -9,6 +9,7 @@ function mhHandleRead_(action, request, actor) {
   var data = null;
   if (action === 'project_overview') data = mhReadOverview_(request, actor, access.project);
   else if (action === 'project_plan') data = mhReadProjectPlan_(request, actor, access.project);
+  else if (action === 'project_snapshot') data = mhReadProjectSnapshot_(request, actor, access.project);
   else if (action === 'tasks') data = mhReadTasks_(request, actor, access.project);
   else if (action === 'contents') data = mhReadContents_(request, actor, access.project);
   else if (action === 'approvals') data = mhReadApprovals_(request, actor, access.project);
@@ -20,8 +21,14 @@ function mhHandleRead_(action, request, actor) {
   return { scope: scope, data: data };
 }
 
-var MH_CLIENT_READ_CACHE_TTL_SECONDS = 30;
+var MH_CLIENT_READ_CACHE_TTL_SECONDS = 120;
 var MH_CLIENT_READ_CACHE_MAX_BYTES = 90000;
+
+function mhClientReadCacheTtl_(action) {
+  return action === 'project_plan' || action === 'project_snapshot'
+    ? 300
+    : MH_CLIENT_READ_CACHE_TTL_SECONDS;
+}
 
 function mhClientReadCacheKey_(action, request, actor, projectId) {
   return 'mh_client_read_v1_' + mhHashToken_(mhStableJson_({
@@ -45,7 +52,16 @@ function mhCachedClientRead_(action, request, actor, projectId) {
     var raw = CacheService.getScriptCache().get(
       mhClientReadCacheKey_(action, request, actor, projectId)
     );
-    var data = raw ? mhParseJson_(raw, null) : null;
+    if (!raw) return { hit: false, data: null };
+    var json = raw;
+    if (raw.indexOf('z:') === 0) {
+      json = Utilities.ungzip(
+        Utilities.newBlob(Utilities.base64Decode(raw.slice(2)))
+      ).getDataAsString('UTF-8');
+    } else if (raw.indexOf('j:') === 0) {
+      json = raw.slice(2);
+    }
+    var data = mhParseJson_(json, null);
     return data === null ? { hit: false, data: null } : { hit: true, data: data };
   } catch (ignored) {
     return { hit: false, data: null };
@@ -56,17 +72,22 @@ function mhRememberClientRead_(action, request, actor, projectId, data) {
   if (actor.role !== 'CLIENT_VIEWER') return;
   try {
     var serialized = JSON.stringify(data);
-    if (Utilities.newBlob(serialized).getBytes().length > MH_CLIENT_READ_CACHE_MAX_BYTES) return;
+    var payload = 'j:' + serialized;
+    if (Utilities.newBlob(payload).getBytes().length > MH_CLIENT_READ_CACHE_MAX_BYTES) {
+      payload = 'z:' + Utilities.base64Encode(
+        Utilities.gzip(Utilities.newBlob(serialized, 'application/json')).getBytes()
+      );
+    }
+    if (Utilities.newBlob(payload).getBytes().length > MH_CLIENT_READ_CACHE_MAX_BYTES) return;
     CacheService.getScriptCache().put(
       mhClientReadCacheKey_(action, request, actor, projectId),
-      serialized,
-      action === 'project_plan' ? 300 : MH_CLIENT_READ_CACHE_TTL_SECONDS
+      payload,
+      mhClientReadCacheTtl_(action)
     );
   } catch (ignored) {}
 }
 
 function mhReadProjectPlan_(request, actor, project) {
-  mhEnsureUndClientPlanInstalled_();
   var projectId = mhAsText_(project.project_id);
   var clientId = mhAsText_(project.client_id);
   var plans = mhProjectRows_(MH_SHEETS.PLANS, clientId, projectId, actor).filter(function (row) {
@@ -105,6 +126,23 @@ function mhReadProjectPlan_(request, actor, project) {
       'primary_goal', 'status_code', 'effective_at', 'updated_at'
     ])),
     sections: sections
+  };
+}
+
+/**
+ * Returns the read-only project workspace in one Apps Script execution.
+ * Existing readers remain the source of truth for row visibility, field
+ * projection, date limits, pagination and role-specific redaction. The shared
+ * execution lets their full-table reads reuse mhReadTable_'s memory cache.
+ */
+function mhReadProjectSnapshot_(request, actor, project) {
+  return {
+    plan: mhReadProjectPlan_(request, actor, project),
+    tasks: mhReadTasks_(request, actor, project),
+    contents: mhReadContents_(request, actor, project),
+    performance: mhReadPerformance_(request, actor, project),
+    files: mhReadFiles_(request, actor, project),
+    activity: mhReadActivity_(request, actor, project)
   };
 }
 

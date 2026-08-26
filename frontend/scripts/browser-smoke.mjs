@@ -144,6 +144,8 @@ try {
   }
   assert(overviewReady, "Overview metrics did not render");
   console.log(`Overview ready in ${Date.now() - smokeStartedAt}ms`);
+  await delay(100);
+  assert(countApiAction(client.events, "project_snapshot") === 1, "Project workspace snapshot must be prefetched exactly once");
   await capture(client, "01-main-only.png");
   const clientLabels = await evaluate(client, "Array.from(document.querySelectorAll('.client-button')).map((button) => button.textContent.trim())");
   assert(clientLabels.length > 0 && clientLabels.every((label) => label.length >= 2), "Client rail must show full client names");
@@ -165,7 +167,7 @@ try {
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('실행계획')).click()")
   assert(await waitFor(client, "document.querySelectorAll('.plan-section-nav button').length === 10 && document.querySelector('.plan-document-body')?.innerText.trim().length > 0", readyTimeout), "Client execution plan did not render");
-  assert(countApiAction(client.events, "project_plan") === 1, "Execution plan must be lazy-loaded once");
+  assert(countApiAction(client.events, "project_plan") <= 1, "Execution plan issued duplicate fallback requests");
   await evaluate(client, "document.querySelectorAll('.plan-section-nav button')[9].click()")
   assert(await evaluate(client, "document.querySelector('.plan-document header h3').textContent.includes('미팅 기록')"), "Execution plan section navigation failed");
   await capture(client, "04-execution-plan.png");
@@ -236,6 +238,7 @@ try {
   assert(await waitFor(client, "document.querySelectorAll('.tracker-task-group article').length > 0", 1000), "Cached task view did not render immediately");
   await delay(250);
   assert(countApiAction(client.events, "tasks") === taskRequestsAfterInitialLoad, "Task-tab revisit issued a duplicate API request inside the cache window");
+  assert(countApiAction(client.events, "project_snapshot") === 1, "Tab navigation issued a duplicate workspace snapshot request");
 
   if (clientLabels.length > 1) {
     await evaluate(client, "document.querySelectorAll('.client-button')[1].click()")

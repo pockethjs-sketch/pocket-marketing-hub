@@ -13,4 +13,5 @@ export {
   planViewModel,
   performanceViewModel,
   tasksViewModel,
+  workspaceViewModel,
 } from "./viewModel.js";
