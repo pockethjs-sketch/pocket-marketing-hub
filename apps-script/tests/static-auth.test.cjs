@@ -132,6 +132,21 @@ assert.equal(login.user.userId, 'USR-TEST');
 assert.ok(login.token.includes('.'));
 assert.equal(context.mhVerifySessionToken_(login.token).email, email);
 assert.equal(context.mhResolveActor_({ auth: { sessionToken: login.token } }).userId, 'USR-TEST');
+assert.equal(context.mhNormalizeLoginAccount_('pocket'), 'pocket@hub.local');
+assert.equal(context.mhNormalizeLoginAccount_('Operator@Example.com'), 'operator@example.com');
+assert.equal(context.mhValidAccessCode_('pocket@hub.local', 'eight123'), true);
+assert.equal(context.mhValidAccessCode_('operator@example.com', 'eight123'), false);
+const aliasEmail = 'pocket@hub.local';
+const aliasAccessCode = 'internal-only-test';
+const aliasDigest = context.mhAccessCodeDigest_(aliasEmail, aliasAccessCode);
+context.MH_LOCAL_SECRETS.ACCESS_ACCOUNTS_JSON = JSON.stringify({
+  [email]: { access_code_hash: digest, enabled: true },
+  [aliasEmail]: { access_code_hash: aliasDigest, enabled: true },
+  'preview@example.com': { access_code_hash: 'preview-account-enabled', enabled: true },
+});
+const aliasLogin = context.mhLogin_({ account: 'pocket', accessCode: aliasAccessCode });
+assert.equal(aliasLogin.user.userId, 'USR-TEST');
+assert.equal(context.mhVerifySessionToken_(aliasLogin.token).email, aliasEmail);
 context.MH_LOCAL_SECRETS.ACCESS_ACCOUNTS_JSON = JSON.stringify({
   [email]: { access_code_hash: digest, enabled: false },
 });
@@ -341,12 +356,11 @@ const pocketInternalPlan = JSON.parse(JSON.stringify(context.mhReadProjectPlan_(
   snapshotProject,
 )));
 assert.deepEqual(pocketInternalPlan.sections.map((row) => row.plan_section_id), ['SEC-TEAM', 'SEC-POCKET']);
-const previewInternalPlan = JSON.parse(JSON.stringify(context.mhReadProjectPlan_(
+assert.throws(() => context.mhReadProjectPlan_(
   { planType: 'INTERNAL' },
   { role: 'CLIENT_VIEWER' },
   snapshotProject,
-)));
-assert.deepEqual(previewInternalPlan.sections.map((row) => row.plan_section_id), ['SEC-TEAM', 'SEC-POCKET']);
+), /internal_plan_requires_project_team/);
 context.mhProjectRows_ = originalProjectRows;
 
 const clientPlanCacheKey = context.mhClientReadCacheKey_(

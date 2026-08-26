@@ -44,7 +44,7 @@ Script Properties가 비어 있으면 `Secrets.gs`의 `MH_LOCAL_SECRETS`를 fall
 계정 이메일은 먼저 `03_사용자`에 있어야 합니다.
 
 1. 임시 Script Properties `SETUP_ACCOUNT_EMAIL`, `SETUP_ACCOUNT_CODE`를 추가합니다.
-2. 접근코드는 사용자별로 다르게, 비밀번호 관리자가 만든 최소 24자(권장 32자) 랜덤값으로 설정합니다.
+2. 접근코드는 사용자별로 다르게 설정합니다. 외부 이메일 계정은 최소 24자(권장 32자) 랜덤값이 필수입니다. 사내 단축 아이디는 서버에서 `@hub.local` 계정으로 정규화되며 최소 8자를 허용하지만, 운영 보안상 더 긴 고유값을 권장합니다.
 3. `mhSetupRegisterStagedAccount`를 실행합니다.
 4. 함수가 digest를 이메일별 `ACCESS_ACCOUNT_*` Script Property에 저장하고 두 임시 평문 속성을 즉시 삭제합니다. 이 구조는 단일 Property의 9KB 한도를 피합니다.
 5. 실행 완료 후 임시 속성이 사라졌는지 다시 확인합니다.
@@ -58,7 +58,7 @@ Script Properties가 비어 있으면 `Secrets.gs`의 `MH_LOCAL_SECRETS`를 fall
 
 Web App 자체는 공개 URL이지만 데이터 API는 접근코드 로그인과 서명 세션 없이는 동작하지 않습니다. `/exec?action=health`는 데이터 없이 설정 상태만 반환합니다.
 
-로그인 UI를 임시로 끌 때도 관리자 계정을 공개하지 않습니다. `PUBLIC_PREVIEW_ENABLED=true`, `PUBLIC_PREVIEW_EMAIL`, `PUBLIC_PREVIEW_PROJECT_IDS`를 설정하면 `preview_bootstrap`이 해당 `CLIENT_VIEWER`의 짧은 서명 세션과 최소 탐색 정보만 발급합니다. 첫 총괄은 `preview_overview`를 동시에 호출합니다. 서버는 허용 프로젝트를 강제로 `READ_ONLY`로 다루며, 이후 계정에 다른 프로젝트가 추가돼도 공개 범위에 포함되지 않습니다. `preview_session`은 이전 클라이언트 호환용으로 유지됩니다.
+현재 운영은 로그인 필수이며 `PUBLIC_PREVIEW_ENABLED=false`, `MH_PUBLIC_TASK_WRITES_ENABLED=false`입니다. 공개 미리보기를 다시 켜야 할 때만 `PUBLIC_PREVIEW_EMAIL`, `PUBLIC_PREVIEW_PROJECT_IDS`와 함께 별도 보안 검토 후 활성화합니다. `preview_session`과 `preview_bootstrap`은 이전 클라이언트 호환용으로만 유지됩니다.
 
 운영 URL 예:
 

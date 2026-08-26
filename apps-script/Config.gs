@@ -5,15 +5,14 @@
  * This file is safe to keep in a public repository.
  */
 
-var MH_CONTRACT_VERSION = '2026-08-26-plan-variants-v7';
+var MH_CONTRACT_VERSION = '2026-08-26-login-alias-v8';
 var MH_SCHEMA_VERSION = '2026-08-26-v3';
-var MH_BACKEND_VERSION = '2026-08-26-plan-variants-v16';
+var MH_BACKEND_VERSION = '2026-08-26-login-alias-v17';
 
-// Temporary: authentication/role gating will be restored after the access
-// policy is finalized. This only opens the internal execution-plan reader;
-// every other CLIENT_VIEWER visibility rule remains unchanged.
-var MH_PUBLIC_INTERNAL_PLAN_ENABLED = true;
-var MH_PUBLIC_TASK_WRITES_ENABLED = true;
+// Login is required. Public preview sessions cannot read internal plans or
+// mutate tasks even if stale preview configuration remains in Script Properties.
+var MH_PUBLIC_INTERNAL_PLAN_ENABLED = false;
+var MH_PUBLIC_TASK_WRITES_ENABLED = false;
 
 var MH_PROPERTY_KEYS = {
   SHEET_ID: 'SHEET_ID',

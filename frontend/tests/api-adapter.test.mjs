@@ -107,7 +107,7 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
       assert.equal(call.options.headers["Content-Type"], "text/plain;charset=UTF-8");
       assert.ok(new URL(call.url).searchParams.get("_mh"), "Apps Script redirect cache buster is required");
     });
-    assert.equal(calls[0].body.email, "pocket@hub.local");
+    assert.equal(calls[0].body.account, "pocket@hub.local");
     assert.equal(calls[1].body.auth.sessionToken, "session-token");
     assert.equal(calls[2].body.action, "mutate");
     assert.equal(calls[2].body.auth.sessionToken, "session-token");

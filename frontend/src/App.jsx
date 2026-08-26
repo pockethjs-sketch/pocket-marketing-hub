@@ -137,13 +137,13 @@ function LoginScreen({ onLogin, error, loading, configured }) {
         <div className="login-mark"><LockKeyhole size={20} /></div>
         <div className="login-heading"><span>포켓컴퍼니</span><h1>마케팅 프로젝트 허브</h1><p>배정된 고객사와 프로젝트만 표시됩니다.</p></div>
         <form onSubmit={submit}>
-          <label><span>계정</span><input type="email" autoComplete="username" value={account} onChange={(event) => setAccount(event.target.value)} placeholder="name@company.com" disabled={loading || !configured} /></label>
-          <label><span>접속 코드</span><input type="password" autoComplete="current-password" value={accessCode} onChange={(event) => setAccessCode(event.target.value)} placeholder="접속 코드를 입력하세요" disabled={loading || !configured} /></label>
+          <label><span>아이디</span><input type="text" autoComplete="username" value={account} onChange={(event) => setAccount(event.target.value)} placeholder="아이디 입력" disabled={loading || !configured} /></label>
+          <label><span>비밀번호</span><input type="password" autoComplete="current-password" value={accessCode} onChange={(event) => setAccessCode(event.target.value)} placeholder="비밀번호 입력" disabled={loading || !configured} /></label>
           {error && <div className="login-error"><AlertCircle size={15} />{error.message}</div>}
           {!configured && <div className="login-error"><WifiOff size={15} />운영 API 주소가 설정되지 않았습니다.</div>}
           <button className="primary-button login-submit" disabled={loading || !configured || !account.trim() || !accessCode}>{loading ? <><LoaderCircle size={16} className="spin" /> 확인 중</> : "로그인"}</button>
         </form>
-        <footer><ShieldCheck size={14} /> 접속 코드는 저장하지 않고, 발급된 세션만 현재 탭에 보관합니다.</footer>
+        <footer><ShieldCheck size={14} /> 비밀번호는 브라우저에 저장하지 않고, 발급된 세션만 현재 탭에 보관합니다.</footer>
       </section>
     </main>
   );
@@ -299,6 +299,42 @@ const trackerStatusOptions = [
   ["ON_HOLD", "보류"],
 ];
 
+const trackerStatusLabels = {
+  TODO: "미착수",
+  NOT_STARTED: "미착수",
+  IN_PROGRESS: "진행",
+  INTERNAL_REVIEW: "검토",
+  WAITING_CLIENT: "고객 확인",
+  REVISION: "검토",
+  BLOCKED: "차단",
+  ON_HOLD: "보류",
+  DONE: "완료",
+  COMPLETED: "완료",
+  CANCELLED: "취소",
+};
+
+const trackerPriorityLabels = { LOW: "낮음", NORMAL: "보통", HIGH: "높음", CRITICAL: "긴급", URGENT: "긴급" };
+
+function taskWithMutationFields(task, fields = {}) {
+  const next = { ...task };
+  if (Object.prototype.hasOwnProperty.call(fields, "status_code")) {
+    next.statusCode = String(fields.status_code || "NOT_STARTED").toUpperCase();
+    next.status = trackerStatusLabels[next.statusCode] || next.statusCode;
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, "title")) next.title = fields.title || "제목 없는 업무";
+  if (Object.prototype.hasOwnProperty.call(fields, "description")) next.description = fields.description || "";
+  if (Object.prototype.hasOwnProperty.call(fields, "due_date")) {
+    next.dueDate = fields.due_date ? String(fields.due_date).slice(0, 10) : null;
+    next.due = next.dueDate || "미정";
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, "priority_code")) {
+    next.priorityCode = String(fields.priority_code || "NORMAL").toUpperCase();
+    next.priority = trackerPriorityLabels[next.priorityCode] || next.priorityCode;
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, "assignee_user_id")) next.assignee = fields.assignee_user_id || null;
+  return next;
+}
+
 function trackerDate(value) {
   if (!value) return null;
   const parsed = new Date(`${String(value).slice(0, 10)}T12:00:00`);
@@ -442,16 +478,19 @@ function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone, memberOptions 
     saveFields({ status_code: isDone ? "NOT_STARTED" : "DONE" });
   };
 
-  return <article className={`${isDone ? "is-done" : ""} ${expanded ? "is-expanded" : ""}`}>
+  return <article className={`${isDone ? "is-done" : ""} ${expanded ? "is-expanded" : ""} ${saving ? "is-saving" : ""}`}>
     <div className="tracker-task-main" role="button" tabIndex={0} aria-expanded={expanded} onClick={() => setExpanded((current) => !current)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setExpanded((current) => !current); } }}>
       <button className="tracker-check" type="button" onClick={toggleDone} disabled={!canWrite || saving} aria-label={isDone ? `${task.title} 완료 취소` : `${task.title} 완료 처리`}>{isDone && <Check size={13} strokeWidth={2.5} />}</button>
-      <div className="tracker-task-copy"><strong>{task.title}</strong><small>{task.parent}{task.planWeek ? ` · ${task.planWeek}주차` : ""}{task.contractLinked ? " · 계약 연계" : ""}</small></div>
-      <span className="tracker-task-phase">{task.phase}</span>
-      <span className="tracker-task-owner">{role === "client" ? "포켓컴퍼니" : task.assigneeName || task.owner}</span>
-      <span className="tracker-task-due">{task.due}</span>
-      <i className={statusClass[task.status] || "status status-muted"}>{task.status}</i>
+      <div className="tracker-task-copy"><strong>{task.title}</strong></div>
+      <div className="tracker-task-state"><i className={statusClass[task.status] || "status status-muted"}>{task.status}</i>{saving && <span className="tracker-row-saving" role="status"><LoaderCircle size={11} className="spin" />저장 중</span>}</div>
       <ChevronDown className="tracker-row-chevron" size={15} />
+      <div className="tracker-task-meta">
+        <span><small>구분</small><strong>{task.parent}{task.planWeek ? ` · ${task.planWeek}주차` : ""}{task.contractLinked ? " · 계획 연계" : ""}</strong></span>
+        <span><small>담당</small><strong>{role === "client" ? "포켓컴퍼니" : task.assigneeName || task.owner}</strong></span>
+        <span><small>마감</small><strong>{task.due}</strong></span>
+      </div>
     </div>
+    {error && !expanded && <div className="tracker-row-error" role="alert"><AlertCircle size={13} /><span>{error.message || "변경사항을 저장하지 못해 이전 상태로 되돌렸습니다."}</span><button type="button" onClick={() => setError(null)} aria-label="오류 닫기"><X size={12} /></button></div>}
     {expanded && <div className="tracker-task-detail">
       {role !== "client" && task.planNote && <div className="tracker-plan-note"><strong>계획 기준</strong><p>{task.planNote}</p></div>}
       {role === "client" && task.customerStatus && <div className="tracker-client-status"><strong>공유 진행 메모</strong><p>{task.customerStatus}</p></div>}
@@ -487,6 +526,7 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   const [stream, setStream] = useState("전체");
   const [category, setCategory] = useState("전체");
   const [hideDone, setHideDone] = useState(false);
+  const [completedOnly, setCompletedOnly] = useState(false);
   const [localQuery, setLocalQuery] = useState("");
   const [alertFilter, setAlertFilter] = useState("전체");
   const [startDateDraft, setStartDateDraft] = useState(taskPage.project?.startDate || "");
@@ -559,10 +599,10 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   const visibleTasks = useMemo(() => tasks.filter((task) => (phase === "전체" || task.phase === phase)
     && (stream === "전체" || streamGroup(task) === stream)
     && (category === "전체" || task.parent === category)
-    && (!hideDone || !isDone(task))
+    && (completedOnly ? isDone(task) : (!hideDone || !isDone(task)))
     && alertMatches(task, alertFilter)
     && (!globalNeedle || `${task.title} ${task.parent} ${task.owner} ${task.assigneeName} ${task.sourceTaskId || ""}`.toLowerCase().includes(globalNeedle))
-    && (!localNeedle || `${task.title} ${task.parent} ${task.owner} ${task.assigneeName} ${task.sourceTaskId || ""}`.toLowerCase().includes(localNeedle))), [phase, stream, category, hideDone, alertFilter, globalNeedle, localNeedle, tasks]);
+    && (!localNeedle || `${task.title} ${task.parent} ${task.owner} ${task.assigneeName} ${task.sourceTaskId || ""}`.toLowerCase().includes(localNeedle))), [phase, stream, category, hideDone, completedOnly, alertFilter, globalNeedle, localNeedle, tasks]);
   const groupedTasks = streamStats.map((item) => ({
     ...item,
     tasks: visibleTasks.filter((task) => task.stream === item.name),
@@ -577,7 +617,17 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   const hasPartialTaskData = Number(taskPage.total || 0) > tasks.length;
   const streamColor = { 마케팅: "#22bc7e", 디자인: "#3b82f6", 영상: "#7c9a32", 공통: "#77837d", 유튜브: "#ff4d4f", 인스타그램: "#d946ef", SEO: "#f59e0b" };
   const phaseDay = currentSchedule?.end ? Math.ceil((currentSchedule.end.getTime() - now.getTime()) / 86400000) : null;
-  const resetFilters = () => { setPhase("전체"); setStream("전체"); setCategory("전체"); setHideDone(false); setLocalQuery(""); setAlertFilter("전체"); };
+  const selectStream = (value) => { setStream(value); setCompletedOnly(false); };
+  const toggleCompletedOnly = () => {
+    const next = !completedOnly;
+    setCompletedOnly(next);
+    if (next) {
+      setStream("전체");
+      setHideDone(false);
+      setAlertFilter("전체");
+    }
+  };
+  const resetFilters = () => { setPhase("전체"); setStream("전체"); setCategory("전체"); setHideDone(false); setCompletedOnly(false); setLocalQuery(""); setAlertFilter("전체"); };
   const saveProjectStartDate = async () => {
     if (!canEditProject || !onProjectUpdate || !startDateDraft) return;
     setStartDateSaving(true);
@@ -627,15 +677,16 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
     <section className="tracker-execution" aria-label="실행 업무 목록">
       <div className="tracker-list-toolbar panel">
         <div className="tracker-stream-tabs" aria-label="업무 분야 필터">
-          <button type="button" className={stream === "전체" ? "is-active" : ""} onClick={() => setStream("전체")}><span>전체</span><strong>{overallCountable}</strong></button>
-          {primaryStreamStats.map((item) => <button type="button" key={item.name} className={stream === item.name ? "is-active" : ""} onClick={() => setStream(item.name)} style={{ "--team-color": streamColor[item.name] || "var(--accent)" }}><span>{item.name}</span><strong>{item.done}/{item.total}</strong></button>)}
+          <button type="button" className={!completedOnly && stream === "전체" ? "is-active" : ""} onClick={() => selectStream("전체")}><span>전체</span><strong>{overallCountable}</strong></button>
+          {primaryStreamStats.map((item) => <button type="button" key={item.name} className={!completedOnly && stream === item.name ? "is-active" : ""} onClick={() => selectStream(item.name)} style={{ "--team-color": streamColor[item.name] || "var(--accent)" }}><span>{item.name}</span><strong>{item.done}/{item.total}</strong></button>)}
+          <button type="button" className={completedOnly ? "is-active" : ""} aria-pressed={completedOnly} onClick={toggleCompletedOnly} style={{ "--team-color": "#0d9f6e" }}><Check size={12} /><span>완료된 작업</span><strong>{overallDone}</strong></button>
         </div>
-        <div className="tracker-filter"><ListFilter size={15} /><select aria-label="업무 구분" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="tracker-inline-search"><Search size={14} /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="업무 검색" /></label><label className="tracker-hide-done"><input type="checkbox" checked={hideDone} onChange={(event) => setHideDone(event.target.checked)} />완료 숨김</label><button className="tracker-filter-reset" type="button" onClick={resetFilters}>초기화</button><span className="result-count">{visibleTasks.length}건</span></div>
+        <div className="tracker-filter"><ListFilter size={15} /><select aria-label="업무 구분" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="tracker-inline-search"><Search size={14} /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="업무 검색" /></label><label className="tracker-hide-done"><input type="checkbox" checked={hideDone} onChange={(event) => { setHideDone(event.target.checked); if (event.target.checked) setCompletedOnly(false); }} />완료 숨김</label><button className="tracker-filter-reset" type="button" onClick={resetFilters}>초기화</button><span className="result-count">{visibleTasks.length}건</span></div>
       </div>
 
       {groupedTasks.length ? <div className="tracker-task-groups">{groupedTasks.map((group) => <section className="tracker-task-group panel" key={group.name} style={{ "--team-color": streamColor[group.name] || "var(--accent)" }}>
         <header><div><span className="tracker-team-dot" /><h3>{group.name}</h3></div><strong>{group.tasks.filter(isDone).length} / {group.tasks.length}</strong></header>
-        <div>{group.tasks.map((task) => <TrackerTaskRow key={task.id} task={task} role={role} canWrite={editable} onUpdate={onUpdate} isDone={isDone(task)} memberOptions={memberOptions} />)}</div>
+        <div className="tracker-task-grid">{group.tasks.map((task) => <TrackerTaskRow key={task.id} task={task} role={role} canWrite={editable} onUpdate={onUpdate} isDone={isDone(task)} memberOptions={memberOptions} />)}</div>
       </section>)}</div> : <EmptyState title="조건에 맞는 업무가 없습니다" description="필터를 바꾸거나 원장에 업무를 등록해 주세요." />}
     </section>
 
@@ -738,7 +789,7 @@ function PlanView({ plan, project, planVariant }) {
     {sections.length ? <section className="plan-layout">
       <nav className="plan-section-nav panel" aria-label="실행계획 목차">
         <span>목차</span>
-        {sections.map((section, index) => <button key={section.id} type="button" className={section.id === activeSection?.id ? "is-active" : ""} onClick={() => setActiveSectionId(section.id)} aria-current={section.id === activeSection?.id ? "page" : undefined}><i>{section.code || String(index + 1).padStart(2, "0")}</i><strong>{section.title}</strong>{isRecentPlanSection(section.updatedAt) && <span className="plan-new-badge" title="24시간 이내 변경된 섹션">신규</span>}</button>)}
+        {sections.map((section) => <button key={section.id} type="button" className={section.id === activeSection?.id ? "is-active" : ""} onClick={() => setActiveSectionId(section.id)} aria-current={section.id === activeSection?.id ? "page" : undefined}><strong>{section.title}</strong>{isRecentPlanSection(section.updatedAt) && <span className="plan-new-badge" title="24시간 이내 변경된 섹션">신규</span>}</button>)}
       </nav>
       <article className="plan-document panel">
         <header><div><span>{activeSection?.code || "실행계획"}</span><h3>{activeSection?.title}{activeSectionIsNew && <span className="plan-new-badge" title="24시간 이내 변경된 섹션">신규</span>}</h3></div><small>{sections.findIndex((section) => section.id === activeSection?.id) + 1} / {sections.length}</small></header>
@@ -1051,9 +1102,10 @@ export function App() {
     }
     let active = true;
     request.then((data) => {
+      if (resourceCacheEpochRef.current !== requestEpoch) return;
       const nextState = { status: "ready", data, error: null, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey };
       const currentCache = resourceCacheRef.current.get(cacheKey);
-      if (resourceCacheEpochRef.current === requestEpoch && (!currentCache || currentCache.refreshKey <= pageRefreshKey)) {
+      if (!currentCache || currentCache.refreshKey <= pageRefreshKey) {
         resourceCacheRef.current.set(cacheKey, { state: nextState, cachedAt: Date.now(), refreshKey: pageRefreshKey });
       }
       if (active) setResourceState(nextState);
@@ -1147,24 +1199,65 @@ export function App() {
     setPageRefreshKey((value) => value + 1);
   };
 
+  const patchTaskResource = (projectId, taskId, updater) => {
+    const patchState = (state) => {
+      if (state.resource !== "tasks" || state.projectId !== projectId || !state.data?.items) return state;
+      let matched = false;
+      const items = state.data.items.map((item) => {
+        if (item.id !== taskId) return item;
+        matched = true;
+        return updater(item);
+      });
+      return matched ? { ...state, data: { ...state.data, items } } : state;
+    };
+
+    setResourceState(patchState);
+    const cacheKey = `${projectId}:tasks`;
+    const cached = resourceCacheRef.current.get(cacheKey);
+    if (!cached?.state) return;
+    const nextState = patchState(cached.state);
+    if (nextState !== cached.state) {
+      resourceCacheRef.current.set(cacheKey, { ...cached, state: nextState, cachedAt: Date.now() });
+    }
+  };
+
   const updateTask = async (task, fields) => {
     if (!canWriteTasks) {
       const readOnlyError = new Error("이 계정은 업무를 수정할 권한이 없습니다.");
       readOnlyError.code = "forbidden";
       throw readOnlyError;
     }
-    await source.mutate({
-      projectId: activeProjectId,
-      mutation: {
-        entityType: "task",
-        operation: "UPDATE",
-        id: task.id,
-        expectedRowVersion: task.rowVersion,
-        fields,
-      },
-    });
-    setSaveNotice("업무 변경사항을 Google Sheets 원장에 저장했습니다.");
-    setPageRefreshKey((value) => value + 1);
+    const projectId = activeProjectId;
+    const previousTask = { ...task };
+    // A task write must not be overwritten by a slower workspace/read request
+    // that started before the click.
+    resourceCacheEpochRef.current += 1;
+    patchTaskResource(projectId, task.id, (current) => taskWithMutationFields(current, fields));
+    try {
+      const result = await source.mutate({
+        projectId,
+        mutation: {
+          entityType: "task",
+          operation: "UPDATE",
+          id: task.id,
+          expectedRowVersion: task.rowVersion,
+          fields,
+        },
+      });
+      const canonicalRecord = result?.data?.record;
+      const canonicalTask = canonicalRecord
+        ? tasksViewModel({ data: { items: [canonicalRecord], totalMatching: 1 }, generatedAt: result.generatedAt }).items[0]
+        : null;
+      patchTaskResource(projectId, task.id, (current) => canonicalTask
+        ? { ...current, ...canonicalTask }
+        : { ...taskWithMutationFields(current, fields), rowVersion: Number(current.rowVersion || 0) + 1 });
+      setSaveNotice("업무 변경사항을 Google Sheets 원장에 저장했습니다.");
+      return canonicalTask;
+    } catch (error) {
+      patchTaskResource(projectId, task.id, () => previousTask);
+      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      throw error;
+    }
   };
 
   const updateProjectStartDate = async (projectRow, startDate) => {

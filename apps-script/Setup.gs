@@ -45,10 +45,10 @@ function mhSetupInitialize() {
 
 function mhSetupRegisterStagedAccount() {
   var properties = PropertiesService.getScriptProperties();
-  var email = mhAsText_(properties.getProperty('SETUP_ACCOUNT_EMAIL')).toLowerCase();
+  var email = mhNormalizeLoginAccount_(properties.getProperty('SETUP_ACCOUNT_EMAIL'));
   var accessCode = String(properties.getProperty('SETUP_ACCOUNT_CODE') || '');
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !/^\S{24,128}$/.test(accessCode)) {
-    throw new Error('SETUP_ACCOUNT_EMAIL과 24자 이상의 랜덤 SETUP_ACCOUNT_CODE를 임시 Script Properties에 먼저 입력하세요.');
+  if (!email || !mhValidAccessCode_(email, accessCode)) {
+    throw new Error('유효한 SETUP_ACCOUNT_EMAIL(또는 내부 아이디)과 정책에 맞는 SETUP_ACCOUNT_CODE를 임시 Script Properties에 먼저 입력하세요.');
   }
   mhActorByEmail_(email);
   var account = {
@@ -61,6 +61,185 @@ function mhSetupRegisterStagedAccount() {
   properties.deleteProperty('SETUP_ACCOUNT_EMAIL');
   properties.deleteProperty('SETUP_ACCOUNT_CODE');
   return { ok: true, email: email, plaintextRemoved: true };
+}
+
+/**
+ * One-time cutover for the two shared internal operator accounts.
+ * Call only through the Apps Script execution API. Plaintext passwords are
+ * accepted as parameters, converted to HMAC digests, and never written to a
+ * sheet, Script Property, response, or repository.
+ */
+function mhSetupProvisionSharedAccounts(pocketAccessCode, nsAccessCode) {
+  var specs = [
+    {
+      account: 'pocket',
+      email: 'pocket@hub.local',
+      accessCode: String(pocketAccessCode || ''),
+      fallbackUserId: 'USR-POCKET-001',
+      fallbackMembershipId: 'MEM-UND-POCKET-001',
+      displayName: '포켓컴퍼니',
+      organizationCode: 'POCKET'
+    },
+    {
+      account: 'ns',
+      email: 'ns@hub.local',
+      accessCode: String(nsAccessCode || ''),
+      fallbackUserId: 'USR-NS-001',
+      fallbackMembershipId: 'MEM-UND-NS-001',
+      displayName: 'NS마케팅',
+      organizationCode: 'NS'
+    }
+  ];
+  specs.forEach(function (spec) {
+    if (!mhValidAccessCode_(spec.email, spec.accessCode)) {
+      throw new Error(spec.account + ' 계정 비밀번호는 공백 없이 8자 이상이어야 합니다.');
+    }
+  });
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) throw new Error('계정 원장을 잠그지 못했습니다. 잠시 후 다시 실행하세요.');
+  try {
+    mhSetupRepairAuthHeaders_();
+    mhUseFreshTables_();
+    var project = mhFindRecord_(MH_SHEETS.PROJECTS, 'project_id', 'PRJ-UND-90D-001').row;
+    if (!project || mhNonEmpty_(project.archived_at)) throw new Error('UND 운영 프로젝트를 찾지 못했습니다.');
+
+    var properties = PropertiesService.getScriptProperties();
+    var now = mhNowIso_();
+    var result = specs.map(function (spec) {
+      var user = mhSetupUpsertSharedUser_(spec, now);
+      var membership = mhSetupUpsertSharedMembership_(spec, user.user_id, project, now);
+      var account = {
+        email: spec.email,
+        access_code_hash: mhAccessCodeDigest_(spec.email, spec.accessCode),
+        enabled: true,
+        updated_at: now
+      };
+      properties.setProperty(mhAccessAccountPropertyKey_(spec.email), JSON.stringify(account));
+      mhClearLoginFailures_(spec.email);
+      return {
+        account: spec.account,
+        userId: user.user_id,
+        role: 'POCKET_MANAGER',
+        projectId: mhAsText_(project.project_id),
+        permission: mhAsText_(membership.permission_code)
+      };
+    });
+
+    properties.setProperty(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_ENABLED, 'false');
+    properties.setProperty(MH_PROPERTY_KEYS.ENABLE_WRITES, 'true');
+    var nextSessionVersion = String(Number(mhSessionVersion_() || 0) + 1);
+    properties.setProperty(MH_PROPERTY_KEYS.SESSION_VERSION, nextSessionVersion);
+    MH_SETTINGS_MEMORY_CACHE = null;
+    mhUseFreshTables_();
+    mhAssertHeaders_(MH_SHEETS.USERS, ['user_id', 'email', 'role_code', 'status_code', 'archived_at']);
+    mhAssertHeaders_(MH_SHEETS.MEMBERSHIPS, ['membership_id', 'user_id', 'client_id', 'project_id', 'permission_code', 'status_code', 'archived_at']);
+    mhAssertUniqueKey_(MH_SHEETS.USERS, 'user_id');
+    mhAssertUniqueKey_(MH_SHEETS.MEMBERSHIPS, 'membership_id');
+    mhAssertUniqueMemberships_();
+    return {
+      ok: true,
+      accounts: result,
+      publicPreviewEnabled: false,
+      writesEnabled: true,
+      sessionVersion: nextSessionVersion,
+      plaintextStored: false
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function mhSetupRepairAuthHeaders_() {
+  var sheet = mhSheet_(MH_SHEETS.USERS);
+  var lastColumn = Math.max(1, sheet.getLastColumn());
+  var headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(function (value) {
+    return mhAsText_(value);
+  });
+  if (headers.indexOf('user_id') >= 0) return false;
+  if (headers[0] !== '1열') {
+    throw new Error('03_사용자 시트의 기본키 열을 자동 판별할 수 없습니다.');
+  }
+  sheet.getRange(1, 1).setValue('user_id');
+  SpreadsheetApp.flush();
+  mhInvalidateTableCache_(MH_SHEETS.USERS);
+  return true;
+}
+
+function mhSetupUpsertSharedUser_(spec, now) {
+  var table = mhReadTable_(MH_SHEETS.USERS);
+  var matches = table.rows.filter(function (row) {
+    return mhAsText_(row.email).toLowerCase() === spec.email && !mhNonEmpty_(row.archived_at);
+  });
+  if (matches.length > 1) throw new Error(spec.account + ' 계정의 활성 사용자 행이 중복되어 있습니다.');
+  var existing = matches[0] || null;
+  var userId = existing && mhNonEmpty_(existing.user_id)
+    ? mhAsText_(existing.user_id)
+    : spec.fallbackUserId;
+  // The legacy user rows used a blank formula in user_id. Setup is the one
+  // controlled migration allowed to replace that formula with a stable key;
+  // ordinary API writes still retain the formula-field protection.
+  if (existing && !mhNonEmpty_(existing.user_id)) {
+    var userIdColumn = table.headers.indexOf('user_id');
+    if (userIdColumn < 0) throw new Error('03_사용자 시트에 user_id 열이 없습니다.');
+    var userSheet = table.sheet || mhSheet_(MH_SHEETS.USERS);
+    userSheet.getRange(existing.__rowNumber, userIdColumn + 1).setValue(userId);
+    SpreadsheetApp.flush();
+    mhInvalidateTableCache_(MH_SHEETS.USERS);
+    mhUseFreshTables_();
+    table = mhReadTable_(MH_SHEETS.USERS);
+    existing = table.rows.filter(function (row) {
+      return mhAsText_(row.email).toLowerCase() === spec.email && !mhNonEmpty_(row.archived_at);
+    })[0] || null;
+  }
+  var record = {
+    user_id: userId,
+    display_name: spec.displayName,
+    email: spec.email,
+    organization_code: spec.organizationCode,
+    role_code: 'POCKET_MANAGER',
+    status_code: 'ACTIVE',
+    created_at: existing && mhNonEmpty_(existing.created_at) ? existing.created_at : now,
+    updated_at: now,
+    row_version: existing ? Math.max(1, Number(existing.row_version || 0) + 1) : 1,
+    archived_at: ''
+  };
+  if (existing) mhUpdateRecord_(table, existing.__rowNumber, record);
+  else mhAppendRecord_(MH_SHEETS.USERS, record);
+  mhUseFreshTables_();
+  return record;
+}
+
+function mhSetupUpsertSharedMembership_(spec, userId, project, now) {
+  var table = mhReadTable_(MH_SHEETS.MEMBERSHIPS);
+  var projectId = mhAsText_(project.project_id);
+  var clientId = mhAsText_(project.client_id);
+  var matches = table.rows.filter(function (row) {
+    return !mhNonEmpty_(row.archived_at) &&
+      mhAsText_(row.user_id) === userId &&
+      mhAsText_(row.client_id) === clientId &&
+      mhAsText_(row.project_id) === projectId;
+  });
+  if (matches.length > 1) throw new Error(spec.account + ' 계정의 활성 프로젝트 권한이 중복되어 있습니다.');
+  var existing = matches[0] || null;
+  var record = {
+    membership_id: existing && mhNonEmpty_(existing.membership_id)
+      ? mhAsText_(existing.membership_id)
+      : spec.fallbackMembershipId,
+    user_id: userId,
+    client_id: clientId,
+    project_id: projectId,
+    permission_code: 'ADMIN',
+    status_code: 'ACTIVE',
+    created_at: existing && mhNonEmpty_(existing.created_at) ? existing.created_at : now,
+    updated_at: now,
+    row_version: existing ? Math.max(1, Number(existing.row_version || 0) + 1) : 1,
+    archived_at: ''
+  };
+  if (existing) mhUpdateRecord_(table, existing.__rowNumber, record);
+  else mhAppendRecord_(MH_SHEETS.MEMBERSHIPS, record);
+  mhUseFreshTables_();
+  return record;
 }
 
 function mhSetupDisableAccount(email) {

@@ -54,7 +54,7 @@ export function createHubApi(config, options = {}) {
   async function login(credentials = {}) {
     const response = await http.request("login", {
       body: {
-        email: String(credentials.account || credentials.email || "").trim(),
+        account: String(credentials.account || credentials.email || "").trim(),
         accessCode: String(credentials.accessCode || ""),
       },
       signal: credentials.signal,

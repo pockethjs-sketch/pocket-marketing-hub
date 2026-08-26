@@ -7,7 +7,7 @@
 - 모든 읽기·쓰기는 `text/plain` POST JSON으로 호출합니다.
 - 접근코드 원문, 시트 ID, 서명키는 GitHub에 커밋하지 않습니다.
 - 로그인 성공 시 최대 12시간의 HMAC 서명 세션을 발급합니다.
-- 일반 로그인 세션은 매 요청마다 `03_사용자`, `04_프로젝트권한`을 다시 확인합니다. 공개 미리보기는 `CLIENT_VIEWER` 역할과 서버의 프로젝트 허용 목록으로 읽기 전용 범위를 다시 계산합니다.
+- 일반 로그인 세션은 매 요청마다 `03_사용자`, `04_프로젝트권한`을 다시 확인합니다. 현재 공개 미리보기는 비활성화돼 있으며, 호환 코드가 다시 활성화될 경우에도 `CLIENT_VIEWER` 역할과 서버의 프로젝트 허용 목록으로 읽기 전용 범위를 다시 계산합니다.
 - 차단된 접근계정도 매 요청마다 다시 확인하므로 기존 세션을 즉시 거부합니다.
 - `CLIENT_VIEWER`는 읽기 전용입니다.
 - `EXECUTOR_EDITOR`는 배정 프로젝트 중 `EDIT/ADMIN` 권한만 수정할 수 있습니다.
@@ -57,16 +57,16 @@ Apps Script ContentService 특성상 애플리케이션 오류도 HTTP 200으로
 ```json
 {
   "action": "login",
-  "email": "operator@example.com",
-  "accessCode": "24자-이상의-개별-랜덤-접근코드"
+  "account": "사내-단축-아이디-또는-email@example.com",
+  "accessCode": "계정별-접근코드"
 }
 ```
 
 성공 시 `data.token`, `data.expiresIn`, `data.user`가 반환됩니다. 토큰은 `localStorage`가 아니라 `sessionStorage`에 저장합니다.
 
-### 로그인 없는 공개 조회
+### 로그인 없는 공개 조회(현재 비활성)
 
-`PUBLIC_PREVIEW_ENABLED=true`일 때 첫 화면은 아래 요청 한 번으로 1시간짜리 `CLIENT_VIEWER` 세션과 최소 bootstrap을 함께 받습니다.
+현재 운영 설정은 `PUBLIC_PREVIEW_ENABLED=false`, `MH_PUBLIC_TASK_WRITES_ENABLED=false`이므로 아래 요청은 `forbidden`으로 거부됩니다. 호환 기능을 별도 검토 후 다시 활성화할 때만 첫 화면이 아래 요청 한 번으로 1시간짜리 `CLIENT_VIEWER` 세션과 최소 bootstrap을 함께 받습니다.
 
 ```json
 { "action": "preview_bootstrap" }

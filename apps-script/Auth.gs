@@ -8,9 +8,9 @@
  */
 
 function mhLogin_(request) {
-  var email = mhAsText_(request.email).toLowerCase();
+  var email = mhNormalizeLoginAccount_(request.account || request.email);
   var accessCode = String(request.accessCode || request.access_code || '');
-  if (!/^\S{24,128}$/.test(accessCode) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  if (!email || !mhValidAccessCode_(email, accessCode)) {
     mhRecordLoginFailure_(email);
     throw mhApiError_('unauthorized', 'invalid_credentials', 401);
   }
@@ -34,6 +34,23 @@ function mhLogin_(request) {
       organization: actor.organization
     }
   };
+}
+
+/**
+ * Internal operators sign in with a short account id. It is normalized to the
+ * existing server-only hub.local identity so no email address or credential
+ * needs to be embedded in the static frontend.
+ */
+function mhNormalizeLoginAccount_(value) {
+  var account = mhAsText_(value).toLowerCase();
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(account)) return account;
+  if (/^[a-z0-9][a-z0-9._-]{1,63}$/.test(account)) return account + '@hub.local';
+  return '';
+}
+
+function mhValidAccessCode_(email, accessCode) {
+  var minimum = /@hub\.local$/.test(mhAsText_(email).toLowerCase()) ? 8 : 24;
+  return new RegExp('^\\S{' + minimum + ',128}$').test(String(accessCode || ''));
 }
 
 function mhPreviewSession_() {
@@ -183,6 +200,7 @@ function mhActorByEmail_(email) {
   var user = matches[0];
   var role = mhAsText_(user.role_code).toUpperCase();
   if (!MH_INTERACTIVE_ROLES[role]) throw mhApiError_('unauthorized', 'invalid_user_role', 401);
+  if (!mhNonEmpty_(user.user_id)) throw mhApiError_('unauthorized', 'user_id_not_registered', 401);
   var actor = {
     userId: mhAsText_(user.user_id),
     userRowVersion: Number(user.row_version || 0),
