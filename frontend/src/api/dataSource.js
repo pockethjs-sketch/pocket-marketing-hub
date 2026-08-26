@@ -149,6 +149,57 @@ export function createHubDataSource(options = {}) {
     }
   }
 
+  async function previewBootstrap(options = {}) {
+    if (!live) {
+      throw new HubApiError("API 주소가 설정되지 않았습니다.", {
+        code: "missing_api_url",
+        action: "preview_bootstrap",
+        retriable: false,
+      });
+    }
+    emit({ phase: "loading", action: "preview_bootstrap", error: null });
+    try {
+      const result = await live.previewBootstrap(options);
+      emit({
+        mode: "live",
+        phase: "ready",
+        action: null,
+        error: null,
+        user: live.getSession()?.user || null,
+        lastSuccessfulAt: result.generatedAt || new Date().toISOString(),
+      });
+      return result;
+    } catch (error) {
+      emit({ phase: "error", action: null, error: publicApiError(error), user: null });
+      throw error;
+    }
+  }
+
+  async function previewOverview(options = {}) {
+    if (!live) {
+      throw new HubApiError("API 주소가 설정되지 않았습니다.", {
+        code: "missing_api_url",
+        action: "preview_overview",
+        retriable: false,
+      });
+    }
+    emit({ phase: "loading", action: "preview_overview", error: null });
+    try {
+      const result = await live.previewOverview(options);
+      emit({
+        mode: "live",
+        phase: "ready",
+        action: null,
+        error: null,
+        lastSuccessfulAt: result.generatedAt || new Date().toISOString(),
+      });
+      return result;
+    } catch (error) {
+      emit({ phase: "error", action: null, error: publicApiError(error) });
+      throw error;
+    }
+  }
+
   function logout() {
     live?.logout?.();
     emit({ phase: "idle", action: null, error: null, user: null, lastSuccessfulAt: null });
@@ -160,6 +211,8 @@ export function createHubDataSource(options = {}) {
     subscribe,
     login,
     previewSession,
+    previewBootstrap,
+    previewOverview,
     logout,
     getSession: () => live?.getSession?.() || null,
     load,

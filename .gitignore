@@ -17,3 +17,8 @@ docs/source-*.png
 docs/implementation-*.png
 docs/design-qa-comparison.*
 docs/pocket-reskin-comparison.png
+docs/.chrome-*/
+docs/hub-*-pandarank.png
+docs/pandarank-*.png
+docs/teamtracker-reference.png
+docs/task-view-*.png

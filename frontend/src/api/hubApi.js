@@ -66,6 +66,30 @@ export function createHubApi(config, options = {}) {
     return response;
   }
 
+  async function previewBootstrap(options = {}) {
+    const response = await http.request("preview_bootstrap", { signal: options.signal });
+    const payload = response.data || {};
+    const session = payload.session || payload;
+    sessionStore.write(session);
+
+    // The optimized endpoint returns the session and the minimum navigation
+    // bootstrap in one round trip. Keep a narrow flat-response compatibility
+    // path so a staged Apps Script deployment does not strand the client.
+    const bootstrap = payload.bootstrap?.data || payload.bootstrap || payload;
+    return {
+      ...response,
+      generatedAt: payload.bootstrap?.generatedAt || response.generatedAt,
+      data: bootstrap,
+    };
+  }
+
+  async function previewOverview(options = {}) {
+    return http.request("preview_overview", {
+      body: { projectId: options.projectId },
+      signal: options.signal,
+    });
+  }
+
   async function read(resource, params = {}) {
     const action = READ_ACTIONS[resource];
     if (!action) {
@@ -118,6 +142,8 @@ export function createHubApi(config, options = {}) {
     read,
     login,
     previewSession,
+    previewBootstrap,
+    previewOverview,
     logout: () => sessionStore.clear(),
     getSession: () => sessionStore.read(),
     bootstrap: (params) => read("bootstrap", params),

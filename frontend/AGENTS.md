@@ -10,16 +10,18 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Pocket Marketing Hub design decisions
 
-- The visual target is the existing Pocket KPI operational UI: Pretendard, cool gray canvas, white surfaces, cobalt-blue primary actions, slate text, thin borders, shallow shadows, and compact 3/5/7px radii.
-- Do not reintroduce editorial serif or mono typography, terracotta/olive brand palettes, decorative `01–04` numbers, giant watermark numerals, English uppercase kickers, glass effects, or presentation-style hero layouts.
+- The visual target is a PandaRank-inspired operational UI: Pretendard, warm white/mist canvas, white surfaces, mint-green primary actions (`#22bc7e`), near-black text, generous spacing, 12–24px radii, and broad soft shadows. Reuse the visual system only; never copy PandaRank branding, content, or trademarks.
+- Do not reintroduce editorial serif or mono typography, cobalt/terracotta/olive primary palettes, decorative `01–04` numbers, giant watermark numerals, English uppercase kickers, glass effects, or presentation-style hero layouts.
 - The desktop shell uses a Discord-like client rail and a second project navigation column.
-- Pocket and executor accounts use one icon-only `<< / >>` control that collapses the client rail first and the project navigation second, then restores them in reverse order. Never collapse both desktop columns on the first click. Client accounts start with both columns hidden and use the same top-bar control only when temporary navigation is needed.
+- Desktop navigation opens in two stages: the top-bar `>>` reveals the current client's project navigation first, then the `>>` inside that navigation reveals the full client/project rail. Reverse controls hide the client rail or the whole project navigation. Compact screens keep the temporary combined drawer.
 - Client selectors in the rail are horizontal name buttons, never initials-only avatars. Preserve each client's own script and brand spelling (for example `UND`, `무극`).
 - Keep overview hierarchy to four primary signals, a compact monthly/week flow, attention items, channel progress, and recent updates.
+- The `업무` view mirrors the supplied 90-day team-tracker information structure: overall completion, phase progress, workstream progress, phase/workstream filters, and grouped task checklists. Keep the active PandaRank-inspired Pocket visual system; do not reuse the reference file's editorial styling.
 - Supplied project-plan HTML files are requirements references only. Do not copy their visible copy, brand palette, typography, or component anatomy into the live product UI.
 - Use a single normalized source and role-based projection. Client mode is read-only and must hide executor names and internal notes.
 - GitHub Pages and local production previews use the authenticated Apps Script API. Never add bundled demo customer or project data as a fallback.
 - Login UI is temporarily disabled through a server-issued `CLIENT_VIEWER` public preview session. Keep it read-only, pinned to an explicit server-side project allowlist, and reversible through configuration; never embed a manager credential or token in the frontend.
+- Keep first load progressive: `preview_bootstrap` may contain only the preview session plus client/project/channel navigation data. The public first overview may load in parallel through `preview_overview`; never add overview aggregates or task/content rows back to bootstrap. Other tabs load on entry.
 - Treat `docs/INTEGRATION_STATUS.md` as the source of truth for connection claims. Never present controls as persisted until the server confirms the Sheet write.
 - Keep Sheet IDs, Apps Script URLs, API tokens, and customer data out of the public frontend and repository. All operational reads and writes must pass through a server-side authenticated, project-scoped API.
 - Preserve the `POCKET_ONLY` / `PROJECT_TEAM` / `CLIENT` visibility model for all new and migrated rows.

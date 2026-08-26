@@ -37,15 +37,36 @@ function mhLogin_(request) {
 }
 
 function mhPreviewSession_() {
+  return mhCreatePreviewContext_().session;
+}
+
+function mhNormalizePreviewActorIdentity_(actor) {
+  if (!mhNonEmpty_(actor.userId)) {
+    actor.userId = 'PUBLIC-PREVIEW-' + mhHashToken_(actor.email).slice(0, 24);
+  }
+  return actor;
+}
+
+/**
+ * Resolves and validates a public-preview actor once per request.
+ * The validated access objects are kept on the in-memory actor so a combined
+ * preview/bootstrap request does not read or re-check the same permissions.
+ */
+function mhCreatePreviewContext_() {
   var enabled = String(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_ENABLED, 'false')).toLowerCase() === 'true';
   if (!enabled) throw mhApiError_('forbidden', 'public_preview_disabled', 403);
 
   var email = mhAsText_(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_EMAIL, '')).toLowerCase();
   if (!email) throw mhApiError_('configuration_error', 'public_preview_email_missing', 500);
-  var actor = mhActorByEmail_(email);
-  var previewProjectIds = mhValidatedPreviewProjectIds_(actor);
+  var actor = mhNormalizePreviewActorIdentity_(mhActorByEmail_(email));
+  var accesses = mhValidatedPreviewProjectAccesses_(actor);
+  var previewProjectIds = accesses.map(function (access) {
+    return mhAsText_(access.project.project_id);
+  });
+  actor.previewProjectIds = previewProjectIds;
+  actor.validatedProjectAccesses = accesses;
 
-  return {
+  var session = {
     token: mhIssueSessionToken_(actor, 3600, {
       sessionType: 'PUBLIC_PREVIEW',
       previewProjectIds: previewProjectIds
@@ -58,6 +79,7 @@ function mhPreviewSession_() {
       organization: actor.organization
     }
   };
+  return { actor: actor, session: session };
 }
 
 function mhConfiguredPreviewProjectIds_() {
@@ -77,6 +99,12 @@ function mhConfiguredPreviewProjectIds_() {
 }
 
 function mhValidatedPreviewProjectIds_(actor) {
+  return mhValidatedPreviewProjectAccesses_(actor).map(function (access) {
+    return mhAsText_(access.project.project_id);
+  });
+}
+
+function mhValidatedPreviewProjectAccesses_(actor) {
   if (actor.role !== 'CLIENT_VIEWER') {
     throw mhApiError_('configuration_error', 'public_preview_must_be_client_viewer', 500);
   }
@@ -84,17 +112,25 @@ function mhValidatedPreviewProjectIds_(actor) {
     throw mhApiError_('configuration_error', 'public_preview_account_disabled', 500);
   }
   var projectIds = mhConfiguredPreviewProjectIds_();
-  projectIds.forEach(function (projectId) {
+  return projectIds.map(function (projectId) {
     var project = mhFindRecord_(MH_SHEETS.PROJECTS, 'project_id', projectId).row;
     if (!project || mhNonEmpty_(project.archived_at) || !mhAsBoolean_(project.client_view_enabled)) {
       throw mhApiError_('configuration_error', 'public_preview_project_unavailable', 500);
     }
     var permission = mhPermissionForProject_(actor, project);
-    if (!permission || permission.permissionCode !== 'READ_ONLY') {
-      throw mhApiError_('configuration_error', 'public_preview_requires_read_only', 500);
-    }
+    // A public-preview token is always represented by CLIENT_VIEWER, and the
+    // configured project IDs are an explicit server-side allowlist. The write
+    // path rejects CLIENT_VIEWER regardless of a membership row, so preview
+    // availability must not depend on an editable membership record. Always
+    // expose a synthetic read-only permission and never advertise EDIT.
+    return {
+      project: project,
+      permission: {
+        permissionCode: 'READ_ONLY',
+        source: permission ? permission.source : 'PUBLIC_PREVIEW'
+      }
+    };
   });
-  return projectIds;
 }
 
 function mhSameTextSet_(left, right) {
@@ -110,6 +146,9 @@ function mhResolveActor_(request) {
   if (!sessionToken) throw mhApiError_('unauthorized', 'missing_session', 401);
   var claims = mhVerifySessionToken_(sessionToken);
   var actor = mhActorByEmail_(mhAsText_(claims.email).toLowerCase());
+  if (mhAsText_(claims.sessionType) === 'PUBLIC_PREVIEW') {
+    actor = mhNormalizePreviewActorIdentity_(actor);
+  }
   if (!mhAccessCodeDigests_()[actor.email]) {
     throw mhApiError_('unauthorized', 'account_disabled', 401);
   }
@@ -120,11 +159,15 @@ function mhResolveActor_(request) {
   if (mhAsText_(claims.sessionType) === 'PUBLIC_PREVIEW') {
     var enabled = String(mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_ENABLED, 'false')).toLowerCase() === 'true';
     if (!enabled) throw mhApiError_('unauthorized', 'public_preview_disabled', 401);
-    var currentProjectIds = mhValidatedPreviewProjectIds_(actor);
+    var currentAccesses = mhValidatedPreviewProjectAccesses_(actor);
+    var currentProjectIds = currentAccesses.map(function (access) {
+      return mhAsText_(access.project.project_id);
+    });
     if (!mhSameTextSet_(claims.previewProjectIds, currentProjectIds)) {
       throw mhApiError_('unauthorized', 'public_preview_scope_changed', 401);
     }
     actor.previewProjectIds = currentProjectIds;
+    actor.validatedProjectAccesses = currentAccesses;
   }
   return actor;
 }
@@ -174,7 +217,7 @@ function mhAccessCodeDigests_() {
       normalized[mhAsText_(email).toLowerCase()] = mhAsText_(account.access_code_hash || account.accessCodeHash);
     }
   });
-  var properties = PropertiesService.getScriptProperties().getProperties();
+  var properties = mhSettings_();
   Object.keys(properties).forEach(function (key) {
     if (key.indexOf(MH_PROPERTY_KEYS.ACCESS_ACCOUNT_PREFIX) !== 0) return;
     var account = mhParseJson_(properties[key], null);
@@ -371,12 +414,22 @@ function mhRequireProjectAccess_(actor, projectId, requireWrite) {
   if (actor.previewProjectIds && actor.previewProjectIds.indexOf(mhAsText_(projectId)) < 0) {
     throw mhApiError_('forbidden', 'preview_project_access_denied', 403);
   }
-  var found = mhFindRecord_(MH_SHEETS.PROJECTS, 'project_id', projectId).row;
+  var validatedAccess = null;
+  if (actor.validatedProjectAccesses) {
+    validatedAccess = actor.validatedProjectAccesses.filter(function (access) {
+      return mhAsText_(access.project.project_id) === mhAsText_(projectId);
+    })[0] || null;
+  }
+  var found = validatedAccess
+    ? validatedAccess.project
+    : mhFindRecord_(MH_SHEETS.PROJECTS, 'project_id', projectId).row;
   if (!found || mhNonEmpty_(found.archived_at)) throw mhApiError_('not_found', 'project_not_found', 404);
   if (actor.role === 'CLIENT_VIEWER' && !mhAsBoolean_(found.client_view_enabled)) {
     throw mhApiError_('forbidden', 'client_view_disabled', 403);
   }
-  var permission = mhPermissionForProject_(actor, found);
+  var permission = validatedAccess
+    ? validatedAccess.permission
+    : mhPermissionForProject_(actor, found);
   if (!permission || !MH_READ_PERMISSIONS[permission.permissionCode]) {
     throw mhApiError_('forbidden', 'project_access_denied', 403);
   }
@@ -393,11 +446,23 @@ function mhRequireProjectAccess_(actor, projectId, requireWrite) {
 }
 
 function mhAccessibleProjects_(actor) {
-  return mhActiveRows_(MH_SHEETS.PROJECTS).filter(function (project) {
+  return mhAccessibleProjectAccesses_(actor).map(function (access) {
+    return access.project;
+  });
+}
+
+function mhAccessibleProjectAccesses_(actor) {
+  if (actor.validatedProjectAccesses) return actor.validatedProjectAccesses.slice();
+  var accesses = [];
+  mhActiveRows_(MH_SHEETS.PROJECTS).forEach(function (project) {
     if (actor.previewProjectIds && actor.previewProjectIds.indexOf(mhAsText_(project.project_id)) < 0) return false;
     if (actor.role === 'CLIENT_VIEWER' && !mhAsBoolean_(project.client_view_enabled)) return false;
-    return !!mhPermissionForProject_(actor, project);
+    var permission = mhPermissionForProject_(actor, project);
+    if (permission && MH_READ_PERMISSIONS[permission.permissionCode]) {
+      accesses.push({ project: project, permission: permission });
+    }
   });
+  return accesses;
 }
 
 function mhScopeForProject_(actor, project) {

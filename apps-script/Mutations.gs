@@ -12,7 +12,8 @@ function mhHandleMutation_(request, actor) {
   if (!/^mut_[A-Za-z0-9_-]{8,120}$/i.test(mutationId)) {
     throw mhApiError_('validation_error', 'invalid_mutation_id', 400);
   }
-  if (!spec || ['CREATE', 'UPDATE', 'ARCHIVE'].indexOf(operation) < 0 || !projectId) {
+  if (!spec || ['CREATE', 'UPDATE', 'ARCHIVE'].indexOf(operation) < 0 ||
+      (spec.operations && spec.operations.indexOf(operation) < 0) || !projectId) {
     throw mhApiError_('invalid_request', 'invalid_mutation_shape', 400);
   }
   var requestHash = mhMutationRequestHash_(entityType, operation, projectId, mutation, actor.userId);
@@ -76,7 +77,12 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
     if (mhAsText_(before.project_id) !== mhAsText_(project.project_id)) {
       throw mhApiError_('forbidden', 'record_scope_mismatch', 403);
     }
-    if (!mhCanSeeRow_(actor, before)) throw mhApiError_('forbidden', 'record_visibility_denied', 403);
+    if (entityType === 'project' && ['MASTER', 'POCKET_MANAGER', 'POCKET_EDITOR'].indexOf(actor.role) < 0) {
+      throw mhApiError_('forbidden', 'project_update_requires_internal_user', 403);
+    }
+    if (entityType !== 'project' && !mhCanSeeRow_(actor, before)) {
+      throw mhApiError_('forbidden', 'record_visibility_denied', 403);
+    }
     if (actor.role === 'EXECUTOR_EDITOR' && mhNormalizeVisibility_(before.visibility_code) === 'CLIENT') {
       throw mhApiError_('forbidden', 'client_visible_record_requires_pocket', 403);
     }
@@ -186,7 +192,7 @@ function mhValidateMutationRecord_(record, spec, entityType, actor, project, bef
   mhValidateRecordFieldTypes_(record, entityType);
   mhValidateStatusTransition_(record, before, entityType);
   mhValidateApprovalTransition_(record, before, entityType, actor);
-  ['planned_start_date', 'due_date', 'planned_date', 'shoot_date', 'review_due_date', 'publish_due_date'].forEach(function (field) {
+  ['start_date', 'planned_start_date', 'due_date', 'planned_date', 'shoot_date', 'review_due_date', 'publish_due_date'].forEach(function (field) {
     if (mhNonEmpty_(record[field]) && !/^\d{4}-\d{2}-\d{2}$/.test(mhAsText_(record[field]))) {
       throw mhApiError_('validation_error', 'invalid_date', 400);
     }
@@ -240,7 +246,7 @@ function mhRequireProjectMember_(userId, project) {
 
 function mhCleanFieldValue_(field, value) {
   if (value === null || value === undefined) return '';
-  if (['current_version_no', 'sort_order'].indexOf(field) >= 0) {
+  if (['current_version_no', 'sort_order', 'plan_week'].indexOf(field) >= 0) {
     var numeric = Number(value);
     if (!isFinite(numeric)) throw mhApiError_('validation_error', 'invalid_number', 400);
     return numeric;
@@ -379,7 +385,9 @@ function mhMutationReplay_(log, actor) {
   delete after.__mutation_request_hash;
   var entityType = mhAsText_(log.entity_type).toLowerCase();
   var spec = MH_ENTITY_SPECS[entityType];
-  if (spec && !mhCanSeeRow_(actor, after)) throw mhApiError_('forbidden', 'record_visibility_denied', 403);
+  if (spec && entityType !== 'project' && !mhCanSeeRow_(actor, after)) {
+    throw mhApiError_('forbidden', 'record_visibility_denied', 403);
+  }
   var operation = mhAsText_(log.action_code) === 'CREATED'
     ? 'CREATE' : mhAsText_(log.action_code) === 'UPDATED' ? 'UPDATE' : 'ARCHIVE';
   return {

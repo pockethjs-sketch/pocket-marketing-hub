@@ -4,18 +4,97 @@ function mhHandleRead_(action, request, actor) {
   if (!projectId) throw mhApiError_('invalid_request', 'project_id_required', 400);
   var access = mhRequireProjectAccess_(actor, projectId, false);
   var scope = mhScopeForProject_(actor, access.project);
-  if (action === 'project_overview') return { scope: scope, data: mhReadOverview_(request, actor, access.project) };
-  if (action === 'tasks') return { scope: scope, data: mhReadTasks_(request, actor, access.project) };
-  if (action === 'contents') return { scope: scope, data: mhReadContents_(request, actor, access.project) };
-  if (action === 'approvals') return { scope: scope, data: mhReadApprovals_(request, actor, access.project) };
-  if (action === 'performance') return { scope: scope, data: mhReadPerformance_(request, actor, access.project) };
-  if (action === 'files') return { scope: scope, data: mhReadFiles_(request, actor, access.project) };
-  if (action === 'activity') return { scope: scope, data: mhReadActivity_(request, actor, access.project) };
-  throw mhApiError_('invalid_request', 'unsupported_read_action', 400);
+  var cached = mhCachedClientRead_(action, request, actor, projectId);
+  if (cached.hit) return { scope: scope, data: cached.data };
+  var data = null;
+  if (action === 'project_overview') data = mhReadOverview_(request, actor, access.project);
+  else if (action === 'tasks') data = mhReadTasks_(request, actor, access.project);
+  else if (action === 'contents') data = mhReadContents_(request, actor, access.project);
+  else if (action === 'approvals') data = mhReadApprovals_(request, actor, access.project);
+  else if (action === 'performance') data = mhReadPerformance_(request, actor, access.project);
+  else if (action === 'files') data = mhReadFiles_(request, actor, access.project);
+  else if (action === 'activity') data = mhReadActivity_(request, actor, access.project);
+  else throw mhApiError_('invalid_request', 'unsupported_read_action', 400);
+  mhRememberClientRead_(action, request, actor, projectId, data);
+  return { scope: scope, data: data };
+}
+
+var MH_CLIENT_READ_CACHE_TTL_SECONDS = 30;
+var MH_CLIENT_READ_CACHE_MAX_BYTES = 90000;
+
+function mhClientReadCacheKey_(action, request, actor, projectId) {
+  return 'mh_client_read_v1_' + mhHashToken_(mhStableJson_({
+    backend: MH_BACKEND_VERSION,
+    action: action,
+    actor: mhAsText_(actor.userId),
+    role: mhAsText_(actor.role),
+    projectId: mhAsText_(projectId),
+    filters: request.filters || null,
+    startDate: request.startDate || request.start_date || null,
+    endDate: request.endDate || request.end_date || null,
+    query: request.query || null,
+    limit: request.limit || null,
+    cursor: request.cursor || null
+  })).slice(0, 48);
+}
+
+function mhCachedClientRead_(action, request, actor, projectId) {
+  if (actor.role !== 'CLIENT_VIEWER') return { hit: false, data: null };
+  try {
+    var raw = CacheService.getScriptCache().get(
+      mhClientReadCacheKey_(action, request, actor, projectId)
+    );
+    var data = raw ? mhParseJson_(raw, null) : null;
+    return data === null ? { hit: false, data: null } : { hit: true, data: data };
+  } catch (ignored) {
+    return { hit: false, data: null };
+  }
+}
+
+function mhRememberClientRead_(action, request, actor, projectId, data) {
+  if (actor.role !== 'CLIENT_VIEWER') return;
+  try {
+    var serialized = JSON.stringify(data);
+    if (Utilities.newBlob(serialized).getBytes().length > MH_CLIENT_READ_CACHE_MAX_BYTES) return;
+    CacheService.getScriptCache().put(
+      mhClientReadCacheKey_(action, request, actor, projectId),
+      serialized,
+      MH_CLIENT_READ_CACHE_TTL_SECONDS
+    );
+  } catch (ignored) {}
+}
+
+function mhPreviewBootstrap_(request) {
+  var preview = mhCreatePreviewContext_();
+  var bootstrap = mhReadBootstrap_(request, preview.actor);
+  return {
+    actor: preview.actor,
+    scope: bootstrap.scope,
+    data: {
+      session: preview.session,
+      bootstrap: bootstrap.data
+    }
+  };
+}
+
+function mhPreviewOverview_(request) {
+  var preview = mhCreatePreviewContext_();
+  var projectId = mhAsText_(request.projectId || request.project_id) || preview.actor.previewProjectIds[0];
+  if (!projectId) throw mhApiError_('not_found', 'preview_project_not_found', 404);
+  var access = mhRequireProjectAccess_(preview.actor, projectId, false);
+  var cached = mhCachedClientRead_('project_overview', request, preview.actor, projectId);
+  var data = cached.hit ? cached.data : mhReadOverview_(request, preview.actor, access.project);
+  if (!cached.hit) mhRememberClientRead_('project_overview', request, preview.actor, projectId, data);
+  return {
+    actor: preview.actor,
+    scope: mhScopeForProject_(preview.actor, access.project),
+    data: data
+  };
 }
 
 function mhReadBootstrap_(request, actor) {
-  var projects = mhAccessibleProjects_(actor);
+  var accesses = mhAccessibleProjectAccesses_(actor);
+  var projects = accesses.map(function (access) { return access.project; });
   var projectKeys = {};
   var clientIds = {};
   projects.forEach(function (project) {
@@ -29,8 +108,9 @@ function mhReadBootstrap_(request, actor) {
       'client_id', 'display_name', 'status_code', 'is_demo', 'logo_url'
     ]));
   });
-  var projectItems = projects.map(function (project) {
-    var permission = mhPermissionForProject_(actor, project);
+  var projectItems = accesses.map(function (access) {
+    var project = access.project;
+    var permission = access.permission;
     return mhNormalizeRow_({
       project_id: project.project_id,
       client_id: project.client_id,
@@ -41,6 +121,7 @@ function mhReadBootstrap_(request, actor) {
       status_code: project.status_code,
       start_date: project.start_date,
       end_date: project.end_date,
+      row_version: project.row_version,
       permission_code: permission ? permission.permissionCode : null
     });
   });
@@ -53,16 +134,6 @@ function mhReadBootstrap_(request, actor) {
       'display_name', 'account_url', 'channel_role', 'cadence', 'status_code'
     ]));
   });
-  var preferredProjectId = mhAsText_(request.projectId || request.project_id);
-  var initialProject = projects.filter(function (project) {
-    return mhAsText_(project.project_id) === preferredProjectId;
-  })[0] || projects[0] || null;
-  var initialOverview = initialProject
-    ? mhReadOverview_({ limit: 5 }, actor, initialProject)
-    : null;
-  var initialTasks = initialProject
-    ? mhReadTasks_({ limit: MH_PAGE_MAX }, actor, initialProject)
-    : null;
   return {
     scope: { clientId: null, projectId: null, visibility: null },
     data: {
@@ -74,15 +145,7 @@ function mhReadBootstrap_(request, actor) {
       },
       clients: clients,
       projects: projectItems,
-      channels: channels,
-      initialOverview: initialOverview ? {
-        projectId: mhAsText_(initialProject.project_id),
-        data: initialOverview
-      } : null,
-      initialTasks: initialTasks ? {
-        projectId: mhAsText_(initialProject.project_id),
-        data: initialTasks
-      } : null
+      channels: channels
     }
   };
 }
@@ -156,7 +219,8 @@ function mhReadOverview_(request, actor, project) {
 }
 
 function mhReadTasks_(request, actor, project) {
-  var rows = mhProjectRows_(MH_SHEETS.TASKS, project.client_id, project.project_id, actor);
+  var allRows = mhProjectRows_(MH_SHEETS.TASKS, project.client_id, project.project_id, actor);
+  var rows = allRows.slice();
   var filters = request.filters || {};
   rows = rows.filter(function (row) {
     if (filters.statusCode && mhAsText_(row.status_code) !== mhAsText_(filters.statusCode)) return false;
@@ -165,13 +229,66 @@ function mhReadTasks_(request, actor, project) {
     if (filters.assigneeUserId && mhAsText_(row.assignee_user_id) !== mhAsText_(filters.assigneeUserId)) return false;
     return true;
   });
-  var limit = mhClampLimit_(request.limit, MH_PAGE_DEFAULT, MH_PAGE_MAX);
-  var page = mhPageRows_(rows, 'task_id', limit, mhDecodeCursor_(request.cursor));
+  var orderedRows = mhSortTaskRows_(rows).slice(0, MH_PAGE_MAX);
   return {
-    items: page.items.map(function (row) { return mhProjectTask_(row, actor); }),
-    nextCursor: page.nextCursor,
+    project: mhNormalizeRow_(mhPick_(project, [
+      'project_id', 'phase_code', 'start_date', 'end_date', 'row_version'
+    ])),
+    members: actor.role === 'CLIENT_VIEWER' ? [] : mhActiveProjectMembers_(project),
+    publishing: mhTrackerPublishingSummary_(project, actor, allRows),
+    items: orderedRows.map(function (row) { return mhProjectTask_(row, actor); }),
+    nextCursor: null,
     totalMatching: rows.length
   };
+}
+
+function mhSortTaskRows_(rows) {
+  return (rows || []).slice().sort(function (left, right) {
+    var leftOrder = mhNonEmpty_(left.sort_order) && isFinite(Number(left.sort_order))
+      ? Number(left.sort_order) : 9007199254740991;
+    var rightOrder = mhNonEmpty_(right.sort_order) && isFinite(Number(right.sort_order))
+      ? Number(right.sort_order) : 9007199254740991;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    var leftId = mhAsText_(left.task_id);
+    var rightId = mhAsText_(right.task_id);
+    if (leftId === rightId) return 0;
+    return leftId < rightId ? -1 : 1;
+  });
+}
+
+function mhActiveProjectMembers_(project) {
+  var projectId = mhAsText_(project.project_id);
+  var clientId = mhAsText_(project.client_id);
+  var membershipByUser = {};
+  mhActiveRows_(MH_SHEETS.MEMBERSHIPS).forEach(function (row) {
+    var userId = mhAsText_(row.user_id);
+    var memberProjectId = mhAsText_(row.project_id);
+    if (!userId || mhAsText_(row.client_id) !== clientId ||
+        (memberProjectId && memberProjectId !== projectId) ||
+        mhAsText_(row.status_code).toUpperCase() !== 'ACTIVE' ||
+        !MH_READ_PERMISSIONS[mhAsText_(row.permission_code).toUpperCase()]) return;
+    var exact = memberProjectId === projectId;
+    if (!membershipByUser[userId] || (exact && !membershipByUser[userId].exact)) {
+      membershipByUser[userId] = { row: row, exact: exact };
+    }
+  });
+  var members = [];
+  mhActiveRows_(MH_SHEETS.USERS).forEach(function (user) {
+    var userId = mhAsText_(user.user_id);
+    var membership = membershipByUser[userId];
+    if (!membership || mhAsText_(user.status_code).toUpperCase() !== 'ACTIVE') return;
+    members.push(mhNormalizeRow_({
+      user_id: userId,
+      display_name: mhAsText_(user.display_name) || userId,
+      organization_code: mhAsText_(user.organization_code).toUpperCase(),
+      role_code: mhAsText_(user.role_code).toUpperCase(),
+      permission_code: mhAsText_(membership.row.permission_code).toUpperCase()
+    }));
+  });
+  members.sort(function (left, right) {
+    return mhAsText_(left.display_name).localeCompare(mhAsText_(right.display_name));
+  });
+  return members;
 }
 
 function mhReadContents_(request, actor, project) {
@@ -394,18 +511,57 @@ function mhProjectRows_(sheetName, clientId, projectId, actor) {
 
 function mhProjectTask_(row, actor) {
   var fields = [
-    'task_id', 'project_id', 'parent_task_id', 'phase_code', 'workstream_code',
+    'task_id', 'project_id', 'source_task_id', 'parent_task_id', 'phase_code', 'workstream_code',
     'category_code', 'title', 'status_code', 'priority_code',
-    'planned_start_date', 'due_date', 'completed_at', 'customer_status_text',
+    'plan_week', 'planned_start_date', 'due_date', 'completed_at', 'customer_status_text',
     'sort_order', 'updated_at', 'row_version'
   ];
   if (actor.role !== 'CLIENT_VIEWER') {
     fields = fields.concat([
-      'description', 'responsible_org_code', 'assignee_user_id',
+      'description', 'plan_note', 'responsible_org_code', 'assignee_user_id',
       'reviewer_org_code', 'blocker_reason', 'source_code'
     ]);
   }
-  return mhNormalizeRow_(mhPick_(row, fields));
+  var projected = mhNormalizeRow_(mhPick_(row, fields));
+  projected.contract_linked = mhNonEmpty_(row.plan_note);
+  return projected;
+}
+
+function mhTrackerPublishingSummary_(project, actor, tasks) {
+  var targets = {
+    P0: { long_form: 2, short_form: 10, instagram: 10, blog: 10 },
+    M1: { long_form: 2, short_form: 10, instagram: 10, blog: 4 },
+    M2: { long_form: 2, short_form: 10, instagram: 10, blog: 4 },
+    M3: { long_form: 2, short_form: 10, instagram: 10, blog: 4 }
+  };
+  var taskPhase = {};
+  (tasks || []).forEach(function (task) {
+    taskPhase[mhAsText_(task.task_id)] = mhAsText_(task.phase_code);
+  });
+  var actuals = {};
+  Object.keys(targets).forEach(function (phase) {
+    actuals[phase] = { long_form: 0, short_form: 0, instagram: 0, blog: 0 };
+  });
+  mhProjectRows_(MH_SHEETS.CONTENTS, project.client_id, project.project_id, actor).forEach(function (content) {
+    if (mhAsText_(content.status_code).toUpperCase() !== 'PUBLISHED') return;
+    var phase = taskPhase[mhAsText_(content.task_id)];
+    if (!actuals[phase]) return;
+    var format = mhAsText_(content.format_code).toUpperCase();
+    if (['LONG_FORM', 'LONGFORM', 'YOUTUBE_LONG'].indexOf(format) >= 0) actuals[phase].long_form += 1;
+    else if (['SHORT_FORM', 'SHORTFORM', 'YOUTUBE_SHORT', 'REELS'].indexOf(format) >= 0) actuals[phase].short_form += 1;
+    else if (['INSTAGRAM', 'FEED', 'INSTAGRAM_FEED', 'CARD_NEWS'].indexOf(format) >= 0) actuals[phase].instagram += 1;
+    else if (['NAVER_BLOG', 'BLOG', 'ARTICLE'].indexOf(format) >= 0) actuals[phase].blog += 1;
+  });
+  return {
+    source: '08_콘텐츠:PUBLISHED',
+    phases: ['P0', 'M1', 'M2', 'M3'].map(function (phase) {
+      var target = targets[phase];
+      var actual = actuals[phase];
+      target.total = target.long_form + target.short_form + target.instagram + target.blog;
+      actual.total = actual.long_form + actual.short_form + actual.instagram + actual.blog;
+      return { phase_code: phase, target: target, actual: actual };
+    })
+  };
 }
 
 function mhProjectContent_(row, actor) {

@@ -5,9 +5,9 @@
  * This file is safe to keep in a public repository.
  */
 
-var MH_CONTRACT_VERSION = '2026-08-25-read-v1';
-var MH_SCHEMA_VERSION = '2026-08-25-v1';
-var MH_BACKEND_VERSION = '2026-08-25-public-preview-v3';
+var MH_CONTRACT_VERSION = '2026-08-26-team-tracker-v4';
+var MH_SCHEMA_VERSION = '2026-08-26-v2';
+var MH_BACKEND_VERSION = '2026-08-26-read-cache-v11';
 
 var MH_PROPERTY_KEYS = {
   SHEET_ID: 'SHEET_ID',
@@ -95,13 +95,21 @@ var MH_FIELD_ENUMS = {
 };
 
 var MH_ENTITY_SPECS = {
+  project: {
+    sheet: '02_프로젝트',
+    idField: 'project_id',
+    idPrefix: 'PRJ',
+    operations: ['UPDATE'],
+    fields: ['start_date'],
+    required: []
+  },
   task: {
     sheet: '06_업무',
     idField: 'task_id',
     idPrefix: 'TSK',
     fields: [
       'source_task_id', 'parent_task_id', 'phase_code', 'workstream_code',
-      'category_code', 'title', 'description', 'responsible_org_code',
+      'category_code', 'title', 'description', 'plan_week', 'plan_note', 'responsible_org_code',
       'assignee_user_id', 'reviewer_org_code', 'status_code', 'priority_code',
       'planned_start_date', 'due_date', 'completed_at', 'blocker_reason',
       'customer_status_text', 'visibility_code', 'sort_order'
@@ -163,9 +171,20 @@ var MH_PERFORMANCE_DATE_LIMIT_DAYS = 366;
 var MH_LOCK_TIMEOUT_MS = 20000;
 var MH_SESSION_TTL_DEFAULT_SECONDS = 28800;
 var MH_SESSION_TTL_MAX_SECONDS = 43200;
+var MH_SETTINGS_MEMORY_CACHE = null;
+
+function mhSettings_() {
+  if (!MH_SETTINGS_MEMORY_CACHE) {
+    MH_SETTINGS_MEMORY_CACHE = PropertiesService.getScriptProperties().getProperties();
+  }
+  return MH_SETTINGS_MEMORY_CACHE;
+}
 
 function mhSetting_(key, fallback) {
-  var propertyValue = PropertiesService.getScriptProperties().getProperty(key);
+  var properties = mhSettings_();
+  var propertyValue = Object.prototype.hasOwnProperty.call(properties, key)
+    ? properties[key]
+    : null;
   if (propertyValue !== null && propertyValue !== undefined && String(propertyValue) !== '') {
     return propertyValue;
   }

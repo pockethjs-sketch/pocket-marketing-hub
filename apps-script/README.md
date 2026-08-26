@@ -7,7 +7,7 @@
 - 모든 읽기·쓰기는 `text/plain` POST JSON으로 호출합니다.
 - 접근코드 원문, 시트 ID, 서명키는 GitHub에 커밋하지 않습니다.
 - 로그인 성공 시 최대 12시간의 HMAC 서명 세션을 발급합니다.
-- 세션이 있어도 매 요청마다 `03_사용자`, `04_프로젝트권한`을 다시 확인합니다.
+- 일반 로그인 세션은 매 요청마다 `03_사용자`, `04_프로젝트권한`을 다시 확인합니다. 공개 미리보기는 `CLIENT_VIEWER` 역할과 서버의 프로젝트 허용 목록으로 읽기 전용 범위를 다시 계산합니다.
 - 차단된 접근계정도 매 요청마다 다시 확인하므로 기존 세션을 즉시 거부합니다.
 - `CLIENT_VIEWER`는 읽기 전용입니다.
 - `EXECUTOR_EDITOR`는 배정 프로젝트 중 `EDIT/ADMIN` 권한만 수정할 수 있습니다.
@@ -66,13 +66,25 @@ Apps Script ContentService 특성상 애플리케이션 오류도 HTTP 200으로
 
 ### 로그인 없는 공개 조회
 
-`PUBLIC_PREVIEW_ENABLED=true`일 때만 아래 요청으로 1시간짜리 `CLIENT_VIEWER` 세션을 발급합니다.
+`PUBLIC_PREVIEW_ENABLED=true`일 때 첫 화면은 아래 요청 한 번으로 1시간짜리 `CLIENT_VIEWER` 세션과 최소 bootstrap을 함께 받습니다.
+
+```json
+{ "action": "preview_bootstrap" }
+```
+
+응답의 `data.session`에는 서명 세션이, `data.bootstrap`에는 허용된 고객사·프로젝트·채널만 들어갑니다. 총괄과 업무 목록은 포함하지 않습니다. 기존 세션 단독 발급 action도 호환 목적으로 유지합니다.
+
+첫 총괄은 아래 action을 `preview_bootstrap`과 동시에 호출해 직렬 대기를 없앱니다.
+
+```json
+{ "action": "preview_overview" }
+```
 
 ```json
 { "action": "preview_session" }
 ```
 
-`PUBLIC_PREVIEW_EMAIL` 사용자는 반드시 `CLIENT_VIEWER` 역할이어야 하며, `PUBLIC_PREVIEW_PROJECT_IDS`에 적힌 프로젝트만 `READ_ONLY`로 공개됩니다. 일반 로그인과 서버 권한 검사는 그대로 유지되고, 허용 목록 밖 프로젝트는 해당 계정에 배정돼도 공개되지 않습니다.
+`PUBLIC_PREVIEW_EMAIL` 사용자는 반드시 `CLIENT_VIEWER` 역할이어야 하며, `PUBLIC_PREVIEW_PROJECT_IDS`에 적힌 프로젝트만 서버가 `READ_ONLY`로 강제 공개합니다. 공개 미리보기는 변경 가능한 프로젝트권한 행에 의존하지 않으며, 일반 로그인 권한 검사는 그대로 유지됩니다.
 
 ### 읽기
 

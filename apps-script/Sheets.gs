@@ -2,18 +2,29 @@ var MH_SPREADSHEET_CACHE = null;
 var MH_TABLE_MEMORY_CACHE = {};
 var MH_FORCE_FRESH_TABLES = false;
 var MH_TABLE_CACHE_TTL_SECONDS = 45;
-var MH_TABLE_CACHE_MAX_BYTES = 85000;
+var MH_TABLE_CACHE_MAX_BYTES = 90000;
 
 function mhTableCacheKey_(sheetName) {
   var spreadsheetId = mhSetting_(MH_PROPERTY_KEYS.SHEET_ID, '');
-  return 'mh_table_v2_' + mhHashToken_(spreadsheetId + '|' + sheetName).slice(0, 48);
+  return 'mh_table_v3_' + mhHashToken_(
+    spreadsheetId + '|' + MH_SCHEMA_VERSION + '|' + MH_BACKEND_VERSION + '|' + sheetName
+  ).slice(0, 48);
 }
 
 function mhCachedTablePayload_(sheetName) {
   if (MH_FORCE_FRESH_TABLES) return null;
   try {
     var raw = CacheService.getScriptCache().get(mhTableCacheKey_(sheetName));
-    var parsed = raw ? mhParseJson_(raw, null) : null;
+    if (!raw) return null;
+    var json = raw;
+    if (raw.indexOf('z:') === 0) {
+      json = Utilities.ungzip(
+        Utilities.newBlob(Utilities.base64Decode(raw.slice(2)))
+      ).getDataAsString('UTF-8');
+    } else if (raw.indexOf('j:') === 0) {
+      json = raw.slice(2);
+    }
+    var parsed = mhParseJson_(json, null);
     if (!parsed || !Array.isArray(parsed.headers) || !Array.isArray(parsed.rows)) return null;
     return {
       sheetName: sheetName,
@@ -30,10 +41,16 @@ function mhRememberTablePayload_(sheetName, table) {
   if (MH_FORCE_FRESH_TABLES) return;
   try {
     var serialized = JSON.stringify({ headers: table.headers, rows: table.rows });
-    if (Utilities.newBlob(serialized).getBytes().length > MH_TABLE_CACHE_MAX_BYTES) return;
+    var payload = 'j:' + serialized;
+    if (Utilities.newBlob(payload).getBytes().length > MH_TABLE_CACHE_MAX_BYTES) {
+      payload = 'z:' + Utilities.base64Encode(
+        Utilities.gzip(Utilities.newBlob(serialized, 'application/json')).getBytes()
+      );
+    }
+    if (Utilities.newBlob(payload).getBytes().length > MH_TABLE_CACHE_MAX_BYTES) return;
     CacheService.getScriptCache().put(
       mhTableCacheKey_(sheetName),
-      serialized,
+      payload,
       MH_TABLE_CACHE_TTL_SECONDS
     );
   } catch (ignored) {}

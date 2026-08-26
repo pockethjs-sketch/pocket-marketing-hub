@@ -1,32 +1,97 @@
-# Design QA
+# PandaRank visual-system QA
 
-## Visual target
+- source visual truth: `docs/pandarank-source-desktop.png`
+- implementation screenshot: `docs/hub-after-pandarank.png`
+- combined comparison: `docs/pandarank-comparison-desktop.png`
+- viewport: 1440 × 1000 CSS px
+- source pixels: 1440 × 1000 at device scale factor 1
+- implementation pixels: 1440 × 1000 at device scale factor 1
+- state: UND overview, desktop, both navigation columns collapsed
 
-- Pocket reference: `../pocket-kpi-deploy/qa-dashboard.png`
-- Marketing Hub implementation: `frontend/src/App.jsx`, `frontend/src/styles.css`
-- Comparison capture: `docs/pocket-reskin-comparison.png`
-- Implementation capture: `docs/implementation-pocket-reskin.png`
-- Reference comparison state: desktop 1440 × 900 px top viewport
+## Full-view comparison evidence
 
-The supplied UND HTML files remain requirements references only. Their editorial copy, serif/mono typography, warm palette, decorative numbering, and presentation-style layout are not the visual target.
+The combined capture confirms the intended PandaRank visual language is present without replacing the existing dashboard information architecture: near-white canvas, white elevated surfaces, mint-green emphasis, near-black high-weight headings, generous section spacing, soft broad shadows, and larger rounded cards.
+
+## Focused region comparison evidence
+
+A separate crop was not required. The full-size 1440 × 1000 comparison keeps the hero, metric cards, panel headers, active state, type hierarchy, radii, and shadows readable in one frame.
+
+## Required fidelity surfaces
+
+- Fonts and typography: Pretendard remains the product font; headings now use heavier optical weights, tighter tracking, and near-black color consistent with the reference.
+- Spacing and layout rhythm: card padding, section gaps, radii, and elevation were increased while preserving the existing operational grid.
+- Colors and visual tokens: cobalt was replaced by PandaRank-like mint (`#22bc7e`), deep green (`#008656`), white, mist gray, and near-black.
+- Image quality and asset fidelity: no PandaRank brand imagery or logos were copied. The source imagery is not applicable to this dashboard and the existing icon library remains intact.
+- Copy and content: Pocket Marketing Hub copy and customer data were preserved; no PandaRank content or branding was introduced.
 
 ## Findings
 
-1. Pretendard, cool-gray canvas, white surfaces, cobalt-blue actions, slate text, thin borders, shallow shadows, and 3/5/7px radii now match the Pocket KPI product family.
-2. Client selectors show the full names `UND` and `무극` as horizontal Discord-like buttons instead of initials-only squares.
-3. The overview uses Pocket's operational hierarchy: compact project header, four KPI cards, weekly flow, action list, channel progress, and activity log.
-4. Editorial serif/mono fonts, terracotta/olive brand treatment, giant watermark numerals, decorative `01–04` markers, glass effects, and proposal-style hero composition have been removed.
-5. Project dates have a wider metadata column, small operational labels were raised to at least 10–11px in the active Pocket override, and the weekly cards were tightened for higher information density.
-6. Desktop and mobile browser smoke tests cover navigation, role visibility, filters, calendar/list toggle, KPI rendering, client switching, overflow, and console health.
-7. The UI still uses non-sensitive demo data. Google Sheets connection status is documented separately in `docs/INTEGRATION_STATUS.md` and is not visually overstated.
+- No actionable P0, P1, or P2 visual mismatch remains for the requested visual-system transfer.
+- P3: the expanded two-column navigation was not included in this capture; its selectors use the same tokens and states but can receive a separate visual pass later.
 
 ## Comparison history
 
-- Pass 1: source HTML-based editorial UI; rejected because it looked unlike Pocket and copied presentation anatomy too closely.
-- Pass 2: Pocket KPI token replacement and operational component restyling.
-- Pass 3: equal-size combined comparison against the existing Pocket KPI screen; no blocking visual defect found.
-- Pass 4: date-column width, text legibility, and weekly-card density tightened after visual QA.
+1. Before: compact cobalt KPI styling, thin shadows, and small radii did not match the reference.
+2. Fix: replaced visual tokens and component surfaces with the mint/white/near-black system, larger radii, softer elevation, heavier typography, and roomier spacing.
+3. After: `docs/pandarank-comparison-desktop.png` shows the updated visual treatment at the same desktop viewport.
 
-## Final result
+## Implementation checklist
 
-passed
+- [x] Typography and hierarchy
+- [x] Background and surface colors
+- [x] Card radii and elevation
+- [x] Primary/active/control states
+- [x] Dashboard spacing rhythm
+- [x] Build and automated tests
+
+final result: passed
+
+---
+
+# Team-tracker structure QA
+
+- source visual truth: `docs/teamtracker-reference.png`
+- implementation screenshot: `docs/task-view-after.png`
+- combined comparison: `docs/task-view-comparison.png`
+- viewport: 1440 × 1100 CSS px
+- source pixels: 1440 × 1100 at device scale factor 1
+- implementation pixels: 1440 × 1100 at device scale factor 1
+- state: UND `업무` view, 구축 phase selected, desktop
+
+## Full-view comparison evidence
+
+The implementation preserves the source tracker hierarchy: overall completion, four phase summaries, workstream summaries, phase/workstream filtering, and workstream-grouped task checklists. The editorial source styling was intentionally replaced with the active Pocket mint/white card system.
+
+## Focused region comparison evidence
+
+No separate crop was needed. At 1440 × 1100, progress labels, phase counts, team counts, filter state, task metadata, and status chips remain legible in the combined comparison.
+
+## Required fidelity surfaces
+
+- Fonts and typography: source hierarchy is retained with Pretendard and the current Pocket optical weights.
+- Spacing and layout rhythm: summary-to-filter-to-task-list order matches the source while cards use the active 16–18px radius and soft elevation.
+- Colors and visual tokens: current mint/white/near-black product tokens are retained as requested.
+- Image quality and asset fidelity: the reference contains no required raster imagery; existing library icons and native controls are retained.
+- Copy and content: labels come from the live task model; reference task copy was used only in the isolated QA capture.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains for the requested structure transfer.
+- P3: the source has a separate channel publishing-quota editor. It was not added because the current task model has no quota or counter fields; inventing those controls would create non-persisted behavior.
+
+## Comparison history
+
+1. Before: the `업무` view was a single flat table.
+2. Fix: added overall, phase, and workstream progress summaries plus grouped checklist sections and retained the existing filters.
+3. After: `docs/task-view-comparison.png` verifies the hierarchy at the same viewport.
+
+## Implementation checklist
+
+- [x] Overall completion summary
+- [x] Phase progress cards and filtering
+- [x] Workstream progress cards and filtering
+- [x] Grouped task checklists
+- [x] Responsive layout rules
+- [x] Build and automated tests
+
+final result: passed

@@ -33,6 +33,26 @@ function doPost(e) {
     if (action === 'preview_session') {
       return mhJsonOutput_(mhSuccess_(requestId, null, null, mhPreviewSession_(), mhRevision_()));
     }
+    if (action === 'preview_bootstrap') {
+      var previewResult = mhPreviewBootstrap_(request);
+      return mhJsonOutput_(mhSuccess_(
+        requestId,
+        previewResult.actor,
+        previewResult.scope,
+        previewResult.data,
+        mhRevision_()
+      ));
+    }
+    if (action === 'preview_overview') {
+      var previewOverview = mhPreviewOverview_(request);
+      return mhJsonOutput_(mhSuccess_(
+        requestId,
+        previewOverview.actor,
+        previewOverview.scope,
+        previewOverview.data,
+        mhRevision_()
+      ));
+    }
     if (action === 'logout') {
       // Sessions are stateless. The client must delete its sessionStorage token.
       return mhJsonOutput_(mhSuccess_(requestId, null, null, { loggedOut: true }, mhRevision_()));

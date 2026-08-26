@@ -10,8 +10,8 @@ const STATUS_LABELS = {
   ACTIVE: "진행 중",
   PAUSED: "중지",
   COMPLETED: "완료",
-  TODO: "할일",
-  NOT_STARTED: "대기",
+  TODO: "미착수",
+  NOT_STARTED: "미착수",
   IN_PROGRESS: "진행",
   INTERNAL_REVIEW: "검토",
   WAITING_CLIENT: "고객 확인",
@@ -103,6 +103,47 @@ function relativeTimestamp(value) {
   }).format(parsed);
 }
 
+function numberFrom(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function publishingValues(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const read = (...keys) => {
+    const key = keys.find((candidate) => source[candidate] !== undefined && source[candidate] !== null && source[candidate] !== "");
+    return key ? numberFrom(source[key]) : 0;
+  };
+  const longForm = read("long_form", "longForm", "LONG_FORM", "lf");
+  const shortForm = read("short_form", "shortForm", "SHORT_FORM", "sf");
+  const instagram = read("instagram", "INSTAGRAM", "feed", "FEED", "ig");
+  const blog = read("blog", "BLOG", "naver_blog", "NAVER_BLOG", "article", "ARTICLE", "bl");
+  const calculatedTotal = longForm + shortForm + instagram + blog;
+  return {
+    longForm,
+    shortForm,
+    instagram,
+    blog,
+    total: read("total", "TOTAL") || calculatedTotal,
+  };
+}
+
+function publishingViewModel(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const rows = Array.isArray(value)
+    ? value
+    : source.phases || source.byPhase || source.items || [];
+  return {
+    phases: rows.map((row) => ({
+      phaseCode: String(row.phase_code || row.phaseCode || row.code || "").toUpperCase(),
+      phase: codeLabel(row.phase_code || row.phaseCode || row.code, PHASE_LABELS),
+      target: publishingValues(row.target || row.targets || row.target_count || {}),
+      actual: publishingValues(row.actual || row.actuals || row.published || {}),
+    })).filter((row) => row.phaseCode),
+    updatedAt: source.updated_at || source.updatedAt || null,
+  };
+}
+
 export function actorRole(roleCode) {
   if (String(roleCode).toUpperCase() === "CLIENT_VIEWER") return "client";
   if (String(roleCode).toUpperCase() === "EXECUTOR_EDITOR") return "ns";
@@ -116,9 +157,13 @@ function projectShell(row, clientsById = {}, generatedAt = null) {
     clientName: clientsById[row.client_id]?.name || row.client_id || "고객사",
     name: row.project_name || "프로젝트",
     label: codeLabel(row.service_type_code, { CONTENT_MARKETING: "콘텐츠 마케팅" }, "마케팅 프로젝트"),
+    phaseCode: String(row.phase_code || "").toUpperCase(),
     phase: codeLabel(row.phase_code, PHASE_LABELS),
     status: codeLabel(row.status_code, STATUS_LABELS),
     permissionCode: String(row.permission_code || "READ_ONLY").toUpperCase(),
+    startDate: row.start_date ? String(row.start_date).slice(0, 10) : null,
+    endDate: row.end_date ? String(row.end_date).slice(0, 10) : null,
+    rowVersion: Number(row.row_version || 0),
     period: period(row.start_date, row.end_date),
     updatedAt: relativeTimestamp(generatedAt),
     objective: row.objective || "등록된 프로젝트 목표가 없습니다.",
@@ -160,8 +205,6 @@ export function bootstrapViewModel(envelope) {
       organization: currentUser.organization || null,
     } : null,
     generatedAt: envelope?.generatedAt || null,
-    initialOverview: data.initialOverview || null,
-    initialTasks: data.initialTasks || null,
   };
 }
 
@@ -243,22 +286,67 @@ export function overviewViewModel(envelope, fallbackProject) {
 
 export function tasksViewModel(envelope) {
   const data = envelope?.data || {};
+  const orderedRows = (data.items || []).slice().sort((left, right) => {
+    const leftOrder = left.sort_order === undefined || left.sort_order === null || left.sort_order === "" ? Number.MAX_SAFE_INTEGER : numberFrom(left.sort_order);
+    const rightOrder = right.sort_order === undefined || right.sort_order === null || right.sort_order === "" ? Number.MAX_SAFE_INTEGER : numberFrom(right.sort_order);
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return String(left.task_id || "").localeCompare(String(right.task_id || ""));
+  });
   return {
-    items: (data.items || []).map((row) => ({
+    items: orderedRows.map((row) => ({
       id: row.task_id,
+      sourceTaskId: row.source_task_id || null,
+      phaseCode: String(row.phase_code || "").toUpperCase(),
       phase: codeLabel(row.phase_code, PHASE_LABELS),
+      streamCode: String(row.workstream_code || "").toUpperCase(),
       stream: codeLabel(row.workstream_code, WORKSTREAM_LABELS),
       title: row.title || "제목 없는 업무",
+      statusCode: String(row.status_code || "NOT_STARTED").toUpperCase(),
       status: codeLabel(row.status_code, STATUS_LABELS),
+      priorityCode: String(row.priority_code || "NORMAL").toUpperCase(),
       priority: codeLabel(row.priority_code, PRIORITY_LABELS),
       owner: ownerLabel(row.responsible_org_code, row.assignee_user_id),
       due: dateOnly(row.due_date),
+      dueDate: row.due_date ? String(row.due_date).slice(0, 10) : null,
+      plannedStartDate: row.planned_start_date ? String(row.planned_start_date).slice(0, 10) : null,
+      completedAt: row.completed_at || null,
+      completedDate: row.completed_at ? String(row.completed_at).slice(0, 10) : null,
       clientVisible: true,
+      categoryCode: String(row.category_code || "").toUpperCase(),
+      category: row.category_code ? codeLabel(row.category_code, {}) : "업무",
       parent: row.category_code ? codeLabel(row.category_code, {}) : "업무",
+      planWeek: row.plan_week === undefined || row.plan_week === null || row.plan_week === "" ? null : numberFrom(row.plan_week),
+      contractLinked: Boolean(row.contract_linked || row.plan_note),
+      planNote: row.plan_note || null,
+      description: row.description || "",
+      assignee: row.assignee_user_id || null,
+      blocker: row.blocker_reason || "",
+      customerStatus: row.customer_status_text || "",
+      sourceCode: row.source_code || "",
+      sortOrder: row.sort_order === undefined || row.sort_order === null || row.sort_order === "" ? null : numberFrom(row.sort_order),
+      visibilityCode: String(row.visibility_code || "").toUpperCase(),
+      updatedAt: row.updated_at || null,
       rowVersion: row.row_version,
     })),
+    members: (data.members || []).map((row) => ({
+      userId: row.user_id,
+      displayName: row.display_name || row.user_id || "이름 미등록",
+      organizationCode: String(row.organization_code || "").toUpperCase(),
+      organization: ORG_LABELS[String(row.organization_code || "").toUpperCase()] || String(row.organization_code || ""),
+      roleCode: String(row.role_code || "").toUpperCase(),
+      permissionCode: String(row.permission_code || "").toUpperCase(),
+    })).filter((member) => member.userId),
     total: Number(data.totalMatching || 0),
     nextCursor: data.nextCursor || null,
+    project: data.project ? {
+      id: data.project.project_id || null,
+      phaseCode: String(data.project.phase_code || "").toUpperCase(),
+      phase: codeLabel(data.project.phase_code, PHASE_LABELS),
+      startDate: data.project.start_date ? String(data.project.start_date).slice(0, 10) : null,
+      endDate: data.project.end_date ? String(data.project.end_date).slice(0, 10) : null,
+      rowVersion: Number(data.project.row_version || 0),
+    } : null,
+    publishing: publishingViewModel(data.publishing || data.publicationSummary || {}),
     generatedAt: envelope?.generatedAt || null,
   };
 }

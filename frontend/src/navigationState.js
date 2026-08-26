@@ -1,15 +1,13 @@
 export function getNavigationPresentation({
   role,
   compactViewport = false,
-  desktopStage = 0,
-  desktopDirection = "collapse",
+  desktopLevel = 0,
   drawerOpen = false,
 }) {
   const normalizedRole = String(role || "").toUpperCase();
-  const usesDrawer = normalizedRole === "CLIENT" || normalizedRole === "CLIENT_VIEWER" || compactViewport;
+  const usesDrawer = Boolean(compactViewport);
   const isDrawerOpen = usesDrawer && Boolean(drawerOpen);
-  const normalizedStage = Math.max(0, Math.min(2, Number(desktopStage) || 0));
-  const normalizedDirection = desktopDirection === "expand" ? "expand" : "collapse";
+  const normalizedLevel = Math.max(0, Math.min(2, Number(desktopLevel) || 0));
 
   if (usesDrawer) {
     return {
@@ -19,6 +17,7 @@ export function getNavigationPresentation({
       clientRailVisible: isDrawerOpen,
       iconDirection: isDrawerOpen ? "left" : "right",
       isDrawerOpen,
+      mainRevealVisible: true,
       projectSidebarCollapsed: !isDrawerOpen,
       projectSidebarVisible: isDrawerOpen,
       shellCollapsed: true,
@@ -26,36 +25,21 @@ export function getNavigationPresentation({
     };
   }
 
-  const clientRailVisible = normalizedStage === 0;
-  const projectSidebarVisible = normalizedStage < 2;
-  const iconDirection = normalizedDirection === "collapse" ? "left" : "right";
-  const actionLabel = normalizedDirection === "collapse"
-    ? normalizedStage === 0 ? "고객사 메뉴 접기" : "프로젝트 메뉴 접기"
-    : normalizedStage === 2 ? "프로젝트 메뉴 펼치기" : "고객사 메뉴 펼치기";
+  const clientRailVisible = normalizedLevel >= 2;
+  const projectSidebarVisible = normalizedLevel >= 1;
 
   return {
-    actionLabel,
+    actionLabel: "프로젝트 메뉴 펼치기",
     anyVisible: clientRailVisible || projectSidebarVisible,
     clientRailCollapsed: !clientRailVisible,
     clientRailVisible,
-    iconDirection,
-    isDrawerOpen,
+    iconDirection: "right",
+    isDrawerOpen: false,
+    mainRevealVisible: normalizedLevel === 0,
     projectSidebarCollapsed: !projectSidebarVisible,
     projectSidebarVisible,
-    shellCollapsed: normalizedStage === 2,
+    shellCollapsed: false,
     usesDrawer,
+    viewerRole: normalizedRole === "CLIENT" || normalizedRole === "CLIENT_VIEWER",
   };
-}
-
-export function getNextDesktopNavigationState({ stage = 0, direction = "collapse" } = {}) {
-  const normalizedStage = Math.max(0, Math.min(2, Number(stage) || 0));
-  const normalizedDirection = direction === "expand" ? "expand" : "collapse";
-
-  if (normalizedDirection === "collapse") {
-    const nextStage = Math.min(2, normalizedStage + 1);
-    return { stage: nextStage, direction: nextStage === 2 ? "expand" : "collapse" };
-  }
-
-  const nextStage = Math.max(0, normalizedStage - 1);
-  return { stage: nextStage, direction: nextStage === 0 ? "collapse" : "expand" };
 }
