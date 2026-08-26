@@ -12,12 +12,12 @@ export function getNavigationPresentation({
   if (usesDrawer) {
     return {
       actionLabel: isDrawerOpen ? "탐색 메뉴 닫기" : "탐색 메뉴 열기",
-      anyVisible: isDrawerOpen,
+      controlVisible: true,
+      controlledIds: "client-navigation project-navigation",
       clientRailCollapsed: !isDrawerOpen,
       clientRailVisible: isDrawerOpen,
       iconDirection: isDrawerOpen ? "left" : "right",
       isDrawerOpen,
-      mainRevealVisible: true,
       projectSidebarCollapsed: !isDrawerOpen,
       projectSidebarVisible: isDrawerOpen,
       shellCollapsed: true,
@@ -29,17 +29,31 @@ export function getNavigationPresentation({
   const projectSidebarVisible = normalizedLevel >= 1;
 
   return {
-    actionLabel: "프로젝트 메뉴 펼치기",
-    anyVisible: clientRailVisible || projectSidebarVisible,
+    actionLabel: normalizedLevel === 0
+      ? "프로젝트 메뉴 열기"
+      : normalizedLevel === 1
+        ? "전체 프로젝트 열기"
+        : "탐색 메뉴 닫기",
+    controlVisible: true,
+    controlledIds: normalizedLevel === 0
+      ? "project-navigation"
+      : normalizedLevel === 1
+        ? "client-navigation"
+        : "client-navigation project-navigation",
     clientRailCollapsed: !clientRailVisible,
     clientRailVisible,
-    iconDirection: "right",
+    desktopLevel: normalizedLevel,
+    iconDirection: normalizedLevel >= 2 ? "left" : "right",
     isDrawerOpen: false,
-    mainRevealVisible: normalizedLevel === 0,
     projectSidebarCollapsed: !projectSidebarVisible,
     projectSidebarVisible,
     shellCollapsed: false,
     usesDrawer,
     viewerRole: normalizedRole === "CLIENT" || normalizedRole === "CLIENT_VIEWER",
   };
+}
+
+export function nextDesktopNavigationLevel(desktopLevel = 0) {
+  const normalizedLevel = Math.max(0, Math.min(2, Number(desktopLevel) || 0));
+  return normalizedLevel >= 2 ? 0 : normalizedLevel + 1;
 }

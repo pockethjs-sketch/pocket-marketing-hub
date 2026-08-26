@@ -40,7 +40,7 @@ import {
   performanceViewModel,
   tasksViewModel,
 } from "./api/index.js";
-import { getNavigationPresentation } from "./navigationState.js";
+import { getNavigationPresentation, nextDesktopNavigationLevel } from "./navigationState.js";
 
 const navItems = [
   { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
@@ -150,10 +150,10 @@ function ClientRail({ clients, activeClient, onSelect, visible }) {
   );
 }
 
-function ProjectSidebar({ project, activeView, onView, open, onClose, taskCount, sourceState, connectionReady, visible, stagedDesktop, clientRailVisible, onToggleClientRail }) {
+function ProjectSidebar({ project, activeView, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
   return (
     <aside id="project-navigation" className={`project-sidebar ${open ? "is-open" : ""}`} aria-label="프로젝트 탐색" aria-hidden={!visible}>
-      <div className="sidebar-header"><div><p className="eyebrow">{project.clientName}</p><h1>{project.name}</h1></div><div className="sidebar-header-actions">{stagedDesktop && <button className="client-list-toggle" type="button" onClick={onToggleClientRail} aria-label={clientRailVisible ? "전체 프로젝트 숨기기" : "전체 프로젝트 펼치기"} title={clientRailVisible ? "전체 프로젝트 숨기기" : "전체 프로젝트 펼치기"} aria-expanded={clientRailVisible} aria-controls="client-navigation">{clientRailVisible ? <ChevronsLeft size={16} /> : <ChevronsRight size={16} />}</button>}<button className="icon-button mobile-close" onClick={onClose} aria-label="메뉴 닫기"><X size={17} /></button></div></div>
+      <div className="sidebar-header"><div><p className="eyebrow">{project.clientName}</p><h1>{project.name}</h1></div><div className="sidebar-header-actions"><button className="icon-button mobile-close" onClick={onClose} aria-label="메뉴 닫기"><X size={17} /></button></div></div>
       <div className="project-switcher"><div><span className="project-dot" /><strong>{project.status}</strong></div><ChevronDown size={15} /></div>
       <nav className="project-nav"><p className="nav-label">프로젝트</p>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>; })}</nav>
       <div className="sidebar-section"><p className="nav-label">현재 단계</p><div className="phase-brief"><div className="phase-number">{project.phase?.slice(0, 2) || "-"}</div><div><strong>{project.phase}</strong><span>{project.period}</span></div></div></div>
@@ -168,7 +168,7 @@ function ActorBadge({ actor, onLogout, live }) {
 
 function Topbar({ project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation }) {
   const NavigationIcon = navigation.iconDirection === "left" ? ChevronsLeft : ChevronsRight;
-  return <header className="topbar"><div className="topbar-leading">{(navigation.usesDrawer || navigation.mainRevealVisible) && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.anyVisible} aria-controls="client-navigation project-navigation"><NavigationIcon size={18} strokeWidth={2} /></button>}<div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무·콘텐츠 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+  return <header className="topbar"><div className="topbar-leading">{navigation.controlVisible && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.usesDrawer ? navigation.isDrawerOpen : undefined} aria-controls={navigation.controlledIds} data-navigation-level={navigation.usesDrawer ? (navigation.isDrawerOpen ? "drawer-open" : "drawer-closed") : navigation.desktopLevel}><NavigationIcon size={18} strokeWidth={2} /></button>}<div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무·콘텐츠 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
 }
 
 function MetricCard({ metric, onOpen }) {
@@ -1056,14 +1056,13 @@ export function App() {
       setSidebarOpen((current) => !current);
       return;
     }
-    setDesktopNavigationLevel(1);
+    setDesktopNavigationLevel((level) => nextDesktopNavigationLevel(level));
   };
 
   return (
     <div className={`app-shell ${navigation.shellCollapsed ? "is-navigation-collapsed" : ""} ${navigation.clientRailCollapsed ? "is-client-rail-collapsed" : ""} ${navigation.projectSidebarCollapsed ? "is-project-sidebar-collapsed" : ""} ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""}`}>
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
-      <ProjectSidebar project={project} activeView={view} onView={setView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} stagedDesktop={!navigation.usesDrawer} clientRailVisible={navigation.clientRailVisible} onToggleClientRail={() => setDesktopNavigationLevel((level) => level >= 2 ? 1 : 2)} />
-      {!navigation.usesDrawer && navigation.projectSidebarVisible && <button className="navigation-boundary-toggle project-sidebar-toggle" type="button" onClick={() => setDesktopNavigationLevel(0)} aria-label="프로젝트 메뉴 접기" title="프로젝트 메뉴 접기" aria-expanded="true" aria-controls="project-navigation"><ChevronsLeft size={16} /></button>}
+      <ProjectSidebar project={project} activeView={view} onView={setView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
       <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} project={project} role={role} search={search} setView={setView} pageState={currentPage} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} canWrite={canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}

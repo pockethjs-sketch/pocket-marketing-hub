@@ -149,15 +149,16 @@ try {
   assert(clientLabels.length > 0 && clientLabels.every((label) => label.length >= 2), "Client rail must show full client names");
 
   assert(await evaluate(client, "Boolean(document.querySelector('.navigation-toggle'))") === true, "Main navigation reveal did not render");
+  assert(await evaluate(client, "document.querySelectorAll('.navigation-toggle, .client-list-toggle, .project-sidebar-toggle').length") === 1, "Desktop navigation must expose exactly one toggle");
   assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") === "none", "Project menu must start collapsed");
   assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "All-project rail must start collapsed");
   await evaluate(client, "document.querySelector('.navigation-toggle').click()");
   await delay(100);
   assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") !== "none", "First reveal did not open the current project menu");
   assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "First reveal opened the all-project rail too early");
-  assert(await evaluate(client, "Boolean(document.querySelector('.client-list-toggle'))") === true, "Second-stage reveal did not render inside the project menu");
+  assert(await evaluate(client, "document.querySelector('.navigation-toggle').getAttribute('aria-label')") === "전체 프로젝트 열기", "Single navigation toggle did not expose the next-stage action");
   await capture(client, "02-project-menu.png");
-  await evaluate(client, "document.querySelector('.client-list-toggle').click()");
+  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
   await delay(100);
   assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") !== "none", "Second reveal did not open the all-project rail");
   await capture(client, "03-all-projects.png");
@@ -209,19 +210,13 @@ try {
   assert(await evaluate(client, "document.querySelector('.role-trigger') === null") === true, "Demo role switcher must not render");
   assert(await evaluate(client, "document.querySelector('.brand-mark') === null") === true, "Removed Pocket P logo returned");
   assert(await evaluate(client, "document.querySelector('.sidebar-footer .icon-button') === null") === true, "Removed sidebar footer icon returned");
-  await evaluate(client, "document.querySelector('.client-list-toggle').click()");
-  await delay(100);
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "Inner collapse did not hide the all-project rail");
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") !== "none", "Inner collapse also hid the current project menu");
-  await evaluate(client, "document.querySelector('.client-list-toggle').click()");
-  await delay(100);
-  await evaluate(client, "document.querySelector('.project-sidebar-toggle').click()");
-  await delay(100);
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") === "none", "Project collapse did not return to the main-only screen");
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "Project collapse left the all-project rail visible");
   await evaluate(client, "document.querySelector('.navigation-toggle').click()");
   await delay(100);
-  await evaluate(client, "document.querySelector('.client-list-toggle').click()");
+  assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") === "none", "Single navigation toggle did not return to the main-only screen");
+  assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "Single navigation toggle left the all-project rail visible");
+  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
+  await delay(100);
+  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
   await delay(100);
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('콘텐츠')).click()")
