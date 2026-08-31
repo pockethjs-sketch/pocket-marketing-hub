@@ -16,7 +16,7 @@ export function taskCreateInitialFields(role, mode = "default") {
     description: "",
     planned_start_date: "",
     due_date: "",
-    progress_percent: mode === "completed" ? 100 : 0,
+    progress_percent: 0,
     completion_url: "",
     remarks: "",
     visibility_code: role === "client" ? "CLIENT" : "PROJECT_TEAM",

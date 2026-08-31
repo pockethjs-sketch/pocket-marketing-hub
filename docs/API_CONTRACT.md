@@ -101,6 +101,8 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 프로젝트와 업무의 날짜 필드는 `yyyy-MM-dd` 날짜 전용 문자열입니다. 프런트의 `일정표` 보기는 같은 `tasks` 응답의 `title`, `description`, `planned_start_date`, `due_date`, `progress_percent`, `status_code`, `completion_url`, `remarks`를 왼쪽 9개 업무 열에 표시하고, 같은 행 오른쪽의 일자별 셀에 시작일~종료일 실행 구간을 표시합니다. 기간(일)은 두 날짜에서 파생하며 별도 일정 API나 복제 테이블을 사용하지 않습니다.
 
+`progress_percent`는 0~100 범위의 사용자 직접 입력값입니다. 신규 업무의 기본값은 상태와 관계없이 0이며, `DONE`·`NOT_STARTED` 전환이나 종료일 경과로 서버가 자동 변경하지 않습니다.
+
 `daily_meetings`는 업무 페이지 권한을 상속합니다. 저장은 `daily_meeting` 엔터티의 CREATE/UPDATE/ARCHIVE mutation을 사용하고, 고객 역할은 `visibility_code = CLIENT` 행만 읽으며 쓰기는 허용하지 않습니다.
 
 ```json

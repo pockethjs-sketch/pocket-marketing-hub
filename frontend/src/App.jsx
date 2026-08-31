@@ -349,10 +349,6 @@ function taskWithMutationFields(task, fields = {}) {
   if (Object.prototype.hasOwnProperty.call(fields, "status_code")) {
     next.statusCode = String(fields.status_code || "NOT_STARTED").toUpperCase();
     next.status = trackerStatusLabels[next.statusCode] || next.statusCode;
-    if (!Object.prototype.hasOwnProperty.call(fields, "progress_percent")) {
-      if (next.statusCode === "DONE") next.progressPercent = 100;
-      if (next.statusCode === "NOT_STARTED") next.progressPercent = 0;
-    }
   }
   if (Object.prototype.hasOwnProperty.call(fields, "title")) next.title = fields.title || "제목 없는 업무";
   if (Object.prototype.hasOwnProperty.call(fields, "description")) next.description = fields.description || "";
@@ -631,7 +627,7 @@ function TaskScheduleTimeline({ tasks, project }) {
     {days.length ? <div className="task-schedule-matrix-scroll"><table className="task-schedule-matrix"><thead><tr><th rowSpan="2">업무</th><th rowSpan="2">세부내용</th><th rowSpan="2">시작일</th><th rowSpan="2">종료일</th><th rowSpan="2">기간(일)</th><th rowSpan="2">진행률</th><th rowSpan="2">상태</th><th rowSpan="2">완료링크</th><th rowSpan="2">비고</th>{months.map((month) => <th className="task-schedule-month" colSpan={month.count} key={month.key}>{month.label}</th>)}</tr><tr>{days.map((day) => <th key={day.iso} className={`task-schedule-day-head ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""}`}><strong>{day.day}</strong><small>{day.weekday}</small></th>)}</tr></thead><tbody>{tasks.map((task) => {
       const row = datedRows.get(task.id);
       const duration = taskDurationDays(task.plannedStartDate, task.dueDate);
-      const progress = task.progressPercent ?? (task.statusCode === "DONE" ? 100 : task.statusCode === "NOT_STARTED" ? 0 : null);
+      const progress = task.progressPercent ?? 0;
       return <tr key={task.id}><td><strong>{task.title}</strong><small>{task.parent || task.stream}</small></td><td>{task.description || "-"}</td><td>{task.plannedStartDate || "-"}</td><td>{task.dueDate || "-"}</td><td>{duration ?? "-"}</td><td>{progress === null ? "-" : <span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span>}</td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td>{task.completionUrl ? <a href={task.completionUrl} target="_blank" rel="noreferrer">열기</a> : "-"}</td><td>{task.remarks || "-"}</td>{days.map((day) => { const active = row && day.iso >= row.startDate && day.iso <= row.endDate; return <td key={`${task.id}-${day.iso}`} className={`task-schedule-cell ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""} ${active ? `has-schedule ${scheduleClass(task)}` : ""}`} title={active ? `${task.title} · ${row.startDate}~${row.endDate}` : day.iso}>{active ? <i /> : null}</td>; })}</tr>;
     })}</tbody></table></div> : <EmptyState title="표시할 일정이 없습니다" description="업무 시작일과 종료일을 입력하면 날짜 칸에 실행 기간이 표시됩니다." />}
   </section>;

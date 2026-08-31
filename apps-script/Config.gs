@@ -7,7 +7,7 @@
 
 var MH_CONTRACT_VERSION = '2026-08-27-outcome-tracking-v11';
 var MH_SCHEMA_VERSION = '2026-08-27-page-access-v4';
-var MH_BACKEND_VERSION = '2026-08-31-task-table-v27';
+var MH_BACKEND_VERSION = '2026-08-31-manual-progress-v29';
 
 // Login is required. Public preview sessions cannot read internal plans or
 // mutate tasks even if stale preview configuration remains in Script Properties.

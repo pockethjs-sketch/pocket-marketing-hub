@@ -70,16 +70,13 @@ function mhSetupEnsureTaskTableFields() {
   var sheet = mhPlanEnsureSheet_(mhSpreadsheet_(), MH_SHEETS.TASKS, fields);
   mhInvalidateTableCache_(MH_SHEETS.TASKS);
   var table = mhReadTable_(MH_SHEETS.TASKS);
-  var statusIndex = table.headers.indexOf('status_code');
   var progressIndex = table.headers.indexOf('progress_percent');
   var updated = 0;
-  if (statusIndex >= 0 && progressIndex >= 0 && sheet.getLastRow() > 1) {
+  if (progressIndex >= 0 && sheet.getLastRow() > 1) {
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
     values.forEach(function (row, index) {
       if (mhNonEmpty_(row[progressIndex])) return;
-      var status = mhAsText_(row[statusIndex]).toUpperCase();
-      if (status !== 'DONE' && status !== 'NOT_STARTED') return;
-      sheet.getRange(index + 2, progressIndex + 1).setValue(status === 'DONE' ? 100 : 0);
+      sheet.getRange(index + 2, progressIndex + 1).setValue(0).setNumberFormat('0');
       updated += 1;
     });
   }
@@ -87,6 +84,22 @@ function mhSetupEnsureTaskTableFields() {
   mhInvalidateTableCache_(MH_SHEETS.TASKS);
   mhAssertHeaders_(MH_SHEETS.TASKS, fields);
   return { ok: true, sheet: MH_SHEETS.TASKS, addedFields: fields, initializedProgressRows: updated };
+}
+
+/** One-time cleanup for progress values that were previously derived from
+ * schedule elapsed time or task status. Progress is now manual-only. */
+function mhSetupResetDerivedTaskProgress() {
+  var table = mhReadTable_(MH_SHEETS.TASKS);
+  var progressIndex = table.headers.indexOf('progress_percent');
+  if (progressIndex < 0) throw new Error('progress_percent 열이 없습니다.');
+  var sheet = table.sheet;
+  var rowCount = Math.max(0, sheet.getLastRow() - 1);
+  if (!rowCount) return { ok: true, sheet: MH_SHEETS.TASKS, resetRows: 0 };
+  var values = Array.from({ length: rowCount }, function () { return [0]; });
+  sheet.getRange(2, progressIndex + 1, values.length, 1).setValues(values).setNumberFormat('0');
+  SpreadsheetApp.flush();
+  mhInvalidateTableCache_(MH_SHEETS.TASKS);
+  return { ok: true, sheet: MH_SHEETS.TASKS, resetRows: values.length };
 }
 
 function mhSetupRegisterStagedAccount() {

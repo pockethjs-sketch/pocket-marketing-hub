@@ -40,7 +40,7 @@ test("완료 업무 추가는 완료 상태만 고정하고 담당 기본값은 
   assert.equal(taskForm.taskCreateInitialFields("ns", "completed").responsible_org_code, "NS");
   assert.equal(taskForm.taskCreateInitialFields("client", "completed").responsible_org_code, "CLIENT");
   assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").status_code, "DONE");
-  assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").progress_percent, 100);
+  assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").progress_percent, 0);
 });
 
 test("업무 생성은 표·일정 필드를 보존하고 진행률을 숫자로 변환한다", () => {

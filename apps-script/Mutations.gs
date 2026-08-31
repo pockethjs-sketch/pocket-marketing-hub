@@ -99,12 +99,6 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
       if (!Object.keys(fields).length) throw mhApiError_('validation_error', 'empty_update', 400);
       mhAssertApproverAssignmentAllowed_(entityType, fields, before, actor);
       mhApplyAllowedFields_(after, fields, spec, actor);
-      if (entityType === 'task' && Object.prototype.hasOwnProperty.call(fields, 'status_code') &&
-          !Object.prototype.hasOwnProperty.call(fields, 'progress_percent')) {
-        var nextTaskStatus = mhAsText_(after.status_code).toUpperCase();
-        if (nextTaskStatus === 'DONE') after.progress_percent = 100;
-        if (nextTaskStatus === 'NOT_STARTED') after.progress_percent = 0;
-      }
     }
     if (operation === 'ARCHIVE') after.archived_at = now;
     after.updated_at = now;
@@ -181,7 +175,7 @@ function mhApplyCreateDefaults_(record, entityType, actor, now) {
     record.source_code = 'MANUAL';
     if (!mhNonEmpty_(record.sort_order)) record.sort_order = 9999;
     if (!mhNonEmpty_(record.progress_percent) && record.progress_percent !== 0) {
-      record.progress_percent = mhAsText_(record.status_code).toUpperCase() === 'DONE' ? 100 : 0;
+      record.progress_percent = 0;
     }
   }
   if (entityType === 'content' && !mhNonEmpty_(record.current_version_no)) {
