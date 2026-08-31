@@ -30,10 +30,6 @@ jobs:
         working-directory: frontend
         run: npm ci --no-audit --no-fund
 
-      - name: Test frontend and Apps Script contracts
-        working-directory: frontend
-        run: npm test
-
       - name: Build
         working-directory: frontend
         env:
@@ -42,6 +38,10 @@ jobs:
           VITE_POCKET_API_CREDENTIALS: omit
           VITE_POCKET_LOGIN_ENABLED: true
         run: npm run build
+
+      - name: Test frontend and Apps Script contracts
+        working-directory: frontend
+        run: npm test
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
