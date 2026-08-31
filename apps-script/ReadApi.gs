@@ -417,10 +417,13 @@ function mhReadTasks_(request, actor, project) {
     return true;
   });
   var orderedRows = mhSortTaskRows_(rows).slice(0, MH_PAGE_MAX);
-  return {
-    project: mhNormalizeRow_(mhPick_(project, [
+  var projectedProject = mhNormalizeRow_(mhPick_(project, [
       'project_id', 'phase_code', 'start_date', 'end_date', 'row_version'
-    ])),
+    ]));
+  projectedProject.start_date = mhDateOnly_(project.start_date) || null;
+  projectedProject.end_date = mhDateOnly_(project.end_date) || null;
+  return {
+    project: projectedProject,
     members: actor.role === 'CLIENT_VIEWER' ? [] : mhActiveProjectMembers_(project),
     publishing: mhTrackerPublishingSummary_(project, actor, allRows),
     items: orderedRows.map(function (row) { return mhProjectTask_(row, actor); }),
@@ -812,6 +815,8 @@ function mhProjectTask_(row, actor) {
     fields = fields.concat(['description', 'assignee_user_id']);
   }
   var projected = mhNormalizeRow_(mhPick_(row, fields));
+  projected.planned_start_date = mhDateOnly_(row.planned_start_date) || null;
+  projected.due_date = mhDateOnly_(row.due_date) || null;
   projected.contract_linked = mhNonEmpty_(row.plan_note);
   return projected;
 }

@@ -5597,6 +5597,68 @@ table tbody tr:hover {
   line-height: 1.45;
 }
 
+.task-timeline {
+  overflow: hidden;
+  padding: 0;
+}
+
+.task-timeline-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.task-timeline-summary > div:first-child > span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-timeline-summary h3 { margin: 5px 0 2px; font-size: 20px; }
+.task-timeline-summary p { margin: 0; color: var(--text-muted); font-size: 12px; }
+.task-timeline-summary > div:last-child { display: flex; gap: 16px; color: var(--text-muted); font-size: 12px; }
+.task-timeline-summary > div:last-child span { display: inline-flex; align-items: center; gap: 6px; }
+.task-timeline-summary > div:last-child i { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; }
+.task-timeline-summary > div:last-child i.is-done { background: #0d9f6e; }
+.task-timeline-summary > div:last-child i.is-progress { background: #3153a4; }
+.task-timeline-summary > div:last-child i.is-hold { background: #d89a24; }
+.task-timeline-summary strong { color: var(--text); }
+
+.task-timeline-scroll { overflow-x: auto; }
+.task-timeline-grid { display: grid; grid-template-columns: 270px minmax(720px, 1fr); min-width: 990px; }
+.task-timeline-corner,
+.task-timeline-axis { position: sticky; top: 0; z-index: 3; min-height: 52px; background: #f8fafc; border-bottom: 1px solid var(--line); }
+.task-timeline-corner { left: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-right: 1px solid var(--line); font-size: 12px; font-weight: 800; }
+.task-timeline-corner small { color: var(--text-muted); }
+.task-timeline-axis { position: relative; margin: 0; }
+.task-timeline-axis > span { position: absolute; bottom: 12px; transform: translateX(-50%); color: var(--text-muted); font-size: 11px; font-weight: 700; }
+.task-timeline-label { position: sticky; left: 0; z-index: 2; display: grid; grid-template-columns: 72px 1fr; gap: 2px 10px; align-content: center; min-height: 62px; padding: 9px 18px; background: var(--surface); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.task-timeline-label > span { grid-row: 1 / span 2; align-self: center; overflow: hidden; color: var(--text-muted); font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.task-timeline-label strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.task-timeline-label small { color: var(--text-muted); font-size: 10px; }
+.task-timeline-track { position: relative; min-height: 62px; overflow: hidden; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(90deg, transparent 0, transparent calc((100% / var(--timeline-days)) - 1px), rgba(148, 163, 184, .14) calc((100% / var(--timeline-days)) - 1px), rgba(148, 163, 184, .14) calc(100% / var(--timeline-days))); }
+.task-timeline-bar { position: absolute; top: 18px; height: 26px; min-width: 8px; overflow: hidden; border-radius: 6px; background: #3153a4; color: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, .14); }
+.task-timeline-bar b { display: block; overflow: hidden; padding: 5px 9px; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.task-timeline-bar.is-done,
+.task-timeline-bar.is-completed { background: #0d9f6e; }
+.task-timeline-bar.is-on_hold,
+.task-timeline-bar.is-blocked { background: #d89a24; }
+.task-timeline-bar.is-not_started { background: #94a3b8; }
+.task-timeline-bar.is-cancelled { background: #cbd5e1; color: #64748b; }
+.task-timeline-today { position: absolute; top: 0; bottom: 0; z-index: 4; width: 2px; background: #ef4444; pointer-events: none; }
+.task-timeline-today em { position: absolute; top: 4px; left: 5px; color: #dc2626; font-size: 10px; font-style: normal; font-weight: 800; white-space: nowrap; }
+.task-timeline-today.is-row { z-index: 1; opacity: .5; }
+
+@media (max-width: 720px) {
+  .task-timeline-summary { align-items: flex-start; flex-direction: column; padding: 18px; }
+  .task-timeline-summary > div:last-child { flex-wrap: wrap; }
+  .task-timeline-grid { grid-template-columns: 210px minmax(620px, 1fr); min-width: 830px; }
+  .task-timeline-label { grid-template-columns: 56px 1fr; padding: 8px 12px; }
+}
+
 .task-change-log-task small,
 .task-change-log-actor small {
   color: var(--muted);

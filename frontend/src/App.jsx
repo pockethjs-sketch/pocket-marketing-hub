@@ -59,6 +59,7 @@ import {
 } from "./planNavigation.js";
 import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
+import { buildTaskTimeline } from "./taskTimeline.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
 import { ACCESS_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
@@ -563,6 +564,27 @@ function TaskActivityLog({ state, onRefresh }) {
   </section>;
 }
 
+function TaskScheduleTimeline({ tasks, project }) {
+  const timeline = buildTaskTimeline(tasks, project);
+  if (!timeline.rows.length) return <EmptyState title="표시할 일정이 없습니다" description="업무 시작일과 마감일을 입력하면 일정표에 자동으로 표시됩니다." />;
+  const done = tasks.filter((task) => task.status === "완료").length;
+  const inProgress = tasks.filter((task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)).length;
+  const onHold = tasks.filter((task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode)).length;
+  return <section className="task-timeline panel" aria-label="업무 일정">
+    <header className="task-timeline-summary"><div><span>프로젝트 일정</span><h3>{trackerDateLabel(timeline.start)} — {trackerDateLabel(timeline.end)}</h3><p>시작일·마감일을 기준으로 자동 생성됩니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span></div></header>
+    <div className="task-timeline-scroll">
+      <div className="task-timeline-grid" style={{ "--timeline-days": timeline.dayCount }}>
+        <div className="task-timeline-corner"><span>업무</span><small>{timeline.rows.length}건</small></div>
+        <div className="task-timeline-axis">{timeline.ticks.map((tick) => <span key={tick.date} style={{ left: `${tick.left}%` }}>{tick.label}</span>)}{timeline.todayLeft !== null && <i className="task-timeline-today" style={{ left: `${timeline.todayLeft}%` }}><em>오늘</em></i>}</div>
+        {timeline.rows.map(({ task, startDate, endDate, left, width }) => <Fragment key={task.id}>
+          <div className="task-timeline-label"><span>{task.parent}</span><strong>{task.title}</strong><small>{trackerDateLabel(startDate)} — {trackerDateLabel(endDate)}</small></div>
+          <div className="task-timeline-track">{timeline.todayLeft !== null && <i className="task-timeline-today is-row" style={{ left: `${timeline.todayLeft}%` }} />}<span className={`task-timeline-bar is-${String(task.statusCode || "not-started").toLowerCase()}`} style={{ left: `${left}%`, width: `${width}%` }} title={`${task.title} · ${startDate}~${endDate}`}><b>{task.status}</b></span></div>
+        </Fragment>)}
+      </div>
+    </div>
+  </section>;
+}
+
 function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCreate, canWrite, onUpdate, onProjectUpdate }) {
   const editable = Boolean(canWrite);
   const canEditProject = Boolean(canWrite && role === "pocket");
@@ -711,9 +733,9 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
       <CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton>
     </ViewHeader>
 
-    {role !== "client" && <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button></div>}
+    <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>일정</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
 
-    {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : <>
+    {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} /> : <>
 
     <section className="tracker-control-panel panel" aria-label="업무 요약 및 90일 진행 흐름">
       <div className="tracker-control-top">

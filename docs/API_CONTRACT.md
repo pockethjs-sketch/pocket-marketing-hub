@@ -98,6 +98,8 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 `tasks`는 업무 목록 외에 프로젝트 일정 기준과 콘텐츠 발행 집계를 함께 반환합니다.
 
+프로젝트와 업무의 날짜 필드는 `yyyy-MM-dd` 날짜 전용 문자열입니다. 프런트의 `일정` 보기는 같은 `tasks` 응답의 `planned_start_date`·`due_date`를 사용해 간트를 계산하며 별도 일정 API나 복제 테이블을 사용하지 않습니다.
+
 ```json
 {
   "project": {

@@ -207,9 +207,15 @@ function mhValidateMutationRecord_(record, spec, entityType, actor, project, bef
   mhValidateStatusTransition_(record, before, entityType);
   mhValidateApprovalTransition_(record, before, entityType, actor);
   ['start_date', 'planned_start_date', 'due_date', 'planned_date', 'shoot_date', 'review_due_date', 'publish_due_date'].forEach(function (field) {
-    if (mhNonEmpty_(record[field]) && !/^\d{4}-\d{2}-\d{2}$/.test(mhAsText_(record[field]))) {
+    if (!mhNonEmpty_(record[field])) return;
+    // Sheets returns date-formatted cells as Date objects. Normalize them to
+    // the business date before validating or any unrelated task edit will be
+    // rejected as an invalid ISO date.
+    var dateText = mhDateOnly_(record[field]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
       throw mhApiError_('validation_error', 'invalid_date', 400);
     }
+    record[field] = dateText;
   });
   ['current_version_no', 'sort_order', 'baseline_value', 'target_value', 'display_order'].forEach(function (field) {
     if (mhNonEmpty_(record[field]) && (!isFinite(Number(record[field])) || Number(record[field]) < 0)) {
