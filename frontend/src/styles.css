@@ -5759,6 +5759,105 @@ table tbody tr:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.task-sheet-scroll {
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.task-sheet-table {
+  width: 100%;
+  min-width: 1320px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.task-sheet-table th,
+.task-sheet-table td {
+  padding: 11px 10px;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e8edf3;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.task-sheet-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #1b2638;
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: -0.01em;
+}
+
+.task-sheet-table th:nth-child(1) { width: 180px; }
+.task-sheet-table th:nth-child(2) { width: 250px; }
+.task-sheet-table th:nth-child(3),
+.task-sheet-table th:nth-child(4) { width: 100px; }
+.task-sheet-table th:nth-child(5) { width: 75px; }
+.task-sheet-table th:nth-child(6) { width: 130px; }
+.task-sheet-table th:nth-child(7) { width: 90px; }
+.task-sheet-table th:nth-child(8) { width: 100px; }
+.task-sheet-table th:nth-child(9) { width: 210px; }
+
+.task-sheet-table td:nth-child(1),
+.task-sheet-table td:nth-child(2),
+.task-sheet-table td:nth-child(9) {
+  text-align: left;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+.task-sheet-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.task-sheet-table tbody tr:hover {
+  background: #eef4fb;
+}
+
+.task-sheet-table td > strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.task-sheet-table a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.task-sheet-progress {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.task-sheet-progress > i {
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.task-sheet-progress > i > b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.task-sheet-progress > em {
+  min-width: 34px;
+  color: #334155;
+  font-style: normal;
+  font-weight: 700;
+  text-align: right;
+}
+
 .task-timeline-summary > div:first-child > span {
   color: var(--accent);
   font-size: 12px;

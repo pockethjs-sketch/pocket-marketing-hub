@@ -99,6 +99,12 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
       if (!Object.keys(fields).length) throw mhApiError_('validation_error', 'empty_update', 400);
       mhAssertApproverAssignmentAllowed_(entityType, fields, before, actor);
       mhApplyAllowedFields_(after, fields, spec, actor);
+      if (entityType === 'task' && Object.prototype.hasOwnProperty.call(fields, 'status_code') &&
+          !Object.prototype.hasOwnProperty.call(fields, 'progress_percent')) {
+        var nextTaskStatus = mhAsText_(after.status_code).toUpperCase();
+        if (nextTaskStatus === 'DONE') after.progress_percent = 100;
+        if (nextTaskStatus === 'NOT_STARTED') after.progress_percent = 0;
+      }
     }
     if (operation === 'ARCHIVE') after.archived_at = now;
     after.updated_at = now;
@@ -174,6 +180,9 @@ function mhApplyCreateDefaults_(record, entityType, actor, now) {
   if (entityType === 'task') {
     record.source_code = 'MANUAL';
     if (!mhNonEmpty_(record.sort_order)) record.sort_order = 9999;
+    if (!mhNonEmpty_(record.progress_percent) && record.progress_percent !== 0) {
+      record.progress_percent = mhAsText_(record.status_code).toUpperCase() === 'DONE' ? 100 : 0;
+    }
   }
   if (entityType === 'content' && !mhNonEmpty_(record.current_version_no)) {
     record.current_version_no = 1;
@@ -218,12 +227,15 @@ function mhValidateMutationRecord_(record, spec, entityType, actor, project, bef
     }
     record[field] = dateText;
   });
-  ['current_version_no', 'sort_order', 'baseline_value', 'target_value', 'display_order'].forEach(function (field) {
+  ['current_version_no', 'sort_order', 'baseline_value', 'target_value', 'display_order', 'progress_percent'].forEach(function (field) {
     if (mhNonEmpty_(record[field]) && (!isFinite(Number(record[field])) || Number(record[field]) < 0)) {
       throw mhApiError_('validation_error', 'invalid_number', 400);
     }
   });
-  ['publish_url', 'url'].forEach(function (field) {
+  if (mhNonEmpty_(record.progress_percent) && Number(record.progress_percent) > 100) {
+    throw mhApiError_('validation_error', 'progress_out_of_range', 400);
+  }
+  ['publish_url', 'url', 'completion_url'].forEach(function (field) {
     if (!mhNonEmpty_(record[field])) return;
     if (!/^https:\/\//i.test(mhAsText_(record[field]))) {
       throw mhApiError_('validation_error', 'https_url_required', 400);
@@ -267,7 +279,7 @@ function mhRequireProjectMember_(userId, project) {
 
 function mhCleanFieldValue_(field, value) {
   if (value === null || value === undefined) return '';
-  if (['current_version_no', 'sort_order', 'plan_week', 'baseline_value', 'target_value', 'display_order'].indexOf(field) >= 0) {
+  if (['current_version_no', 'sort_order', 'plan_week', 'baseline_value', 'target_value', 'display_order', 'progress_percent'].indexOf(field) >= 0) {
     var numeric = Number(value);
     if (!isFinite(numeric)) throw mhApiError_('validation_error', 'invalid_number', 400);
     return numeric;

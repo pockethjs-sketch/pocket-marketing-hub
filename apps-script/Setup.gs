@@ -65,6 +65,30 @@ function mhSetupEnsureDailyMeetingsSheet() {
   return { ok: true, sheet: MH_SHEETS.DAILY_MEETINGS, headers: headers.length };
 }
 
+function mhSetupEnsureTaskTableFields() {
+  var fields = ['progress_percent', 'completion_url', 'remarks'];
+  var sheet = mhPlanEnsureSheet_(mhSpreadsheet_(), MH_SHEETS.TASKS, fields);
+  mhInvalidateTableCache_(MH_SHEETS.TASKS);
+  var table = mhReadTable_(MH_SHEETS.TASKS);
+  var statusIndex = table.headers.indexOf('status_code');
+  var progressIndex = table.headers.indexOf('progress_percent');
+  var updated = 0;
+  if (statusIndex >= 0 && progressIndex >= 0 && sheet.getLastRow() > 1) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+    values.forEach(function (row, index) {
+      if (mhNonEmpty_(row[progressIndex])) return;
+      var status = mhAsText_(row[statusIndex]).toUpperCase();
+      if (status !== 'DONE' && status !== 'NOT_STARTED') return;
+      sheet.getRange(index + 2, progressIndex + 1).setValue(status === 'DONE' ? 100 : 0);
+      updated += 1;
+    });
+  }
+  SpreadsheetApp.flush();
+  mhInvalidateTableCache_(MH_SHEETS.TASKS);
+  mhAssertHeaders_(MH_SHEETS.TASKS, fields);
+  return { ok: true, sheet: MH_SHEETS.TASKS, addedFields: fields, initializedProgressRows: updated };
+}
+
 function mhSetupRegisterStagedAccount() {
   var properties = PropertiesService.getScriptProperties();
   var email = mhNormalizeLoginAccount_(properties.getProperty('SETUP_ACCOUNT_EMAIL'));

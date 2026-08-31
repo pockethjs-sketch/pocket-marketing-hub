@@ -40,4 +40,20 @@ test("완료 업무 추가는 완료 상태만 고정하고 담당 기본값은 
   assert.equal(taskForm.taskCreateInitialFields("ns", "completed").responsible_org_code, "NS");
   assert.equal(taskForm.taskCreateInitialFields("client", "completed").responsible_org_code, "CLIENT");
   assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").status_code, "DONE");
+  assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").progress_percent, 100);
+});
+
+test("업무 생성은 표·일정 필드를 보존하고 진행률을 숫자로 변환한다", () => {
+  const payload = taskForm.taskCreateSubmissionFields({
+    title: "업무",
+    description: "세부내용",
+    planned_start_date: "2026-09-01",
+    due_date: "2026-09-03",
+    progress_percent: "25",
+    completion_url: "https://example.com/result",
+    remarks: "비고",
+  });
+  assert.equal(payload.progress_percent, 25);
+  assert.equal(payload.completion_url, "https://example.com/result");
+  assert.equal(payload.remarks, "비고");
 });

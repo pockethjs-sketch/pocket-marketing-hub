@@ -7,7 +7,7 @@
 
 var MH_CONTRACT_VERSION = '2026-08-27-outcome-tracking-v11';
 var MH_SCHEMA_VERSION = '2026-08-27-page-access-v4';
-var MH_BACKEND_VERSION = '2026-08-31-daily-meetings-v26';
+var MH_BACKEND_VERSION = '2026-08-31-task-table-v27';
 
 // Login is required. Public preview sessions cannot read internal plans or
 // mutate tasks even if stale preview configuration remains in Script Properties.
@@ -124,7 +124,8 @@ var MH_ENTITY_SPECS = {
       'category_code', 'title', 'description', 'plan_week', 'plan_note', 'responsible_org_code',
       'assignee_user_id', 'reviewer_org_code', 'status_code', 'priority_code',
       'planned_start_date', 'due_date', 'completed_at', 'blocker_reason',
-      'customer_status_text', 'visibility_code', 'sort_order'
+      'customer_status_text', 'progress_percent', 'completion_url', 'remarks',
+      'visibility_code', 'sort_order'
     ],
     required: [
       'phase_code', 'workstream_code', 'title', 'responsible_org_code',

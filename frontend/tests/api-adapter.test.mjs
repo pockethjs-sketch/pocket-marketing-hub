@@ -448,6 +448,9 @@ test("Sheets 응답을 Pocket 화면 뷰모델로 변환한다", () => {
         plan_week: 2,
         contract_linked: true,
         customer_status_text: "촬영 일정 확인 중",
+        progress_percent: 35,
+        completion_url: "https://example.com/result",
+        remarks: "9월 촬영",
         assignee_user_id: "USR-POCKET-1",
         sort_order: 20,
         row_version: 4,
@@ -470,6 +473,9 @@ test("Sheets 응답을 Pocket 화면 뷰모델로 변환한다", () => {
   assert.equal(trackedTask.planWeek, 2);
   assert.equal(trackedTask.contractLinked, true);
   assert.equal(trackedTask.customerStatus, "촬영 일정 확인 중");
+  assert.equal(trackedTask.progressPercent, 35);
+  assert.equal(trackedTask.completionUrl, "https://example.com/result");
+  assert.equal(trackedTask.remarks, "9월 촬영");
   assert.equal(taskPage.members[0].userId, "USR-POCKET-1");
   assert.equal(taskPage.members[0].displayName, "포켓 담당자");
   assert.equal(taskPage.members[0].organization, "포켓컴퍼니");

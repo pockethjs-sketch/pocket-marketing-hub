@@ -87,6 +87,12 @@ function doPost(e) {
       }
       return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhSetupEnsureDailyMeetingsSheet(), mhRevision_()));
     }
+    if (action === 'ensure_task_table_fields') {
+      if (actor.role !== 'MASTER' && actor.role !== 'POCKET_MANAGER') {
+        throw mhApiError_('forbidden', 'task_table_setup_requires_manager', 403);
+      }
+      return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhSetupEnsureTaskTableFields(), mhRevision_()));
+    }
     if (action === 'provision_muguk') {
       return mhJsonOutput_(mhSuccess_(
         requestId, actor, null, mhProvisionMugukProject_(actor), mhRevision_()

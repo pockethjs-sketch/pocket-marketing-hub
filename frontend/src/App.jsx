@@ -304,7 +304,7 @@ function CreateRecordModal({ entityType, role, onClose, onSubmit }) {
   };
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal" role="dialog" aria-modal="true" aria-labelledby="create-record-title"><header><div><p className="editorial-kicker">Google Sheets 원장 등록</p><h2 id="create-record-title">{entityLabel} 추가</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
     <label className="create-field is-wide"><span>{entityLabel} 제목</span><input autoFocus required maxLength={200} value={fields.title} onChange={(event) => setField("title", event.target.value)} placeholder={`${entityLabel} 제목을 입력하세요`} /></label>
-    {recordType === "task" && <><FormSelect label="단계" value={fields.phase_code} onChange={(value) => setField("phase_code", value)} options={createFormOptions.phase} /><FormSelect label="업무 분야" value={fields.workstream_code} onChange={(value) => setField("workstream_code", value)} options={createFormOptions.stream} /><FormSelect label="담당" value={fields.responsible_org_code} onChange={(value) => setField("responsible_org_code", value)} options={TASK_RESPONSIBLE_ORG_OPTIONS} />{completedTaskMode ? <div className="completed-task-lock"><Check size={16} /><div><strong>완료 상태로 바로 등록</strong><span>담당자는 직접 선택할 수 있습니다.</span></div></div> : <FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["NOT_STARTED", "미착수"], ["IN_PROGRESS", "진행"]]} />}<FormSelect label="우선순위" value={fields.priority_code} onChange={(value) => setField("priority_code", value)} options={[["NORMAL", "보통"], ["HIGH", "높음"], ["CRITICAL", "긴급"]]} /><label className="create-field"><span>마감일</span><input type="date" value={fields.due_date} onChange={(event) => setField("due_date", event.target.value)} /></label></>}
+    {recordType === "task" && <><FormSelect label="단계" value={fields.phase_code} onChange={(value) => setField("phase_code", value)} options={createFormOptions.phase} /><FormSelect label="업무 분야" value={fields.workstream_code} onChange={(value) => setField("workstream_code", value)} options={createFormOptions.stream} /><FormSelect label="담당" value={fields.responsible_org_code} onChange={(value) => setField("responsible_org_code", value)} options={TASK_RESPONSIBLE_ORG_OPTIONS} />{completedTaskMode ? <div className="completed-task-lock"><Check size={16} /><div><strong>완료 상태로 바로 등록</strong><span>담당자는 직접 선택할 수 있습니다.</span></div></div> : <FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["NOT_STARTED", "미착수"], ["IN_PROGRESS", "진행"]]} />}<FormSelect label="우선순위" value={fields.priority_code} onChange={(value) => setField("priority_code", value)} options={[["NORMAL", "보통"], ["HIGH", "높음"], ["CRITICAL", "긴급"]]} /><label className="create-field is-wide"><span>세부내용</span><textarea rows="3" maxLength={10000} value={fields.description} onChange={(event) => setField("description", event.target.value)} placeholder="업무 범위와 산출물을 적어 주세요" /></label><label className="create-field"><span>시작일</span><input type="date" value={fields.planned_start_date} onChange={(event) => setField("planned_start_date", event.target.value)} /></label><label className="create-field"><span>종료일</span><input type="date" value={fields.due_date} onChange={(event) => setField("due_date", event.target.value)} /></label><label className="create-field"><span>진행률 (%)</span><input type="number" min="0" max="100" value={fields.progress_percent} onChange={(event) => setField("progress_percent", event.target.value)} /></label><label className="create-field is-wide"><span>완료링크</span><input type="url" pattern="https://.*" value={fields.completion_url} onChange={(event) => setField("completion_url", event.target.value)} placeholder="https://" /></label><label className="create-field is-wide"><span>비고</span><textarea rows="2" maxLength={10000} value={fields.remarks} onChange={(event) => setField("remarks", event.target.value)} placeholder="일정 이슈나 참고사항을 적어 주세요" /></label></>}
     {recordType === "content" && <><FormSelect label="채널" value={fields.channel_code} onChange={(value) => setField("channel_code", value)} options={createFormOptions.channel} /><FormSelect label="형식" value={fields.format_code} onChange={(value) => setField("format_code", value)} options={createFormOptions.format} /><FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["DRAFT", "초안"], ["PLANNED", "예정"], ["IN_PROGRESS", "제작"]]} /><label className="create-field"><span>예정일</span><input type="date" value={fields.planned_date} onChange={(event) => setField("planned_date", event.target.value)} /></label></>}
     {recordType === "file" && <><label className="create-field is-wide"><span>HTTPS 자료 링크</span><input type="url" required pattern="https://.*" value={fields.url} onChange={(event) => setField("url", event.target.value)} placeholder="https://" /></label><label className="create-field is-wide"><span>메모</span><textarea rows="3" maxLength={1000} value={fields.notes} onChange={(event) => setField("notes", event.target.value)} placeholder="자료 설명 또는 버전을 적어 주세요" /></label></>}
     {role === "pocket" && <FormSelect label="공개 범위" value={fields.visibility_code} onChange={(value) => setField("visibility_code", value)} options={[["PROJECT_TEAM", "프로젝트 팀"], ["CLIENT", "고객 공개"], ["POCKET_ONLY", "포켓 전용"]]} />}
@@ -348,9 +348,14 @@ function taskWithMutationFields(task, fields = {}) {
   if (Object.prototype.hasOwnProperty.call(fields, "status_code")) {
     next.statusCode = String(fields.status_code || "NOT_STARTED").toUpperCase();
     next.status = trackerStatusLabels[next.statusCode] || next.statusCode;
+    if (!Object.prototype.hasOwnProperty.call(fields, "progress_percent")) {
+      if (next.statusCode === "DONE") next.progressPercent = 100;
+      if (next.statusCode === "NOT_STARTED") next.progressPercent = 0;
+    }
   }
   if (Object.prototype.hasOwnProperty.call(fields, "title")) next.title = fields.title || "제목 없는 업무";
   if (Object.prototype.hasOwnProperty.call(fields, "description")) next.description = fields.description || "";
+  if (Object.prototype.hasOwnProperty.call(fields, "planned_start_date")) next.plannedStartDate = fields.planned_start_date || null;
   if (Object.prototype.hasOwnProperty.call(fields, "due_date")) {
     next.dueDate = fields.due_date ? String(fields.due_date).slice(0, 10) : null;
     next.due = next.dueDate || "미정";
@@ -359,6 +364,9 @@ function taskWithMutationFields(task, fields = {}) {
     next.priorityCode = String(fields.priority_code || "NORMAL").toUpperCase();
     next.priority = trackerPriorityLabels[next.priorityCode] || next.priorityCode;
   }
+  if (Object.prototype.hasOwnProperty.call(fields, "progress_percent")) next.progressPercent = Number(fields.progress_percent || 0);
+  if (Object.prototype.hasOwnProperty.call(fields, "completion_url")) next.completionUrl = fields.completion_url || "";
+  if (Object.prototype.hasOwnProperty.call(fields, "remarks")) next.remarks = fields.remarks || "";
   if (Object.prototype.hasOwnProperty.call(fields, "responsible_org_code")) {
     const organization = taskResponsibleOrganization(fields.responsible_org_code);
     next.responsibleOrgCode = organization.code;
@@ -480,15 +488,23 @@ function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone }) {
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState(task.title || "");
   const [note, setNote] = useState(task.description || "");
+  const [startDate, setStartDate] = useState(task.plannedStartDate || "");
   const [responsibleOrg, setResponsibleOrg] = useState(task.responsibleOrgCode || "POCKET");
   const [dueDate, setDueDate] = useState(task.dueDate || "");
+  const [progressPercent, setProgressPercent] = useState(task.progressPercent ?? 0);
+  const [completionUrl, setCompletionUrl] = useState(task.completionUrl || "");
+  const [remarks, setRemarks] = useState(task.remarks || "");
   const [priority, setPriority] = useState(task.priorityCode || "NORMAL");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   useEffect(() => setTitle(task.title || ""), [task.title]);
   useEffect(() => setNote(task.description || ""), [task.description]);
+  useEffect(() => setStartDate(task.plannedStartDate || ""), [task.plannedStartDate]);
   useEffect(() => setResponsibleOrg(task.responsibleOrgCode || "POCKET"), [task.responsibleOrgCode]);
   useEffect(() => setDueDate(task.dueDate || ""), [task.dueDate]);
+  useEffect(() => setProgressPercent(task.progressPercent ?? 0), [task.progressPercent]);
+  useEffect(() => setCompletionUrl(task.completionUrl || ""), [task.completionUrl]);
+  useEffect(() => setRemarks(task.remarks || ""), [task.remarks]);
   useEffect(() => setPriority(task.priorityCode || "NORMAL"), [task.priorityCode]);
 
   const saveFields = async (fields) => {
@@ -529,11 +545,15 @@ function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone }) {
       {canWrite && <div className="tracker-task-edit">
         <div><span>상태</span><div className="tracker-status-actions">{trackerStatusOptions.map(([code, label]) => <button key={code} type="button" disabled={!canWrite || saving} className={task.statusCode === code || (code === "DONE" && task.statusCode === "COMPLETED") ? "is-active" : ""} onClick={() => saveFields({ status_code: code })}>{label}</button>)}</div></div>
         <label className="tracker-owner-edit"><span>업무명</span><input value={title} disabled={saving} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
-        <label className="tracker-owner-edit"><span>마감일</span><input type="date" value={dueDate} disabled={saving} onChange={(event) => setDueDate(event.target.value)} /></label>
+        <label className="tracker-owner-edit"><span>시작일</span><input type="date" value={startDate} disabled={saving} onChange={(event) => setStartDate(event.target.value)} /></label>
+        <label className="tracker-owner-edit"><span>종료일</span><input type="date" value={dueDate} disabled={saving} onChange={(event) => setDueDate(event.target.value)} /></label>
+        <label className="tracker-owner-edit"><span>진행률 (%)</span><input type="number" min="0" max="100" value={progressPercent} disabled={saving} onChange={(event) => setProgressPercent(event.target.value)} /></label>
         <label className="tracker-owner-edit"><span>우선순위</span><select value={priority} disabled={saving} onChange={(event) => setPriority(event.target.value)}><option value="LOW">낮음</option><option value="NORMAL">보통</option><option value="HIGH">높음</option><option value="CRITICAL">긴급</option></select></label>
         <label className="tracker-owner-edit"><span>담당</span><select value={responsibleOrg} disabled={!canWrite || saving} onChange={(event) => setResponsibleOrg(event.target.value)}><option value="POCKET">포켓</option><option value="NS">NS</option><option value="CLIENT">UND</option></select></label>
-        <label><span>업무 메모</span><textarea rows="3" value={note} disabled={!canWrite || saving} onChange={(event) => setNote(event.target.value)} placeholder="진행 내용이나 다음 액션을 기록하세요" /></label>
-        <div className="tracker-edit-footer">{error ? <span className="tracker-save-error"><AlertCircle size={14} />{error.message || "저장하지 못했습니다."}</span> : <span>저장 시 Google Sheets 업무 원장에 반영됩니다.</span>}<button className="primary-button" type="button" disabled={saving || !title.trim() || (title === (task.title || "") && note === (task.description || "") && responsibleOrg === (task.responsibleOrgCode || "POCKET") && dueDate === (task.dueDate || "") && priority === (task.priorityCode || "NORMAL"))} onClick={() => { const fields = { title, description: note, due_date: dueDate, priority_code: priority }; if (responsibleOrg !== (task.responsibleOrgCode || "POCKET")) fields.responsible_org_code = responsibleOrg; saveFields(fields); }}>{saving ? <><LoaderCircle size={14} className="spin" /> 저장 중</> : "변경 저장"}</button></div>
+        <label><span>세부내용</span><textarea rows="3" value={note} disabled={!canWrite || saving} onChange={(event) => setNote(event.target.value)} placeholder="업무 범위와 산출물을 적어 주세요" /></label>
+        <label><span>완료링크</span><input type="url" pattern="https://.*" value={completionUrl} disabled={!canWrite || saving} onChange={(event) => setCompletionUrl(event.target.value)} placeholder="https://" /></label>
+        <label><span>비고</span><textarea rows="2" value={remarks} disabled={!canWrite || saving} onChange={(event) => setRemarks(event.target.value)} placeholder="일정 이슈나 참고사항을 적어 주세요" /></label>
+        <div className="tracker-edit-footer">{error ? <span className="tracker-save-error"><AlertCircle size={14} />{error.message || "저장하지 못했습니다."}</span> : <span>저장 시 Google Sheets 업무 원장에 반영됩니다.</span>}<button className="primary-button" type="button" disabled={saving || !title.trim() || (title === (task.title || "") && note === (task.description || "") && startDate === (task.plannedStartDate || "") && responsibleOrg === (task.responsibleOrgCode || "POCKET") && dueDate === (task.dueDate || "") && Number(progressPercent) === Number(task.progressPercent ?? 0) && completionUrl === (task.completionUrl || "") && remarks === (task.remarks || "") && priority === (task.priorityCode || "NORMAL"))} onClick={() => { const fields = { title, description: note, planned_start_date: startDate, due_date: dueDate, progress_percent: Number(progressPercent), completion_url: completionUrl, remarks, priority_code: priority }; if (responsibleOrg !== (task.responsibleOrgCode || "POCKET")) fields.responsible_org_code = responsibleOrg; saveFields(fields); }}>{saving ? <><LoaderCircle size={14} className="spin" /> 저장 중</> : "변경 저장"}</button></div>
       </div>}
     </div>}
   </article>;
@@ -567,15 +587,22 @@ function TaskActivityLog({ state, onRefresh }) {
   </section>;
 }
 
+function taskDurationDays(startValue, endValue) {
+  const start = trackerDate(startValue);
+  const end = trackerDate(endValue);
+  if (!start || !end || end < start) return null;
+  return Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+}
+
 function TaskScheduleTimeline({ tasks, project }) {
   const timeline = buildTaskTimeline(tasks, project);
-  if (!timeline.rows.length) return <EmptyState title="표시할 일정이 없습니다" description="업무 시작일과 마감일을 입력하면 일정표에 자동으로 표시됩니다." />;
   const done = tasks.filter((task) => task.status === "완료").length;
   const inProgress = tasks.filter((task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)).length;
   const onHold = tasks.filter((task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode)).length;
   return <section className="task-timeline panel" aria-label="업무 일정">
-    <header className="task-timeline-summary"><div><span>프로젝트 일정</span><h3>{trackerDateLabel(timeline.start)} — {trackerDateLabel(timeline.end)}</h3><p>시작일·마감일을 기준으로 자동 생성됩니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span></div></header>
-    <div className="task-timeline-scroll">
+    <header className="task-timeline-summary"><div><span>프로젝트 표·일정</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무 원장의 9개 필드를 표와 일정 막대로 함께 표시합니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span></div></header>
+    <div className="task-sheet-scroll"><table className="task-sheet-table"><thead><tr><th>업무</th><th>세부내용</th><th>시작일</th><th>종료일</th><th>기간(일)</th><th>진행률</th><th>상태</th><th>완료링크</th><th>비고</th></tr></thead><tbody>{tasks.map((task) => { const duration = taskDurationDays(task.plannedStartDate, task.dueDate); const progress = task.progressPercent ?? (task.statusCode === "DONE" ? 100 : task.statusCode === "NOT_STARTED" ? 0 : null); return <tr key={task.id}><td><strong>{task.title}</strong></td><td>{task.description || "-"}</td><td>{task.plannedStartDate || "-"}</td><td>{task.dueDate || "-"}</td><td>{duration ?? "-"}</td><td>{progress === null ? "-" : <span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span>}</td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td>{task.completionUrl ? <a href={task.completionUrl} target="_blank" rel="noreferrer">완료링크</a> : "-"}</td><td>{task.remarks || "-"}</td></tr>; })}</tbody></table></div>
+    {timeline.rows.length ? <div className="task-timeline-scroll">
       <div className="task-timeline-grid" style={{ "--timeline-days": timeline.dayCount }}>
         <div className="task-timeline-corner"><span>업무</span><small>{timeline.rows.length}건</small></div>
         <div className="task-timeline-axis">{timeline.ticks.map((tick) => <span key={tick.date} style={{ left: `${tick.left}%` }}>{tick.label}</span>)}{timeline.todayLeft !== null && <i className="task-timeline-today" style={{ left: `${timeline.todayLeft}%` }}><em>오늘</em></i>}</div>
@@ -584,7 +611,7 @@ function TaskScheduleTimeline({ tasks, project }) {
           <div className="task-timeline-track">{timeline.todayLeft !== null && <i className="task-timeline-today is-row" style={{ left: `${timeline.todayLeft}%` }} />}<span className={`task-timeline-bar is-${String(task.statusCode || "not-started").toLowerCase()}`} style={{ left: `${left}%`, width: `${width}%` }} title={`${task.title} · ${startDate}~${endDate}`}><b>{task.status}</b></span></div>
         </Fragment>)}
       </div>
-    </div>
+    </div> : <EmptyState title="표시할 일정 막대가 없습니다" description="업무 시작일과 종료일을 입력하면 표 아래에 자동으로 표시됩니다." />}
   </section>;
 }
 
@@ -736,7 +763,7 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
       <CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton>
     </ViewHeader>
 
-    <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>일정</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
+    <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>표·일정</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
 
     {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} /> : <>
 
