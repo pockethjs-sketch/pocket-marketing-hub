@@ -17,7 +17,7 @@ jobs:
           test -n "$POCKET_API_URL"
           test -n "$BACKUP_RUNNER_SECRET"
           payload=$(jq -nc --arg secret "$BACKUP_RUNNER_SECRET" '{action:"scheduled_backup",runnerSecret:$secret}')
-          response=$(curl --silent --show-error --fail-with-body --retry 2 --max-time 90 \
+          response=$(curl --location --silent --show-error --fail-with-body --retry 2 --max-time 90 \
             -H 'Content-Type: text/plain;charset=utf-8' \
             --data "$payload" \
             "$POCKET_API_URL")
