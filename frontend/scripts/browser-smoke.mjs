@@ -141,29 +141,13 @@ try {
     })()`);
     await delay(100);
     assert(await evaluate(client, "document.querySelector('.login-submit')?.disabled === false"), "Login form did not accept smoke credentials");
-    const loginPoint = await evaluate(client, `(() => {
-      const rect = document.querySelector('.login-submit').getBoundingClientRect();
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    })()`);
-    await client.send("Input.dispatchMouseEvent", { type: "mousePressed", x: loginPoint.x, y: loginPoint.y, button: "left", clickCount: 1 });
-    await client.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: loginPoint.x, y: loginPoint.y, button: "left", clickCount: 1 });
-    await delay(250);
-    if (await evaluate(client, "Boolean(document.querySelector('.login-shell')) && document.querySelector('.login-submit')?.disabled === false")) {
-      await evaluate(client, "document.querySelector('.login-submit').click()");
-    }
-    await delay(250);
-    if (await evaluate(client, "Boolean(document.querySelector('.login-shell')) && document.querySelector('.login-submit')?.disabled === false")) {
-      await evaluate(client, "document.querySelector('.login-card form').requestSubmit()");
-    }
-    await delay(100);
-    if (await evaluate(client, "Boolean(document.querySelector('.login-shell')) && document.querySelector('.login-submit')?.disabled === false")) {
-      await evaluate(client, `(() => {
+    const submitted = await evaluate(client, `(() => {
         const form = document.querySelector('.login-card form');
         const propsKey = Object.keys(form).find((key) => key.startsWith('__reactProps$'));
         const result = propsKey && form[propsKey]?.onSubmit?.({ preventDefault() {} });
-        return result && typeof result.then === 'function' ? result.then(() => true) : Boolean(result);
+        return result && typeof result.then === 'function' ? result.then(() => true) : false;
       })()`);
-    }
+    assert(submitted, "Login submit handler did not run");
   }
   const overviewReady = await waitFor(client, "document.querySelectorAll('.metric-card').length === 4", readyTimeout);
   if (!overviewReady) {
