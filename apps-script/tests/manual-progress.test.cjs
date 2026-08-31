@@ -11,6 +11,6 @@ assert.doesNotMatch(mutations, /nextTaskStatus\s*===\s*'DONE'/);
 assert.match(mutations, /record\.progress_percent\s*=\s*0/);
 assert.match(setup, /function mhSetupResetDerivedTaskProgress\(\)/);
 assert.match(setup, /setValues\(values\)\.setNumberFormat\('0'\)/);
-assert.match(router, /action === 'reset_derived_task_progress'/);
+assert.doesNotMatch(router, /action === 'reset_derived_task_progress'/);
 
 console.log('Manual-only task progress contract checks passed.');
