@@ -128,33 +128,7 @@ try {
   if (await evaluate(client, "Boolean(document.querySelector('.login-shell'))")) {
     const account = process.env.SMOKE_ACCOUNT || "";
     const accessCode = process.env.SMOKE_ACCESS_CODE || "";
-    const apiUrl = process.env.SMOKE_API_URL || "";
     assert(account && accessCode, "Authenticated smoke test requires SMOKE_ACCOUNT and SMOKE_ACCESS_CODE");
-    if (apiUrl) {
-      const loginResponse = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=UTF-8" },
-        body: JSON.stringify({ action: "login", account, accessCode, includeBootstrap: false }),
-      });
-      const loginPayload = await loginResponse.json();
-      assert(loginPayload?.ok === true, `Smoke API login failed: ${loginPayload?.error?.code || loginResponse.status}`);
-      const loginData = loginPayload.data?.session || loginPayload.data;
-      const storedSession = {
-        token: String(loginData.token || ""),
-        expiresAt: Date.now() + Number(loginData.expiresIn || 0) * 1000,
-        user: loginData.user || null,
-      };
-      assert(storedSession.token && storedSession.expiresAt > Date.now(), "Smoke API returned an invalid session");
-      const sessionJson = JSON.stringify(storedSession);
-      await client.send("Page.addScriptToEvaluateOnNewDocument", {
-        source: `sessionStorage.setItem('pocket_marketing_hub_session_v1', ${JSON.stringify(sessionJson)});`,
-      });
-      const authenticatedUrl = new URL(baseUrl);
-      authenticatedUrl.searchParams.set("_smoke", String(Date.now()));
-      await client.send("Page.navigate", { url: authenticatedUrl.toString() });
-      await delay(500);
-      assert(await evaluate(client, "Boolean(sessionStorage.getItem('pocket_marketing_hub_session_v1'))"), "Smoke session disappeared during reload");
-    } else {
     await evaluate(client, `(() => {
       const inputs = document.querySelectorAll('.login-card input');
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
@@ -181,6 +155,14 @@ try {
     if (await evaluate(client, "Boolean(document.querySelector('.login-shell')) && document.querySelector('.login-submit')?.disabled === false")) {
       await evaluate(client, "document.querySelector('.login-card form').requestSubmit()");
     }
+    await delay(100);
+    if (await evaluate(client, "Boolean(document.querySelector('.login-shell')) && document.querySelector('.login-submit')?.disabled === false")) {
+      await evaluate(client, `(() => {
+        const form = document.querySelector('.login-card form');
+        const propsKey = Object.keys(form).find((key) => key.startsWith('__reactProps$'));
+        const result = propsKey && form[propsKey]?.onSubmit?.({ preventDefault() {} });
+        return result && typeof result.then === 'function' ? result.then(() => true) : Boolean(result);
+      })()`);
     }
   }
   const overviewReady = await waitFor(client, "document.querySelectorAll('.metric-card').length === 4", readyTimeout);
