@@ -1,7 +1,7 @@
 function mhHandleMutation_(request, actor) {
-  // Writes must never trust the short-lived read cache. Always re-read the
-  // current Sheet rows before validating row versions or applying changes.
-  mhUseFreshTables_();
+  // Writes must never trust the short-lived read cache. Invalidate once, then
+  // reuse the freshly read tables for the remainder of this execution.
+  mhBeginMutationTables_();
   var mutation = request.mutation || request;
   var mutationId = mhAsText_(mutation.mutationId || mutation.mutation_id);
   var entityType = mhAsText_(mutation.entityType || mutation.entity_type).toLowerCase();
@@ -83,7 +83,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
     if (entityType === 'project' && ['MASTER', 'POCKET_MANAGER', 'POCKET_EDITOR'].indexOf(actor.role) < 0) {
       throw mhApiError_('forbidden', 'project_update_requires_internal_user', 403);
     }
-    if (entityType !== 'project' && !mhCanSeeRow_(actor, before)) {
+    if (entityType !== 'project' && entityType !== 'kpi_definition' && !mhCanSeeRow_(actor, before)) {
       throw mhApiError_('forbidden', 'record_visibility_denied', 403);
     }
     if (actor.role === 'EXECUTOR_EDITOR' && mhNormalizeVisibility_(before.visibility_code) === 'CLIENT') {
@@ -180,6 +180,17 @@ function mhApplyCreateDefaults_(record, entityType, actor, now) {
   }
   if (entityType === 'approval') record.requested_by_user_id = actor.userId;
   if (entityType === 'file') record.uploaded_by_user_id = actor.userId;
+  if (entityType === 'kpi_definition') {
+    if (!mhNonEmpty_(record.metric_code)) {
+      record.metric_code = 'CUSTOM_' + mhAsText_(record.kpi_id).replace(/[^A-Za-z0-9]+/g, '_').toUpperCase();
+    }
+    if (!mhNonEmpty_(record.phase_code)) record.phase_code = 'ALL';
+    if (!mhNonEmpty_(record.aggregation_code)) record.aggregation_code = 'SUM';
+    if (!mhNonEmpty_(record.display_order)) record.display_order = 999;
+    if (record.customer_visible === '' || record.customer_visible === null || record.customer_visible === undefined) {
+      record.customer_visible = true;
+    }
+  }
 }
 
 function mhValidateMutationRecord_(record, spec, entityType, actor, project, before) {
@@ -200,7 +211,7 @@ function mhValidateMutationRecord_(record, spec, entityType, actor, project, bef
       throw mhApiError_('validation_error', 'invalid_date', 400);
     }
   });
-  ['current_version_no', 'sort_order'].forEach(function (field) {
+  ['current_version_no', 'sort_order', 'baseline_value', 'target_value', 'display_order'].forEach(function (field) {
     if (mhNonEmpty_(record[field]) && (!isFinite(Number(record[field])) || Number(record[field]) < 0)) {
       throw mhApiError_('validation_error', 'invalid_number', 400);
     }
@@ -249,10 +260,17 @@ function mhRequireProjectMember_(userId, project) {
 
 function mhCleanFieldValue_(field, value) {
   if (value === null || value === undefined) return '';
-  if (['current_version_no', 'sort_order', 'plan_week'].indexOf(field) >= 0) {
+  if (['current_version_no', 'sort_order', 'plan_week', 'baseline_value', 'target_value', 'display_order'].indexOf(field) >= 0) {
     var numeric = Number(value);
     if (!isFinite(numeric)) throw mhApiError_('validation_error', 'invalid_number', 400);
     return numeric;
+  }
+  if (field === 'customer_visible') {
+    if (value === true || value === false) return value;
+    var booleanText = mhAsText_(value).toLowerCase();
+    if (['true', '1', 'y', 'yes'].indexOf(booleanText) >= 0) return true;
+    if (['false', '0', 'n', 'no'].indexOf(booleanText) >= 0) return false;
+    throw mhApiError_('validation_error', 'invalid_boolean', 400);
   }
   if (typeof value !== 'string') throw mhApiError_('validation_error', 'invalid_field_type', 400);
   var text = value.trim();
@@ -278,6 +296,11 @@ function mhValidateRecordFieldTypes_(record, entityType) {
   }
   if (entityType === 'file' && mhNonEmpty_(record.entity_type)) {
     enumChecks.push(['entity_type', MH_FIELD_ENUMS.linked_entity_type]);
+  }
+  if (entityType === 'kpi_definition') {
+    if (mhNonEmpty_(record.unit_code)) enumChecks.push(['unit_code', ['COUNT', 'PEOPLE', 'KRW', 'PERCENT', 'RATE', 'VIEW']]);
+    if (mhNonEmpty_(record.period_type_code)) enumChecks.push(['period_type_code', ['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY']]);
+    if (mhNonEmpty_(record.aggregation_code)) enumChecks.push(['aggregation_code', ['SUM', 'AVERAGE', 'LATEST', 'MAX', 'MIN']]);
   }
   enumChecks.forEach(function (entry) {
     var normalized = mhAsText_(record[entry[0]]).toUpperCase();
@@ -312,6 +335,13 @@ function mhValidateStatusTransition_(record, before, entityType) {
   var previous = mhAsText_(before.status_code).toUpperCase();
   var next = mhAsText_(record.status_code).toUpperCase();
   if (!previous || previous === next) return;
+  // The task screen exposes these four states as direct controls. They are
+  // corrective workflow states, so users must be able to move between them
+  // without following the more granular content-production state machine.
+  var primaryTaskStatuses = ['NOT_STARTED', 'IN_PROGRESS', 'DONE', 'ON_HOLD'];
+  if (entityType === 'task' &&
+      primaryTaskStatuses.indexOf(previous) >= 0 &&
+      primaryTaskStatuses.indexOf(next) >= 0) return;
   var transitions = entityType === 'task' ? {
     NOT_STARTED: ['IN_PROGRESS', 'ON_HOLD', 'BLOCKED', 'CANCELLED'],
     IN_PROGRESS: ['INTERNAL_REVIEW', 'WAITING_CLIENT', 'BLOCKED', 'ON_HOLD', 'DONE', 'CANCELLED'],

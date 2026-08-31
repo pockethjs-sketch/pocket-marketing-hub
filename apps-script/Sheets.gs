@@ -68,6 +68,14 @@ function mhUseFreshTables_() {
   MH_TABLE_MEMORY_CACHE = {};
 }
 
+function mhBeginMutationTables_() {
+  MH_FORCE_FRESH_TABLES = false;
+  MH_TABLE_MEMORY_CACHE = {};
+  Object.keys(MH_SHEETS).forEach(function (key) {
+    mhInvalidateTableCache_(MH_SHEETS[key]);
+  });
+}
+
 function mhSpreadsheet_() {
   if (MH_SPREADSHEET_CACHE) return MH_SPREADSHEET_CACHE;
   var spreadsheetId = mhSetting_(MH_PROPERTY_KEYS.SHEET_ID, '');
@@ -168,14 +176,22 @@ function mhUpdateRecord_(table, rowNumber, record) {
   var range = sheet.getRange(rowNumber, 1, 1, table.headers.length);
   var current = range.getValues()[0];
   var formulas = range.getFormulas()[0];
+  var nextValues = current.slice();
+  var changed = false;
   table.headers.forEach(function (header, index) {
     if (!Object.prototype.hasOwnProperty.call(record, header)) return;
     var next = record[header];
     var same = mhStableJson_(mhToIsoValue_(current[index])) === mhStableJson_(mhToIsoValue_(next));
     if (same) return;
     if (formulas[index]) throw mhApiError_('schema_mismatch', 'formula_field_is_server_read_only', 500);
-    sheet.getRange(rowNumber, index + 1).setValue(next);
+    nextValues[index] = next;
+    changed = true;
   });
+  if (!changed) return record;
+  formulas.forEach(function (formula, index) {
+    if (formula) nextValues[index] = formula;
+  });
+  range.setValues([nextValues]);
   SpreadsheetApp.flush();
   mhInvalidateTableCache_(table.sheetName);
   return record;
@@ -193,7 +209,7 @@ function mhSchemaCheck_() {
   Object.keys(MH_SHEETS).forEach(function (key) { mhReadTable_(MH_SHEETS[key]); });
   mhAssertHeaders_(MH_SHEETS.CLIENTS, ['client_id', 'display_name', 'status_code', 'archived_at']);
   mhAssertHeaders_(MH_SHEETS.USERS, ['user_id', 'email', 'role_code', 'status_code', 'archived_at']);
-  mhAssertHeaders_(MH_SHEETS.MEMBERSHIPS, ['membership_id', 'user_id', 'client_id', 'project_id', 'permission_code', 'status_code', 'archived_at']);
+  mhAssertHeaders_(MH_SHEETS.MEMBERSHIPS, ['membership_id', 'user_id', 'client_id', 'project_id', 'permission_code', 'status_code', 'allowed_pages_json', 'archived_at']);
   mhAssertHeaders_(MH_SHEETS.PROJECTS, ['project_id', 'client_id', 'project_name', 'client_view_enabled', 'archived_at']);
   mhAssertHeaders_(MH_SHEETS.CHANNELS, ['project_channel_id', 'client_id', 'project_id', 'channel_code', 'customer_visible', 'archived_at']);
   mhAssertHeaders_(MH_SHEETS.CONTENT_VERSIONS, ['content_version_id', 'content_id', 'client_id', 'project_id', 'version_no', 'file_url', 'copy_text', 'change_summary', 'status_code', 'created_at', 'archived_at']);

@@ -3,6 +3,7 @@ function mhHandleRead_(action, request, actor) {
   var projectId = mhAsText_(request.projectId || request.project_id);
   if (!projectId) throw mhApiError_('invalid_request', 'project_id_required', 400);
   var access = mhRequireProjectAccess_(actor, projectId, false);
+  if (action !== 'project_snapshot') mhRequirePageAccess_(actor, access.permission, action, request);
   var scope = mhScopeForProject_(actor, access.project);
   var cached = mhCachedClientRead_(action, request, actor, projectId);
   if (cached.hit) return { scope: scope, data: cached.data };
@@ -13,6 +14,7 @@ function mhHandleRead_(action, request, actor) {
   else if (action === 'tasks') data = mhReadTasks_(request, actor, access.project);
   else if (action === 'contents') data = mhReadContents_(request, actor, access.project);
   else if (action === 'approvals') data = mhReadApprovals_(request, actor, access.project);
+  else if (action === 'performance_tracking') data = mhReadPerformanceTracking_(request, actor, access.project);
   else if (action === 'performance') data = mhReadPerformance_(request, actor, access.project);
   else if (action === 'files') data = mhReadFiles_(request, actor, access.project);
   else if (action === 'activity') data = mhReadActivity_(request, actor, access.project);
@@ -41,6 +43,7 @@ function mhClientReadCacheKey_(action, request, actor, projectId) {
     startDate: request.startDate || request.start_date || null,
     endDate: request.endDate || request.end_date || null,
     planType: request.planType || request.plan_type || null,
+    entityType: request.entityType || request.entity_type || null,
     query: request.query || null,
     limit: request.limit || null,
     cursor: request.cursor || null
@@ -178,17 +181,24 @@ function mhPlanRequest_(request, planType) {
  * execution lets their full-table reads reuse mhReadTable_'s memory cache.
  */
 function mhReadProjectSnapshot_(request, actor, project) {
-  var clientPlan = mhReadProjectPlan_(mhPlanRequest_(request, 'CLIENT_SHARE'), actor, project);
-  var internalPlan = mhReadProjectPlan_(mhPlanRequest_(request, 'INTERNAL'), actor, project);
-  return {
-    plan: clientPlan,
-    internalPlan: internalPlan,
-    tasks: mhReadTasks_(request, actor, project),
-    contents: mhReadContents_(request, actor, project),
-    performance: mhReadPerformance_(request, actor, project),
-    files: mhReadFiles_(request, actor, project),
-    activity: mhReadActivity_(request, actor, project)
-  };
+  var permission = mhPermissionForProject_(actor, project);
+  var allowed = actor.role === 'CLIENT_VIEWER' && permission
+    ? permission.allowedPages : MH_ACCESS_PAGES.slice();
+  var result = {};
+  if (allowed.indexOf('plan') >= 0) {
+    result.plan = mhReadProjectPlan_(mhPlanRequest_(request, 'CLIENT_SHARE'), actor, project);
+    if (actor.role !== 'CLIENT_VIEWER') result.internalPlan = mhReadProjectPlan_(mhPlanRequest_(request, 'INTERNAL'), actor, project);
+  }
+  if (allowed.indexOf('tasks') >= 0) result.tasks = mhReadTasks_(request, actor, project);
+  if (allowed.indexOf('content') >= 0) result.contents = mhReadContents_(request, actor, project);
+  // 성과 추적은 90일 일별 원장을 별도로 읽는다. 모든 화면의 선조회인
+  // project_snapshot에 포함하면 스냅샷 전체가 느려지므로 탭 진입 시만 조회한다.
+  if (allowed.indexOf('performance') >= 0) result.performance = mhReadPerformance_(request, actor, project);
+  if (allowed.indexOf('files') >= 0) {
+    result.files = mhReadFiles_(request, actor, project);
+    result.activity = mhReadActivity_(request, actor, project);
+  }
+  return result;
 }
 
 function mhPlanProjectProjection_(project) {
@@ -215,6 +225,25 @@ function mhPreviewBootstrap_(request) {
     scope: bootstrap.scope,
     data: {
       session: preview.session,
+      bootstrap: bootstrap.data
+    }
+  };
+}
+
+/**
+ * Authenticates and returns the minimum navigation bootstrap in one Apps
+ * Script execution. Keeping this combined path behind an explicit request
+ * flag preserves the legacy flat login response for older clients.
+ */
+function mhLoginBootstrap_(request) {
+  var session = mhLogin_(request);
+  var actor = mhResolveActor_({ auth: { sessionToken: session.token } });
+  var bootstrap = mhReadBootstrap_(request, actor);
+  return {
+    actor: actor,
+    scope: bootstrap.scope,
+    data: {
+      session: session,
       bootstrap: bootstrap.data
     }
   };
@@ -265,7 +294,8 @@ function mhReadBootstrap_(request, actor) {
       start_date: project.start_date,
       end_date: project.end_date,
       row_version: project.row_version,
-      permission_code: permission ? permission.permissionCode : null
+      permission_code: permission ? permission.permissionCode : null,
+      allowed_pages: permission && permission.allowedPages ? permission.allowedPages : MH_ACCESS_PAGES.slice()
     });
   });
   var channels = mhActiveRows_(MH_SHEETS.CHANNELS).filter(function (channel) {
@@ -553,7 +583,8 @@ function mhReadPerformance_(request, actor, project) {
       return mhNormalizeRow_(mhPick_(row, [
         'kpi_id', 'phase_code', 'channel_code', 'metric_code', 'metric_name',
         'unit_code', 'period_type_code', 'baseline_value', 'target_value',
-        'aggregation_code', 'display_order'
+        'aggregation_code', 'display_order', 'customer_visible',
+        'row_version', 'created_at', 'updated_at'
       ]));
     }),
     actuals: actuals.map(function (row) {
@@ -574,6 +605,68 @@ function mhReadPerformance_(request, actor, project) {
       ]));
     }),
     channels: actor.role === 'CLIENT_VIEWER' ? [] : Object.keys(channels).sort().map(function (key) { return channels[key]; })
+  };
+}
+
+function mhReadPerformanceTracking_(request, actor, project) {
+  var defaultRange = mhDefaultDateRange_(90);
+  var range = mhValidateDateWindow_(
+    mhAsText_(request.startDate || request.start_date || defaultRange.start),
+    mhAsText_(request.endDate || request.end_date || defaultRange.end),
+    MH_PERFORMANCE_DATE_LIMIT_DAYS
+  );
+  var projectId = mhAsText_(project.project_id);
+  var clientId = mhAsText_(project.client_id);
+  // 이 화면의 첫 응답은 12_성과일별 한 탭만 읽는다. 업무·콘텐츠·KPI 원장을
+  // 한 요청에서 다시 읽던 이전 구현은 Apps Script 302 응답이 만료될 정도로 느렸다.
+  var allowedChannelCodes = null;
+  if (actor.role === 'CLIENT_VIEWER') {
+    allowedChannelCodes = mhActiveRows_(MH_SHEETS.CHANNELS).filter(function (row) {
+      return mhAsText_(row.client_id) === clientId && mhAsText_(row.project_id) === projectId &&
+        mhAsBoolean_(row.customer_visible);
+    }).map(function (row) { return mhAsText_(row.channel_code); });
+  }
+  var dailyRows = mhActiveRows_(MH_SHEETS.DAILY_PERFORMANCE).filter(function (row) {
+    if (mhAsText_(row.client_id) !== clientId || mhAsText_(row.project_id) !== projectId || !mhInDateRange_(row.performance_date, range)) return false;
+    return !allowedChannelCodes || allowedChannelCodes.indexOf(mhAsText_(row.channel_code)) >= 0;
+  });
+  var metricFields = [
+    'spend', 'impressions', 'reach', 'video_views', 'watch_time_sec', 'engagements',
+    'saves', 'followers_delta', 'clicks', 'inquiries', 'leads', 'reservations',
+    'conversions', 'revenue'
+  ];
+  function emptyMetrics() {
+    var result = {};
+    metricFields.forEach(function (field) { result[field] = 0; });
+    return result;
+  }
+  function addMetrics(target, row) {
+    metricFields.forEach(function (field) { target[field] += Number(row[field] || 0); });
+  }
+  var totals = emptyMetrics();
+  var daily = {};
+  var channels = {};
+  dailyRows.forEach(function (row) {
+    var date = mhDateOnly_(row.performance_date);
+    var channelCode = mhAsText_(row.channel_code) || 'UNKNOWN';
+    if (!daily[date]) daily[date] = emptyMetrics();
+    if (!channels[channelCode]) channels[channelCode] = emptyMetrics();
+    addMetrics(totals, row);
+    addMetrics(daily[date], row);
+    addMetrics(channels[channelCode], row);
+  });
+  return {
+    range: range,
+    totals: mhNormalizeRow_(totals),
+    daily: Object.keys(daily).sort().map(function (date) {
+      return mhNormalizeRow_(Object.assign({ date: date }, daily[date]));
+    }),
+    channels: Object.keys(channels).sort().map(function (code) {
+      return mhNormalizeRow_(Object.assign({
+        channelCode: code
+      }, channels[code]));
+    }),
+    source: MH_SHEETS.DAILY_PERFORMANCE
   };
 }
 
@@ -599,12 +692,14 @@ function mhReadFiles_(request, actor, project) {
 function mhReadActivity_(request, actor, project) {
   var projectId = mhAsText_(project.project_id);
   var clientId = mhAsText_(project.client_id);
+  var entityType = mhAsText_(request.entityType || request.entity_type).toUpperCase();
   var clientVisibleEntities = actor.role === 'CLIENT_VIEWER'
     ? mhClientVisibleEntityIds_(clientId, projectId, actor)
     : null;
   var rows = mhActiveRows_(MH_SHEETS.ACTIVITY).filter(function (row) {
     if (mhAsText_(row.client_id) !== clientId || mhAsText_(row.project_id) !== projectId) return false;
     if (mhAsText_(row.event_status_code) !== 'COMMIT') return false;
+    if (entityType && mhAsText_(row.entity_type).toUpperCase() !== entityType) return false;
     if (actor.role === 'CLIENT_VIEWER') {
       var actionVisible = ['CREATED', 'UPDATED', 'ARCHIVED', 'APPROVED', 'REJECTED'].indexOf(mhAsText_(row.action_code)) >= 0;
       var entityKey = mhAsText_(row.entity_type).toUpperCase() + ':' + mhAsText_(row.entity_id);
@@ -612,21 +707,56 @@ function mhReadActivity_(request, actor, project) {
     }
     return true;
   });
+  var taskTitles = {};
+  var actorNames = {};
+  if (entityType === 'TASK') {
+    mhProjectRows_(MH_SHEETS.TASKS, clientId, projectId, actor).forEach(function (task) {
+      taskTitles[mhAsText_(task.task_id)] = mhAsText_(task.title);
+    });
+    mhActiveRows_(MH_SHEETS.USERS).forEach(function (user) {
+      actorNames[mhAsText_(user.user_id)] = mhAsText_(user.display_name);
+    });
+  }
   var limit = mhClampLimit_(request.limit, Math.min(20, MH_ACTIVITY_PAGE_MAX), MH_ACTIVITY_PAGE_MAX);
   var page = mhPageRows_(rows, 'event_id', limit, mhDecodeCursor_(request.cursor));
   return {
     items: page.items.map(function (row) {
-      return mhNormalizeRow_({
+      var projected = {
         event_id: row.event_id,
         entity_type: row.entity_type,
         entity_id: row.entity_id,
         action_code: row.action_code,
         summary: mhActivitySummary_(row.action_code, row.entity_type),
         created_at: row.created_at
-      });
+      };
+      if (entityType === 'TASK') {
+        projected.task_title = taskTitles[mhAsText_(row.entity_id)] || null;
+        projected.actor_display_name = actorNames[mhAsText_(row.actor_user_id)] || null;
+        projected.changes = mhTaskActivityChanges_(row);
+      }
+      return mhNormalizeRow_(projected);
     }),
     nextCursor: page.nextCursor
   };
+}
+
+function mhTaskActivityChanges_(row) {
+  var before = mhParseJson_(mhAsText_(row.before_json), {});
+  var after = mhParseJson_(mhAsText_(row.after_json), {});
+  var fields = [
+    ['title', '업무명'], ['status_code', '상태'], ['responsible_org_code', '담당 조직'], ['priority_code', '우선순위'],
+    ['planned_start_date', '시작일'], ['due_date', '마감일'],
+    ['completed_at', '완료일'], ['customer_status_text', '고객 공유 메모']
+  ];
+  var changes = [];
+  fields.forEach(function (entry) {
+    var field = entry[0];
+    var beforeValue = Object.prototype.hasOwnProperty.call(before, field) ? mhToIsoValue_(before[field]) : null;
+    var afterValue = Object.prototype.hasOwnProperty.call(after, field) ? mhToIsoValue_(after[field]) : null;
+    if (mhStableJson_(beforeValue) === mhStableJson_(afterValue)) return;
+    changes.push({ field: field, label: entry[1], before: beforeValue, after: afterValue });
+  });
+  return changes;
 }
 
 function mhClientVisibleEntityIds_(clientId, projectId, actor) {

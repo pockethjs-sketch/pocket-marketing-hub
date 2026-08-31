@@ -82,7 +82,7 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(
-  ['Config.gs', 'Utils.gs', 'Auth.gs'].map((name) => fs.readFileSync(path.join(root, name), 'utf8')).join('\n'),
+  ['Config.gs', 'Utils.gs', 'PermissionAdmin.gs', 'Auth.gs'].map((name) => fs.readFileSync(path.join(root, name), 'utf8')).join('\n'),
   context,
   { filename: 'auth-test-bundle.gs' },
 );
@@ -228,6 +228,8 @@ assert.equal(Object.hasOwn(combined.data.bootstrap, 'initialTasks'), false);
 assert.deepEqual(tablesRead, [context.MH_SHEETS.CLIENTS, context.MH_SHEETS.CHANNELS]);
 assert.equal(permissionChecks, 1, 'preview scope permission must be validated only once');
 assert.match(fs.readFileSync(path.join(root, 'Router.gs'), 'utf8'), /action === 'preview_bootstrap'/);
+assert.match(fs.readFileSync(path.join(root, 'Router.gs'), 'utf8'), /request\.includeBootstrap/);
+assert.match(fs.readFileSync(path.join(root, 'ReadApi.gs'), 'utf8'), /function mhLoginBootstrap_/);
 
 const clientActor = { role: 'CLIENT_VIEWER' };
 const teamActor = { role: 'EXECUTOR_EDITOR' };
@@ -283,7 +285,10 @@ const snapshotReaders = [
 ];
 const originalSnapshotReaders = Object.fromEntries(snapshotReaders.map(([name]) => [name, context[name]]));
 const originalPlanReader = context.mhReadProjectPlan_;
-const snapshotActor = { userId: 'USR-SNAPSHOT', role: 'CLIENT_VIEWER' };
+const snapshotActor = { userId: 'USR-SNAPSHOT', role: 'CLIENT_VIEWER', memberships: [{
+  membership_id: 'MEM-SNAPSHOT', client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001',
+  permission_code: 'READ_ONLY', allowed_pages_json: '["overview","plan","tasks","content","performance","files"]',
+}] };
 const snapshotProject = { client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001' };
 context.mhReadProjectPlan_ = (request, actor, project) => {
   assert.equal(actor, snapshotActor);
@@ -305,10 +310,9 @@ const snapshot = JSON.parse(JSON.stringify(context.mhReadProjectSnapshot_(
   snapshotActor,
   snapshotProject,
 )));
-assert.deepEqual(snapshotCallOrder, ['plan:CLIENT_SHARE', 'plan:INTERNAL', ...snapshotReaders.map(([, key]) => key)]);
+assert.deepEqual(snapshotCallOrder, ['plan:CLIENT_SHARE', ...snapshotReaders.map(([, key]) => key)]);
 assert.deepEqual(snapshot, {
   plan: { resource: 'plan:CLIENT_SHARE' },
-  internalPlan: { resource: 'plan:INTERNAL' },
   ...Object.fromEntries(snapshotReaders.map(([, key]) => [key, { resource: key }])),
 });
 context.mhReadProjectPlan_ = originalPlanReader;
@@ -420,5 +424,63 @@ const mutationSource = fs.readFileSync(path.join(root, 'Mutations.gs'), 'utf8');
 assert.match(mutationSource, /spec\.operations && spec\.operations\.indexOf\(operation\) < 0/);
 assert.match(mutationSource, /\['start_date', 'planned_start_date'/);
 assert.match(mutationSource, /\['MASTER', 'POCKET_MANAGER', 'POCKET_EDITOR'\]\.indexOf\(actor\.role\) < 0/);
+
+// Task activity is a safe, task-specific audit projection: only committed
+// task events are returned, with the task title, actor display name, and
+// field-level before/after changes.
+context.mhActiveRows_ = (sheetName) => {
+  if (sheetName === context.MH_SHEETS.ACTIVITY) return [
+    {
+      event_id: 'EVT-TASK-PREPARE', mutation_id: 'mut-task-1', client_id: 'CLT-UND',
+      project_id: 'PRJ-UND-90D-001', entity_type: 'TASK', entity_id: 'TSK-1',
+      action_code: 'UPDATED', event_status_code: 'PREPARE',
+      before_json: JSON.stringify({ status_code: 'IN_PROGRESS', responsible_org_code: 'NS', description: '비공개 메모' }),
+      after_json: JSON.stringify({ status_code: 'DONE', responsible_org_code: 'POCKET', description: '완료 메모' }),
+      actor_user_id: 'USR-1', created_at: '2026-08-26T10:00:00+09:00',
+    },
+    {
+      event_id: 'EVT-CONTENT-COMMIT', mutation_id: 'mut-content-1', client_id: 'CLT-UND',
+      project_id: 'PRJ-UND-90D-001', entity_type: 'CONTENT', entity_id: 'CNT-1',
+      action_code: 'UPDATED', event_status_code: 'COMMIT',
+      before_json: JSON.stringify({ status_code: 'DRAFT' }),
+      after_json: JSON.stringify({ status_code: 'PUBLISHED' }),
+      actor_user_id: 'USR-1', created_at: '2026-08-26T10:01:00+09:00',
+    },
+    {
+      event_id: 'EVT-TASK-COMMIT', mutation_id: 'mut-task-1', client_id: 'CLT-UND',
+      project_id: 'PRJ-UND-90D-001', entity_type: 'TASK', entity_id: 'TSK-1',
+      action_code: 'UPDATED', event_status_code: 'COMMIT',
+      before_json: JSON.stringify({ status_code: 'IN_PROGRESS', responsible_org_code: 'NS', description: '비공개 메모' }),
+      after_json: JSON.stringify({ status_code: 'DONE', responsible_org_code: 'POCKET', description: '완료 메모' }),
+      actor_user_id: 'USR-1', created_at: '2026-08-26T10:02:00+09:00',
+    },
+  ];
+  if (sheetName === context.MH_SHEETS.TASKS) return [
+    { task_id: 'TSK-1', client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001', title: '캠페인 검수', visibility_code: 'PROJECT_TEAM', archived_at: '' },
+  ];
+  if (sheetName === context.MH_SHEETS.USERS) return [
+    { user_id: 'USR-1', display_name: '포켓 담당자', status_code: 'ACTIVE', archived_at: '' },
+  ];
+  return [];
+};
+const taskActivity = JSON.parse(JSON.stringify(context.mhReadActivity_(
+  { entityType: 'TASK', limit: 20 },
+  { userId: 'USR-2', role: 'POCKET_EDITOR' },
+  { client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001' },
+)));
+assert.deepEqual(taskActivity.items, [{
+  event_id: 'EVT-TASK-COMMIT',
+  entity_type: 'TASK',
+  entity_id: 'TSK-1',
+  action_code: 'UPDATED',
+  summary: '업무가 수정됨',
+  created_at: '2026-08-26T10:02:00+09:00',
+  task_title: '캠페인 검수',
+  actor_display_name: '포켓 담당자',
+  changes: [
+    { field: 'status_code', label: '상태', before: 'IN_PROGRESS', after: 'DONE' },
+    { field: 'responsible_org_code', label: '담당 조직', before: 'NS', after: 'POCKET' },
+  ],
+}]);
 
 console.log(`Apps Script static/auth checks passed (${sourceFiles.length} source files).`);

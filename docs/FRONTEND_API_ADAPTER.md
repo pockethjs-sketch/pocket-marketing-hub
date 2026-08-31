@@ -15,10 +15,13 @@
 | `plan` | `project_plan` | `planType=CLIENT_SHARE|INTERNAL` 계획; 내부 계획은 프로젝트팀 이상만 허용 |
 | `tasks` | `tasks` | 업무 목록 |
 | `contents` | `contents` | 콘텐츠 목록 |
+| `tracking` | `performance_tracking` | 실행·발행·퍼널·채널 기여 성과 추적 |
 | `performance` | `performance` | KPI·성과 |
 | `files` | `files` | 자료 링크 |
-| `activity` | `activity` | 안전하게 투영된 활동 이력 |
+| `activity` | `activity` | 안전하게 투영된 활동 이력; 업무 로그는 `entityType=TASK`로 지연 조회 |
+| `permissions` | `access_admin` | 포켓 전용 고객 계정·프로젝트·페이지 권한 조회 |
 | `mutate` | `mutate` | 생성·수정·보관 |
+| `accessAdminMutate` | `access_admin_mutate` | 고객 계정 생성·수정·비활성화·비밀번호 재설정 |
 
 ## 환경 설정
 
@@ -68,14 +71,18 @@ await source.mutate({
 
 프런트가 `mutation_id`를 생략하면 UUID를 생성합니다. 서버는 이 ID의 멱등성, 로그인 사용자 권한, `row_version`, 허용 필드, 참조 무결성을 반드시 검증해야 합니다. `Content-Type: text/plain`을 사용해 Apps Script 계열 엔드포인트의 불필요한 CORS preflight를 피하지만, 이것은 인증을 대신하지 않습니다. 모든 호출에는 `_mh` 난수를 붙여 Google의 만료된 `googleusercontent` 리다이렉트가 브라우저·프록시에서 재사용되지 않게 합니다.
 
+성과 탭의 KPI 설정 모달은 `kpi_definition` 엔터티를 사용합니다. 생성 시 목표·단위·주기·채널·공개 여부를 보내고, 수정·보관 시 성과 조회 응답의 `kpi_id`, `row_version`을 그대로 사용합니다. 저장 성공 후 `performance` 캐시를 폐기하고 다시 조회합니다.
+
+포켓 계정에는 프로젝트 메뉴 하단에 `권한 관리`가 표시됩니다. 고객 계정의 허용 페이지는 bootstrap의 프로젝트별 `allowed_pages`로 전달되며, 프런트는 메뉴와 직접 URL 접근을 제한합니다. 서버도 같은 권한을 검사하므로 프런트 우회만으로 숨긴 페이지 데이터를 읽을 수 없습니다.
+
 ## App.jsx 연결 순서
 
 1. 로그인 없는 앱 부팅은 `previewBootstrap()`과 `previewOverview()`를 병렬 실행해 탐색 정보와 첫 총괄을 함께 준비합니다.
 2. 유효한 저장 세션 또는 로그인 상태에서는 `bootstrap()`으로 최소 탐색 정보만 받습니다.
 3. 로그인 사용자는 탐색 화면 뒤 `overview()`를 조회하고, 공개 첫 진입은 병렬 응답을 그대로 사용해 두 번째 직렬 대기를 없앱니다.
-4. 실행계획·업무·콘텐츠·성과·자료 탭 진입 시 해당 화면 action을 지연 조회합니다.
+4. 실행계획·업무·콘텐츠·성과 추적·성과·자료 탭 진입 시 해당 화면 action을 지연 조회합니다.
 5. 화면에 `loading`, `error`, 마지막 성공 시각을 표시합니다.
 6. 추가·수정 버튼은 서버 성공 응답을 받은 뒤에만 화면을 확정합니다.
-7. 저장 후 영향받은 화면 데이터와 활동로그를 다시 조회합니다.
+7. 업무 저장은 화면을 낙관적으로 갱신하고 서버 응답의 최신 행으로 확정합니다. 업무 로그 캐시는 무효화하며, 사용자가 `업무 로그`를 열 때 최신 `TASK` 이력을 조회합니다.
 
 운영 원장은 `POCKET_ONLY / PROJECT_TEAM / CLIENT` 공개 범위와 프로젝트별 `ADMIN / EDIT / READ_ONLY` 권한을 사용합니다. 화면의 작성 버튼도 선택 프로젝트의 실제 권한에 맞춰 표시됩니다.

@@ -424,7 +424,9 @@ function mhPermissionForProject_(actor, project) {
   if (!selected) return null;
   return {
     permissionCode: mhAsText_(selected.permission_code).toUpperCase(),
-    source: exact.length ? 'PROJECT' : 'CLIENT'
+    source: exact.length ? 'PROJECT' : 'CLIENT',
+    membershipId: mhAsText_(selected.membership_id),
+    allowedPages: mhAllowedPagesForMembership_(selected)
   };
 }
 

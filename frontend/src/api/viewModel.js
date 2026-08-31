@@ -59,6 +59,8 @@ const FORMAT_LABELS = {
 };
 
 const PRIORITY_LABELS = { LOW: "낮음", NORMAL: "보통", HIGH: "높음", CRITICAL: "긴급", URGENT: "긴급" };
+const TASK_RESPONSIBLE_ORG_LABELS = { POCKET: "포켓", NS: "NS", CLIENT: "UND" };
+const ACTIVITY_ACTION_LABELS = { CREATED: "추가", UPDATED: "수정", ARCHIVED: "보관", APPROVED: "승인", REJECTED: "반려" };
 // 화면의 대외 담당 주체는 포켓컴퍼니로 통일한다.
 // 원장에 남아 있는 기존 NS 코드도 표시 단계에서는 포켓컴퍼니로 정규화한다.
 const ORG_LABELS = { POCKET: "포켓컴퍼니", NS: "포켓컴퍼니", NS_MARKETING: "포켓컴퍼니", CLIENT: "고객사" };
@@ -72,6 +74,24 @@ function ownerLabel(orgCode, assignee) {
   const normalizedAssignee = rawAssignee.toUpperCase().replace(/[\s_-]/g, "");
   if (["NS", "NS마케팅", "NSMARKETING"].includes(normalizedAssignee)) return "포켓컴퍼니";
   return rawAssignee || "미지정";
+}
+
+export function taskResponsibleOrganization(value) {
+  const rawCode = String(value || "").trim().toUpperCase();
+  const code = rawCode === "NS_MARKETING" ? "NS" : rawCode;
+  const normalizedCode = Object.prototype.hasOwnProperty.call(TASK_RESPONSIBLE_ORG_LABELS, code) ? code : "POCKET";
+  return { code: normalizedCode, label: TASK_RESPONSIBLE_ORG_LABELS[normalizedCode] };
+}
+
+function activityChangeValue(field, value) {
+  if (value === null || value === undefined || value === "") return value ?? "";
+  const normalized = String(value).trim().toUpperCase();
+  if (field === "status_code") return STATUS_LABELS[normalized] || value;
+  if (field === "responsible_org_code") {
+    const organizationCode = normalized === "NS_MARKETING" ? "NS" : normalized;
+    return TASK_RESPONSIBLE_ORG_LABELS[organizationCode] || value;
+  }
+  return value;
 }
 
 function codeLabel(code, labels, fallback = "미지정") {
@@ -161,6 +181,7 @@ function projectShell(row, clientsById = {}, generatedAt = null) {
     phase: codeLabel(row.phase_code, PHASE_LABELS),
     status: codeLabel(row.status_code, STATUS_LABELS),
     permissionCode: String(row.permission_code || "READ_ONLY").toUpperCase(),
+    allowedPages: Array.isArray(row.allowed_pages) ? row.allowed_pages.map((page) => String(page).toLowerCase()) : ["overview", "plan", "tasks", "content", "tracking", "performance", "files"],
     startDate: row.start_date ? String(row.start_date).slice(0, 10) : null,
     endDate: row.end_date ? String(row.end_date).slice(0, 10) : null,
     rowVersion: Number(row.row_version || 0),
@@ -171,6 +192,37 @@ function projectShell(row, clientsById = {}, generatedAt = null) {
     phases: [],
     workstreams: [],
     attention: [],
+  };
+}
+
+export function accessAdminViewModel(envelope) {
+  const data = envelope?.data || {};
+  const projects = (data.projects || []).map((row) => ({
+    id: row.project_id,
+    clientId: row.client_id,
+    name: row.project_name || row.project_id,
+  }));
+  const projectById = Object.fromEntries(projects.map((project) => [project.id, project]));
+  return {
+    clients: (data.clients || []).map((row) => ({ id: row.client_id, name: row.display_name || row.client_id })),
+    projects,
+    accounts: (data.accounts || []).map((row) => ({
+      id: row.user_id,
+      account: row.account || String(row.email || "").replace(/@hub\.local$/i, ""),
+      displayName: row.display_name || row.user_id,
+      enabled: String(row.status_code || "").toUpperCase() === "ACTIVE",
+      rowVersion: Number(row.row_version || 0),
+      accesses: (row.accesses || []).map((access) => ({
+        id: access.membership_id,
+        clientId: access.client_id,
+        projectId: access.project_id,
+        projectName: access.project_name || projectById[access.project_id]?.name || access.project_id,
+        allowedPages: Array.isArray(access.allowed_pages) ? access.allowed_pages : [],
+        rowVersion: Number(access.row_version || 0),
+      })),
+    })),
+    pageOptions: Array.isArray(data.pageOptions) ? data.pageOptions : [],
+    generatedAt: envelope?.generatedAt || null,
   };
 }
 
@@ -211,10 +263,28 @@ export function bootstrapViewModel(envelope) {
 function activityViewModel(row) {
   const entity = String(row.entity_type || "").toLowerCase();
   const type = entity === "content" ? "content" : entity === "approval" ? "schedule" : entity === "task" ? "task" : "metric";
+  const actionCode = String(row.action_code || "").toUpperCase();
+  const rawChanges = Array.isArray(row.changes) ? row.changes : [];
+  const changes = rawChanges.map((change) => ({
+    field: String(change?.field || ""),
+    label: String(change?.label || change?.field || "변경값"),
+    before: activityChangeValue(String(change?.field || ""), change?.before),
+    after: activityChangeValue(String(change?.field || ""), change?.after),
+  }));
+  const completesTask = actionCode === "UPDATED" && rawChanges.some((change) => (
+    String(change?.field || "") === "status_code" && ["DONE", "COMPLETED"].includes(String(change?.after || "").toUpperCase())
+  ));
   return {
     id: row.event_id || row.id,
     type,
+    entityId: row.entity_id || null,
+    taskTitle: row.task_title || row.entity_title || "",
     title: row.summary || "프로젝트 항목이 변경됨",
+    actionCode,
+    action: completesTask ? "완료" : ACTIVITY_ACTION_LABELS[actionCode] || "변경",
+    actor: row.actor_display_name || row.actor_name || row.actor_user_id || "확인되지 않은 사용자",
+    changes,
+    createdAt: row.created_at || null,
     meta: relativeTimestamp(row.created_at),
     internalMeta: "Google Sheets 활동로그",
   };
@@ -242,6 +312,7 @@ export function overviewViewModel(envelope, fallbackProject) {
   const project = {
     ...base,
     ...(data.project ? projectShell(data.project, { [data.project.client_id]: { name: base.clientName } }, envelope?.generatedAt) : {}),
+    allowedPages: base.allowedPages || ["overview", "plan", "tasks", "content", "tracking", "performance", "files"],
   };
 
   project.metrics = [
@@ -293,41 +364,46 @@ export function tasksViewModel(envelope) {
     return String(left.task_id || "").localeCompare(String(right.task_id || ""));
   });
   return {
-    items: orderedRows.map((row) => ({
-      id: row.task_id,
-      sourceTaskId: row.source_task_id || null,
-      phaseCode: String(row.phase_code || "").toUpperCase(),
-      phase: codeLabel(row.phase_code, PHASE_LABELS),
-      streamCode: String(row.workstream_code || "").toUpperCase(),
-      stream: codeLabel(row.workstream_code, WORKSTREAM_LABELS),
-      title: row.title || "제목 없는 업무",
-      statusCode: String(row.status_code || "NOT_STARTED").toUpperCase(),
-      status: codeLabel(row.status_code, STATUS_LABELS),
-      priorityCode: String(row.priority_code || "NORMAL").toUpperCase(),
-      priority: codeLabel(row.priority_code, PRIORITY_LABELS),
-      owner: ownerLabel(row.responsible_org_code, row.assignee_user_id),
-      due: dateOnly(row.due_date),
-      dueDate: row.due_date ? String(row.due_date).slice(0, 10) : null,
-      plannedStartDate: row.planned_start_date ? String(row.planned_start_date).slice(0, 10) : null,
-      completedAt: row.completed_at || null,
-      completedDate: row.completed_at ? String(row.completed_at).slice(0, 10) : null,
-      clientVisible: true,
-      categoryCode: String(row.category_code || "").toUpperCase(),
-      category: row.category_code ? codeLabel(row.category_code, {}) : "업무",
-      parent: row.category_code ? codeLabel(row.category_code, {}) : "업무",
-      planWeek: row.plan_week === undefined || row.plan_week === null || row.plan_week === "" ? null : numberFrom(row.plan_week),
-      contractLinked: Boolean(row.contract_linked || row.plan_note),
-      planNote: row.plan_note || null,
-      description: row.description || "",
-      assignee: row.assignee_user_id || null,
-      blocker: row.blocker_reason || "",
-      customerStatus: row.customer_status_text || "",
-      sourceCode: row.source_code || "",
-      sortOrder: row.sort_order === undefined || row.sort_order === null || row.sort_order === "" ? null : numberFrom(row.sort_order),
-      visibilityCode: String(row.visibility_code || "").toUpperCase(),
-      updatedAt: row.updated_at || null,
-      rowVersion: row.row_version,
-    })),
+    items: orderedRows.map((row) => {
+      const responsibleOrganization = taskResponsibleOrganization(row.responsible_org_code);
+      return {
+        id: row.task_id,
+        sourceTaskId: row.source_task_id || null,
+        phaseCode: String(row.phase_code || "").toUpperCase(),
+        phase: codeLabel(row.phase_code, PHASE_LABELS),
+        streamCode: String(row.workstream_code || "").toUpperCase(),
+        stream: codeLabel(row.workstream_code, WORKSTREAM_LABELS),
+        title: row.title || "제목 없는 업무",
+        statusCode: String(row.status_code || "NOT_STARTED").toUpperCase(),
+        status: codeLabel(row.status_code, STATUS_LABELS),
+        priorityCode: String(row.priority_code || "NORMAL").toUpperCase(),
+        priority: codeLabel(row.priority_code, PRIORITY_LABELS),
+        owner: ownerLabel(row.responsible_org_code, row.assignee_user_id),
+        responsibleOrgCode: responsibleOrganization.code,
+        responsibleOrg: responsibleOrganization.label,
+        due: dateOnly(row.due_date),
+        dueDate: row.due_date ? String(row.due_date).slice(0, 10) : null,
+        plannedStartDate: row.planned_start_date ? String(row.planned_start_date).slice(0, 10) : null,
+        completedAt: row.completed_at || null,
+        completedDate: row.completed_at ? String(row.completed_at).slice(0, 10) : null,
+        clientVisible: true,
+        categoryCode: String(row.category_code || "").toUpperCase(),
+        category: row.category_code ? codeLabel(row.category_code, {}) : "업무",
+        parent: row.category_code ? codeLabel(row.category_code, {}) : "업무",
+        planWeek: row.plan_week === undefined || row.plan_week === null || row.plan_week === "" ? null : numberFrom(row.plan_week),
+        contractLinked: Boolean(row.contract_linked || row.plan_note),
+        planNote: row.plan_note || null,
+        description: row.description || "",
+        assignee: row.assignee_user_id || null,
+        blocker: row.blocker_reason || "",
+        customerStatus: row.customer_status_text || "",
+        sourceCode: row.source_code || "",
+        sortOrder: row.sort_order === undefined || row.sort_order === null || row.sort_order === "" ? null : numberFrom(row.sort_order),
+        visibilityCode: String(row.visibility_code || "").toUpperCase(),
+        updatedAt: row.updated_at || null,
+        rowVersion: row.row_version,
+      };
+    }),
     members: (data.members || []).map((row) => ({
       userId: row.user_id,
       displayName: row.display_name || row.user_id || "이름 미등록",
@@ -415,6 +491,11 @@ export function performanceViewModel(envelope) {
       value: Number(actual?.actual_value || 0),
       target: Number(row.target_value || 0),
       unit: codeLabel(row.unit_code, UNIT_LABELS, ""),
+      unitCode: row.unit_code || "COUNT",
+      periodTypeCode: row.period_type_code || "MONTHLY",
+      channelCode: row.channel_code || "",
+      customerVisible: row.customer_visible !== false && String(row.customer_visible).toLowerCase() !== "false",
+      rowVersion: Number(row.row_version || 0),
       source: actual?.source_code || codeLabel(row.channel_code, CHANNEL_LABELS, "원장 집계"),
       state: actual ? "측정 중" : "데이터 없음",
     };
@@ -424,6 +505,45 @@ export function performanceViewModel(envelope) {
     channels: Array.isArray(data.channels) ? data.channels : [],
     daily: Array.isArray(data.daily) ? data.daily : [],
     range: data.range || null,
+    generatedAt: envelope?.generatedAt || null,
+  };
+}
+
+export function performanceTrackingViewModel(envelope) {
+  const data = envelope?.data || {};
+  const numericFields = ["spend", "impressions", "reach", "video_views", "watch_time_sec", "engagements", "saves", "followers_delta", "clicks", "inquiries", "leads", "reservations", "conversions", "revenue"];
+  const metrics = (row = {}) => Object.fromEntries(numericFields.map((field) => [field.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()), Number(row[field] ?? row[field.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())] ?? 0)]));
+  return {
+    source: data.source || "12_성과일별",
+    dataAvailable: Array.isArray(data.daily) && data.daily.length > 0,
+    range: data.range || null,
+    execution: {
+      total: Number(data.execution?.total || 0),
+      done: Number(data.execution?.done || 0),
+      active: Number(data.execution?.active || 0),
+      blocked: Number(data.execution?.blocked || 0),
+    },
+    publishing: {
+      total: Number(data.publishing?.total || 0),
+      published: Number(data.publishing?.published || 0),
+      inReview: Number(data.publishing?.inReview ?? data.publishing?.in_review ?? 0),
+      approvalsPending: Number(data.publishing?.approvalsPending ?? data.publishing?.approvals_pending ?? 0),
+    },
+    totals: metrics(data.totals),
+    daily: (data.daily || []).map((row) => ({ date: String(row.date || row.performance_date || "").slice(0, 10), ...metrics(row) })),
+    channels: (data.channels || []).map((row) => ({
+      channelCode: row.channelCode || row.channel_code || "UNKNOWN",
+      label: row.label || codeLabel(row.channelCode || row.channel_code, CHANNEL_LABELS, "채널 미지정"),
+      ...metrics(row),
+    })),
+    goals: (data.goals || []).map((row) => ({
+      id: row.kpi_id,
+      name: row.metric_name || "이름 없는 KPI",
+      unit: codeLabel(row.unit_code, UNIT_LABELS, ""),
+      target: Number(row.target_value || 0),
+      value: row.actual_value === null || row.actual_value === undefined ? null : Number(row.actual_value),
+      periodEnd: row.period_end || null,
+    })),
     generatedAt: envelope?.generatedAt || null,
   };
 }
@@ -448,7 +568,9 @@ export function filesViewModel(envelope) {
 export function activityListViewModel(envelope) {
   const data = envelope?.data || {};
   return {
-    items: (data.items || []).map(activityViewModel),
+    items: (data.items || []).map(activityViewModel).filter((item) => (
+      item.type !== "task" || item.taskTitle || item.changes.length || item.actor !== "확인되지 않은 사용자"
+    )),
     nextCursor: data.nextCursor || null,
     generatedAt: envelope?.generatedAt || null,
   };
@@ -483,6 +605,7 @@ export function workspaceViewModel(envelope, fallbackProject) {
   const tasks = workspaceValue(data, "tasks");
   const contents = workspaceValue(data, "contents", "content");
   const performance = workspaceValue(data, "performance");
+  const tracking = workspaceValue(data, "tracking", "performance_tracking");
   const files = workspaceValue(data, "files");
   const activity = workspaceValue(data, "activity", "activities");
 
@@ -492,6 +615,7 @@ export function workspaceViewModel(envelope, fallbackProject) {
   if (tasks !== undefined) result.tasks = tasksViewModel(workspaceEnvelope(envelope, tasks));
   if (contents !== undefined) result.content = contentsViewModel(workspaceEnvelope(envelope, contents));
   if (performance !== undefined) result.performance = performanceViewModel(workspaceEnvelope(envelope, performance));
+  if (tracking !== undefined) result.tracking = performanceTrackingViewModel(workspaceEnvelope(envelope, tracking));
   if (files !== undefined || activity !== undefined) {
     result.files = {
       files: filesViewModel(workspaceEnvelope(envelope, files || {})),

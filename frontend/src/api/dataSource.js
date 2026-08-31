@@ -97,6 +97,19 @@ export function createHubDataSource(options = {}) {
     }
   }
 
+  async function accessAdminMutate(input) {
+    if (!live) throw new OfflineMutationError();
+    emit({ phase: "saving", action: "access_admin_mutate", error: null });
+    try {
+      const result = await live.accessAdminMutate(input);
+      emit({ mode: "live", phase: "ready", action: null, error: null, lastSuccessfulAt: result.generatedAt || new Date().toISOString() });
+      return result;
+    } catch (error) {
+      emit({ phase: "error", action: null, error: publicApiError(error) });
+      throw error;
+    }
+  }
+
   async function login(credentials) {
     if (!live) {
       throw new HubApiError("API 주소가 설정되지 않았습니다.", {
@@ -222,9 +235,12 @@ export function createHubDataSource(options = {}) {
     plan: (params) => load("plan", params),
     tasks: (params) => load("tasks", params),
     contents: (params) => load("contents", params),
+    tracking: (params) => load("tracking", params),
     performance: (params) => load("performance", params),
     files: (params) => load("files", params),
     activity: (params) => load("activity", params),
+    permissions: (params) => load("permissions", params),
+    accessAdminMutate,
     mutate,
   });
 }

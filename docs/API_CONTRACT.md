@@ -29,6 +29,17 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 
 ## 화면별 action
 
+로그인 클라이언트는 `login` 요청에 `includeBootstrap: true`를 보냅니다. 성공 응답의 `data.session`은 서명 세션, `data.bootstrap`은 허용 고객사·프로젝트·채널의 최소 앱 셸 데이터입니다. 이 결합 응답은 Apps Script 왕복과 콜드 스타트를 한 번으로 줄이며, `includeBootstrap`이 없는 기존 호출은 평면 세션 응답을 계속 받습니다.
+
+```json
+{
+  "action": "login",
+  "account": "operator-id",
+  "accessCode": "server-verified-secret",
+  "includeBootstrap": true
+}
+```
+
 | action | 화면 | 반환 범위 |
 |---|---|---|
 | `preview_bootstrap` | 로그인 없는 첫 앱 셸 | 1시간 읽기 전용 세션 + 허용 고객사·프로젝트·채널 |
@@ -40,11 +51,19 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 | `tasks` | 업무 | 필터된 업무 목록, 프로젝트 일정, 08_콘텐츠 발행 집계; 기본 30건·최대 200건 |
 | `contents` | 콘텐츠 | 최대 92일의 콘텐츠와 현재 버전·검수 상태 |
 | `approvals` | 검수 현황 | 공개 허용된 현재 검수 상태만 |
+| `performance_tracking` | 성과 추적 | 최근 90일 일별 성과·퍼널·채널 기여; `12_성과일별` 전용 경량 조회 |
 | `performance` | 성과 | 최대 366일의 집계 KPI·추이·채널 분해 |
 | `files` | 자료 | 공개 범위가 허용된 파일 링크만 |
-| `activity` | 활동 | 안전한 요약 문장으로 투영한 이벤트만 |
+| `activity` | 활동·업무 로그 | 안전한 요약 문장으로 투영한 COMMIT 이벤트만; `entityType=TASK` 지원 |
+| `access_admin` | 고객 계정·권한 원장 | `MASTER`·`POCKET_MANAGER` 전용; 고객 계정, 프로젝트, 페이지 허용 범위 |
 
 Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `action`, `projectId`로 라우팅한다. 인증 세션도 query string이나 커스텀 헤더가 아니라 JSON 본문의 `auth.sessionToken`으로 전달한다. 프런트는 각 요청 URL에 데이터 의미와 무관한 `_mh` 난수를 붙여 만료된 Apps Script 302 리다이렉트가 재사용되는 것을 막는다.
+
+성과 화면의 KPI 설정은 `mutate`에 `entityType = kpi_definition`을 사용합니다. 내부 운영 계정은 `11_KPI정의`의 생성·수정·보관을 요청할 수 있고, 수정·보관에는 현재 `row_version`이 필요합니다. 허용 필드는 KPI명, 목표값, 단위, 측정주기, 채널, 고객 공개 여부이며 실제 실적은 이 mutation으로 입력하지 않습니다.
+
+`performance_tracking`은 별도 실적을 저장하지 않는 읽기 전용 집계입니다. 첫 응답이 지연되지 않도록 `12_성과일별`의 비용·노출·반응·클릭·문의·전환·매출만 선택 기간 기준으로 한 번 읽어 합산합니다. 고객 역할일 때만 `05_프로젝트채널.customer_visible = true` 채널 목록을 추가 확인합니다. 프런트가 계산하는 전환율과 병목은 이 응답의 실제 합계만 사용하며, 원장 행이 없으면 0원·0건으로 가장하지 않고 연결된 빈 상태를 표시합니다. 이 경량 조회는 모든 화면에서 실행되는 `project_snapshot`에 포함하지 않고 성과 추적 탭 진입 시에만 호출합니다.
+
+고객 계정 생성·수정·비활성화는 `access_admin_mutate` 전용 action을 사용합니다. 입력은 계정 ID, 표시 이름, 프로젝트, 허용 페이지 배열, 활성 상태이며 신규 계정은 8자 이상의 임시 비밀번호가 필요합니다. 서버는 포켓 관리자 권한을 다시 검사하고 사용자·프로젝트권한 원장과 Script Properties의 비밀번호 digest를 갱신합니다. 고객 세션의 화면별 조회는 메뉴 숨김과 별개로 서버에서도 `allowed_pages_json`을 검사해 미허용 action을 `403 page_access_denied`로 거부합니다.
 
 ```json
 {
@@ -72,7 +91,7 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 ### 프로젝트 스냅샷 응답
 
-`project_snapshot`은 첫 총괄 화면을 막지 않고 그 뒤에 실행되는 읽기 최적화 API입니다. 하위 호환 `plan`에는 클라이언트 공유용 계획을, `internalPlan`에는 현재 역할이 내부 계획을 볼 수 있을 때만 내부 계획을 넣습니다. 고객 응답의 `internalPlan`은 `null`입니다. 이외 `tasks`, `contents`, `performance`, `files`, `activity`는 기존 reader 그대로 호출하므로 역할·프로젝트 권한, 공개 범위, 필드 제거, 기간·건수 제한은 개별 API와 동일합니다. `overview`는 첫 진입 시 이미 병렬 조회하므로 스냅샷에 중복 포함하지 않습니다. 스냅샷 실패 시 프런트는 필요한 탭의 개별 API를 다시 호출합니다.
+`project_snapshot`은 현재 화면을 막지 않고 그 화면의 전용 API가 완료된 뒤 실행되는 읽기 최적화 API입니다. 하위 호환 `plan`에는 클라이언트 공유용 계획을, `internalPlan`에는 현재 역할이 내부 계획을 볼 수 있을 때만 내부 계획을 넣습니다. 고객 응답의 `internalPlan`은 `null`입니다. 이외 `tasks`, `contents`, `performance`, `files`, `activity`는 기존 reader 그대로 호출하므로 역할·프로젝트 권한, 공개 범위, 필드 제거, 기간·건수 제한은 개별 API와 동일합니다. `overview`는 첫 진입 시 이미 조회하므로 스냅샷에 중복 포함하지 않습니다. 스냅샷이 진행 중이어도 탭 이동은 이를 기다리지 않고 해당 탭 전용 API를 즉시 호출합니다.
 
 ### 업무 응답
 
@@ -122,6 +141,10 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 - 콘텐츠 실제값은 현재 역할이 볼 수 있는 `08_콘텐츠`의 `PUBLISHED` 행 가운데 업무 `task_id`로 단계가 연결되는 지원 포맷만 집계합니다. 따라서 고객 집계에는 `CLIENT` 공개 콘텐츠만 포함됩니다.
 - 고객과 공개 미리보기는 `CLIENT_VIEWER + READ_ONLY`이고 `visibility_code = CLIENT`인 업무만 읽습니다. 생성·수정·보관 mutation은 서버가 거부합니다.
 - 프로젝트 착수일은 Pocket 내부 사용자만 `project / UPDATE / start_date` mutation으로 변경합니다. `02_프로젝트.row_version`을 반드시 보내므로 동시 수정 충돌은 `409 row_version_conflict`로 차단됩니다.
+
+### 업무 로그 응답
+
+업무 화면은 목록과 별도로 `activity`에 `entityType=TASK`를 보내 최근 확정 이력을 지연 조회합니다. 응답은 `15_활동로그`의 `COMMIT` 이벤트만 사용하며 업무명, 변경자 표시명, 동작 코드, 허용된 필드의 변경 전·후 값을 반환합니다. 설명·개인 담당자 ID와 원시 `before_json`·`after_json`은 반환하지 않습니다.
 
 ## 응답 크기와 페이지 처리
 

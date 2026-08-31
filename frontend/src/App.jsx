@@ -21,22 +21,31 @@ import {
   LockKeyhole,
   LogOut,
   MoreHorizontal,
+  MousePointerClick,
+  Pencil,
+  Plus,
   RefreshCw,
   Search,
+  Settings2,
   ShieldCheck,
+  TrendingUp,
+  Trash2,
   Video,
   WifiOff,
   X,
 } from "lucide-react";
 import {
   activityListViewModel,
+  accessAdminViewModel,
   bootstrapViewModel,
   contentsViewModel,
   createHubDataSource,
   filesViewModel,
   overviewViewModel,
   planViewModel,
+  performanceTrackingViewModel,
   performanceViewModel,
+  taskResponsibleOrganization,
   tasksViewModel,
   workspaceViewModel,
 } from "./api/index.js";
@@ -48,14 +57,21 @@ import {
   viewLocationHash,
   viewResourceKey,
 } from "./planNavigation.js";
+import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmissionFields } from "./taskForm.js";
+import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
+import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
+import { ACCESS_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages } from "./accessPermissions.js";
+import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
 
 const navItems = [
   { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
   { id: "plan", label: "실행계획", icon: BookOpenText, children: Object.values(PLAN_VARIANTS) },
   { id: "tasks", label: "업무", icon: ClipboardCheck },
   { id: "content", label: "콘텐츠", icon: GalleryHorizontalEnd },
+  { id: "tracking", label: "성과 추적", icon: TrendingUp },
   { id: "performance", label: "성과", icon: BarChart3 },
   { id: "files", label: "자료·활동", icon: FolderOpen },
+  { id: "permissions", label: "권한 관리", icon: ShieldCheck, pocketOnly: true },
 ];
 
 const statusClass = {
@@ -157,20 +173,25 @@ function ClientRail({ clients, activeClient, onSelect, visible }) {
   );
 }
 
-function ProjectSidebar({ project, activeView, activePlanVariant, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
+function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
   const [planExpanded, setPlanExpanded] = useState(activeView === "plan");
 
   useEffect(() => {
     if (activeView === "plan") setPlanExpanded(true);
   }, [activeView]);
 
-  const visiblePlanChildren = Object.values(PLAN_VARIANTS);
+  const visiblePlanChildren = role === "client" ? [PLAN_VARIANTS.client] : Object.values(PLAN_VARIANTS);
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.pocketOnly) return role === "pocket";
+    if (role !== "client") return true;
+    return isViewAllowed(item.id, project.allowedPages);
+  });
 
   return (
     <aside id="project-navigation" className={`project-sidebar ${open ? "is-open" : ""}`} aria-label="프로젝트 탐색" aria-hidden={!visible}>
       <div className="sidebar-header"><div><p className="eyebrow">{project.clientName}</p><h1>{project.name}</h1></div><div className="sidebar-header-actions"><button className="icon-button mobile-close" onClick={onClose} aria-label="메뉴 닫기"><X size={17} /></button></div></div>
       <div className="project-switcher"><div><span className="project-dot" /><strong>{project.status}</strong></div><ChevronDown size={15} /></div>
-      <nav className="project-nav"><p className="nav-label">프로젝트</p>{navItems.map((item) => {
+      <nav className="project-nav"><p className="nav-label">프로젝트</p>{visibleNavItems.map((item) => {
         const Icon = item.icon;
         if (item.id !== "plan") return <button key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
         return <div key={item.id} className={`project-nav-tree ${planExpanded ? "is-expanded" : ""}`}>
@@ -243,30 +264,33 @@ function FormSelect({ label, value, onChange, options }) {
   return <label className="create-field"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([code, text]) => <option key={code} value={code}>{text}</option>)}</select></label>;
 }
 
+function DisclosureChevron({ expanded, className, size = 16 }) {
+  const direction = disclosureChevronDirection(expanded);
+  return <span className={`disclosure-chevron ${className || ""}`} data-direction={direction} style={{ "--chevron-size": `${size + 3}px` }} aria-hidden="true">{disclosureChevronGlyph(expanded)}</span>;
+}
+
 function CreateRecordModal({ entityType, role, onClose, onSubmit }) {
-  const [fields, setFields] = useState(() => entityType === "task" ? {
-    title: "", phase_code: "M1", workstream_code: "MKT", status_code: "NOT_STARTED", priority_code: "NORMAL", due_date: "", visibility_code: role === "client" ? "CLIENT" : "PROJECT_TEAM",
-  } : entityType === "content" ? {
+  const completedTaskMode = entityType === "task-completed";
+  const recordType = completedTaskMode ? "task" : entityType;
+  const [fields, setFields] = useState(() => recordType === "task" ? taskCreateInitialFields(role, completedTaskMode ? "completed" : "default") : recordType === "content" ? {
     title: "", channel_code: "INSTAGRAM", format_code: "FEED", status_code: "DRAFT", planned_date: "", visibility_code: "PROJECT_TEAM",
   } : {
     title: "", url: "", file_type_code: "LINK", storage_provider_code: "LINK", visibility_code: "PROJECT_TEAM", notes: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const entityLabel = entityType === "task" ? "업무" : entityType === "content" ? "콘텐츠" : "자료";
+  const entityLabel = completedTaskMode ? "완료 업무" : recordType === "task" ? "업무" : recordType === "content" ? "콘텐츠" : "자료";
   const setField = (name, value) => setFields((current) => ({ ...current, [name]: value }));
   const submit = async (event) => {
     event.preventDefault();
     setError(null);
     setSaving(true);
     try {
-      const cleaned = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== ""));
-      if (entityType === "task") {
-        cleaned.responsible_org_code = role === "ns" ? "NS" : "POCKET";
-        cleaned.reviewer_org_code = "POCKET";
-      }
-      if (entityType === "content") cleaned.current_version_no = 1;
-      await onSubmit(entityType, cleaned);
+      const cleaned = recordType === "task"
+        ? taskCreateSubmissionFields(fields)
+        : Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== ""));
+      if (recordType === "content") cleaned.current_version_no = 1;
+      await onSubmit(recordType, cleaned);
       onClose();
     } catch (saveError) {
       setError(saveError);
@@ -276,9 +300,9 @@ function CreateRecordModal({ entityType, role, onClose, onSubmit }) {
   };
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal" role="dialog" aria-modal="true" aria-labelledby="create-record-title"><header><div><p className="editorial-kicker">Google Sheets 원장 등록</p><h2 id="create-record-title">{entityLabel} 추가</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
     <label className="create-field is-wide"><span>{entityLabel} 제목</span><input autoFocus required maxLength={200} value={fields.title} onChange={(event) => setField("title", event.target.value)} placeholder={`${entityLabel} 제목을 입력하세요`} /></label>
-    {entityType === "task" && <><FormSelect label="단계" value={fields.phase_code} onChange={(value) => setField("phase_code", value)} options={createFormOptions.phase} /><FormSelect label="업무 분야" value={fields.workstream_code} onChange={(value) => setField("workstream_code", value)} options={createFormOptions.stream} /><FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["NOT_STARTED", "미착수"], ["IN_PROGRESS", "진행"]]} /><FormSelect label="우선순위" value={fields.priority_code} onChange={(value) => setField("priority_code", value)} options={[["NORMAL", "보통"], ["HIGH", "높음"], ["CRITICAL", "긴급"]]} /><label className="create-field"><span>마감일</span><input type="date" value={fields.due_date} onChange={(event) => setField("due_date", event.target.value)} /></label></>}
-    {entityType === "content" && <><FormSelect label="채널" value={fields.channel_code} onChange={(value) => setField("channel_code", value)} options={createFormOptions.channel} /><FormSelect label="형식" value={fields.format_code} onChange={(value) => setField("format_code", value)} options={createFormOptions.format} /><FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["DRAFT", "초안"], ["PLANNED", "예정"], ["IN_PROGRESS", "제작"]]} /><label className="create-field"><span>예정일</span><input type="date" value={fields.planned_date} onChange={(event) => setField("planned_date", event.target.value)} /></label></>}
-    {entityType === "file" && <><label className="create-field is-wide"><span>HTTPS 자료 링크</span><input type="url" required pattern="https://.*" value={fields.url} onChange={(event) => setField("url", event.target.value)} placeholder="https://" /></label><label className="create-field is-wide"><span>메모</span><textarea rows="3" maxLength={1000} value={fields.notes} onChange={(event) => setField("notes", event.target.value)} placeholder="자료 설명 또는 버전을 적어 주세요" /></label></>}
+    {recordType === "task" && <><FormSelect label="단계" value={fields.phase_code} onChange={(value) => setField("phase_code", value)} options={createFormOptions.phase} /><FormSelect label="업무 분야" value={fields.workstream_code} onChange={(value) => setField("workstream_code", value)} options={createFormOptions.stream} /><FormSelect label="담당" value={fields.responsible_org_code} onChange={(value) => setField("responsible_org_code", value)} options={TASK_RESPONSIBLE_ORG_OPTIONS} />{completedTaskMode ? <div className="completed-task-lock"><Check size={16} /><div><strong>완료 상태로 바로 등록</strong><span>담당자는 직접 선택할 수 있습니다.</span></div></div> : <FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["NOT_STARTED", "미착수"], ["IN_PROGRESS", "진행"]]} />}<FormSelect label="우선순위" value={fields.priority_code} onChange={(value) => setField("priority_code", value)} options={[["NORMAL", "보통"], ["HIGH", "높음"], ["CRITICAL", "긴급"]]} /><label className="create-field"><span>마감일</span><input type="date" value={fields.due_date} onChange={(event) => setField("due_date", event.target.value)} /></label></>}
+    {recordType === "content" && <><FormSelect label="채널" value={fields.channel_code} onChange={(value) => setField("channel_code", value)} options={createFormOptions.channel} /><FormSelect label="형식" value={fields.format_code} onChange={(value) => setField("format_code", value)} options={createFormOptions.format} /><FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["DRAFT", "초안"], ["PLANNED", "예정"], ["IN_PROGRESS", "제작"]]} /><label className="create-field"><span>예정일</span><input type="date" value={fields.planned_date} onChange={(event) => setField("planned_date", event.target.value)} /></label></>}
+    {recordType === "file" && <><label className="create-field is-wide"><span>HTTPS 자료 링크</span><input type="url" required pattern="https://.*" value={fields.url} onChange={(event) => setField("url", event.target.value)} placeholder="https://" /></label><label className="create-field is-wide"><span>메모</span><textarea rows="3" maxLength={1000} value={fields.notes} onChange={(event) => setField("notes", event.target.value)} placeholder="자료 설명 또는 버전을 적어 주세요" /></label></>}
     {role === "pocket" && <FormSelect label="공개 범위" value={fields.visibility_code} onChange={(value) => setField("visibility_code", value)} options={[["PROJECT_TEAM", "프로젝트 팀"], ["CLIENT", "고객 공개"], ["POCKET_ONLY", "포켓 전용"]]} />}
     {error && <div className="form-error"><AlertCircle size={15} /><span>{error.message || "저장하지 못했습니다."}</span></div>}
     <footer><p>서버 저장 성공 이후에만 목록에 반영됩니다.</p><div><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.title.trim()}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "원장에 저장"}</button></div></footer>
@@ -331,7 +355,11 @@ function taskWithMutationFields(task, fields = {}) {
     next.priorityCode = String(fields.priority_code || "NORMAL").toUpperCase();
     next.priority = trackerPriorityLabels[next.priorityCode] || next.priorityCode;
   }
-  if (Object.prototype.hasOwnProperty.call(fields, "assignee_user_id")) next.assignee = fields.assignee_user_id || null;
+  if (Object.prototype.hasOwnProperty.call(fields, "responsible_org_code")) {
+    const organization = taskResponsibleOrganization(fields.responsible_org_code);
+    next.responsibleOrgCode = organization.code;
+    next.responsibleOrg = organization.label;
+  }
   return next;
 }
 
@@ -444,18 +472,18 @@ function trackerDdayLabel(value) {
   return `D-${days}`;
 }
 
-function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone, memberOptions }) {
+function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone }) {
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState(task.title || "");
   const [note, setNote] = useState(task.description || "");
-  const [assignee, setAssignee] = useState(task.assignee || "");
+  const [responsibleOrg, setResponsibleOrg] = useState(task.responsibleOrgCode || "POCKET");
   const [dueDate, setDueDate] = useState(task.dueDate || "");
   const [priority, setPriority] = useState(task.priorityCode || "NORMAL");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   useEffect(() => setTitle(task.title || ""), [task.title]);
   useEffect(() => setNote(task.description || ""), [task.description]);
-  useEffect(() => setAssignee(task.assignee || ""), [task.assignee]);
+  useEffect(() => setResponsibleOrg(task.responsibleOrgCode || "POCKET"), [task.responsibleOrgCode]);
   useEffect(() => setDueDate(task.dueDate || ""), [task.dueDate]);
   useEffect(() => setPriority(task.priorityCode || "NORMAL"), [task.priorityCode]);
 
@@ -483,10 +511,10 @@ function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone, memberOptions 
       <button className="tracker-check" type="button" onClick={toggleDone} disabled={!canWrite || saving} aria-label={isDone ? `${task.title} 완료 취소` : `${task.title} 완료 처리`}>{isDone && <Check size={13} strokeWidth={2.5} />}</button>
       <div className="tracker-task-copy"><strong>{task.title}</strong></div>
       <div className="tracker-task-state"><i className={statusClass[task.status] || "status status-muted"}>{task.status}</i>{saving && <span className="tracker-row-saving" role="status"><LoaderCircle size={11} className="spin" />저장 중</span>}</div>
-      <ChevronDown className="tracker-row-chevron" size={15} />
+      <DisclosureChevron expanded={expanded} className="tracker-row-chevron" size={16} />
       <div className="tracker-task-meta">
         <span><small>구분</small><strong>{task.parent}{task.planWeek ? ` · ${task.planWeek}주차` : ""}{task.contractLinked ? " · 계획 연계" : ""}</strong></span>
-        <span><small>담당</small><strong>{role === "client" ? "포켓컴퍼니" : task.assigneeName || task.owner}</strong></span>
+        <span><small>담당</small><strong>{role === "client" ? "포켓컴퍼니" : task.responsibleOrg || task.owner}</strong></span>
         <span><small>마감</small><strong>{task.due}</strong></span>
       </div>
     </div>
@@ -499,19 +527,45 @@ function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone, memberOptions 
         <label className="tracker-owner-edit"><span>업무명</span><input value={title} disabled={saving} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
         <label className="tracker-owner-edit"><span>마감일</span><input type="date" value={dueDate} disabled={saving} onChange={(event) => setDueDate(event.target.value)} /></label>
         <label className="tracker-owner-edit"><span>우선순위</span><select value={priority} disabled={saving} onChange={(event) => setPriority(event.target.value)}><option value="LOW">낮음</option><option value="NORMAL">보통</option><option value="HIGH">높음</option><option value="CRITICAL">긴급</option></select></label>
-        <label className="tracker-owner-edit"><span>담당자</span><select value={assignee} disabled={!canWrite || saving} onChange={(event) => setAssignee(event.target.value)}><option value="">담당자 미정</option>{assignee && !memberOptions.some((member) => member.userId === assignee) && <option value={assignee}>{task.assigneeName || assignee} · 비활성</option>}{memberOptions.map((member) => <option key={member.userId} value={member.userId}>{member.displayName}{member.organization ? ` · ${member.organization}` : ""}</option>)}</select></label>
+        <label className="tracker-owner-edit"><span>담당</span><select value={responsibleOrg} disabled={!canWrite || saving} onChange={(event) => setResponsibleOrg(event.target.value)}><option value="POCKET">포켓</option><option value="NS">NS</option><option value="CLIENT">UND</option></select></label>
         <label><span>업무 메모</span><textarea rows="3" value={note} disabled={!canWrite || saving} onChange={(event) => setNote(event.target.value)} placeholder="진행 내용이나 다음 액션을 기록하세요" /></label>
-        <div className="tracker-edit-footer">{error ? <span className="tracker-save-error"><AlertCircle size={14} />{error.message || "저장하지 못했습니다."}</span> : <span>저장 시 Google Sheets 업무 원장에 반영됩니다.</span>}<button className="primary-button" type="button" disabled={saving || !title.trim() || (title === (task.title || "") && note === (task.description || "") && assignee === (task.assignee || "") && dueDate === (task.dueDate || "") && priority === (task.priorityCode || "NORMAL"))} onClick={() => { const fields = { title, description: note, due_date: dueDate, priority_code: priority }; if (assignee !== (task.assignee || "")) fields.assignee_user_id = assignee; saveFields(fields); }}>{saving ? <><LoaderCircle size={14} className="spin" /> 저장 중</> : "변경 저장"}</button></div>
+        <div className="tracker-edit-footer">{error ? <span className="tracker-save-error"><AlertCircle size={14} />{error.message || "저장하지 못했습니다."}</span> : <span>저장 시 Google Sheets 업무 원장에 반영됩니다.</span>}<button className="primary-button" type="button" disabled={saving || !title.trim() || (title === (task.title || "") && note === (task.description || "") && responsibleOrg === (task.responsibleOrgCode || "POCKET") && dueDate === (task.dueDate || "") && priority === (task.priorityCode || "NORMAL"))} onClick={() => { const fields = { title, description: note, due_date: dueDate, priority_code: priority }; if (responsibleOrg !== (task.responsibleOrgCode || "POCKET")) fields.responsible_org_code = responsibleOrg; saveFields(fields); }}>{saving ? <><LoaderCircle size={14} className="spin" /> 저장 중</> : "변경 저장"}</button></div>
       </div>}
     </div>}
   </article>;
 }
 
-function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProjectUpdate }) {
+function taskActivityValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "예" : "아니요";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function TaskActivityLog({ state, onRefresh }) {
+  const data = state?.data || null;
+  const items = data?.items || [];
+  const loading = state?.status === "loading";
+
+  if (loading && !data) return <LoadingState label="업무 로그를 불러오는 중입니다." />;
+  if (state?.status === "error" && !data) return <ErrorState error={state.error} onRetry={onRefresh} title="업무 로그를 불러오지 못했습니다." />;
+
+  return <section className="task-change-log panel" aria-label="업무 로그" aria-busy={loading}>
+    <header className="task-change-log-header"><div><span>Google Sheets 활동로그</span><h3>업무 로그</h3><p>확정된 업무 생성·수정 이력을 최신순으로 표시합니다.</p></div><button className="secondary-button" type="button" onClick={onRefresh} disabled={loading}>{loading ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} 새로고침</button></header>
+    {state?.status === "error" && data && <div className="task-change-log-warning" role="alert"><AlertCircle size={14} />{state.error?.message || "새로고침하지 못해 이전 로그를 표시합니다."}</div>}
+    {items.length ? <div className="task-change-log-list">{items.map((item) => <article key={item.id} className="task-change-log-row">
+      <time dateTime={item.createdAt || undefined}>{formatSyncTime(item.createdAt)}</time>
+      <div className="task-change-log-task"><strong>{item.taskTitle || item.entityId || "제목 없는 업무"}</strong><small>{item.entityId || "업무 ID 없음"}</small></div>
+      <span className={`task-change-log-action is-${String(item.actionCode || "changed").toLowerCase()}`}>{item.action}</span>
+      <div className="task-change-log-changes">{item.changes.length ? item.changes.map((change) => <div key={`${item.id}-${change.field}`}><strong>{change.label}</strong><span>{taskActivityValue(change.before)}</span><ArrowRight size={12} /><em>{taskActivityValue(change.after)}</em></div>) : <span className="task-change-log-no-detail">변경값 상세 없음</span>}</div>
+      <div className="task-change-log-actor"><small>변경자</small><strong>{item.actor}</strong></div>
+    </article>)}</div> : <EmptyState title="업무 로그가 없습니다" description="웹에서 업무를 생성하거나 수정하면 확정된 이력이 표시됩니다." />}
+  </section>;
+}
+
+function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCreate, canWrite, onUpdate, onProjectUpdate }) {
   const editable = Boolean(canWrite);
   const canEditProject = Boolean(canWrite && role === "pocket");
-  const memberOptions = taskPage.members || [];
-  const memberNameById = Object.fromEntries(memberOptions.map((member) => [member.userId, member.displayName]));
   const schedule = trackerSchedule(taskPage.project?.startDate);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -519,8 +573,8 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   const currentPhaseLabel = currentSchedule?.label || "전체";
   const tasks = (taskPage.items || []).map((task) => {
     const calculatedDue = trackerTaskDue(task, schedule);
-    const withAssignee = { ...task, status: task.statusCode === "CANCELLED" ? "취소" : task.status, assigneeName: memberNameById[task.assignee] || task.assignee || "" };
-    return calculatedDue ? { ...withAssignee, dueDate: `${calculatedDue.getFullYear()}-${String(calculatedDue.getMonth() + 1).padStart(2, "0")}-${String(calculatedDue.getDate()).padStart(2, "0")}`, due: `${trackerTaskDueLabel(calculatedDue)} · ${trackerDdayLabel(calculatedDue)}` } : withAssignee;
+    const normalizedTask = { ...task, status: task.statusCode === "CANCELLED" ? "취소" : task.status };
+    return calculatedDue ? { ...normalizedTask, dueDate: `${calculatedDue.getFullYear()}-${String(calculatedDue.getMonth() + 1).padStart(2, "0")}-${String(calculatedDue.getDate()).padStart(2, "0")}`, due: `${trackerTaskDueLabel(calculatedDue)} · ${trackerDdayLabel(calculatedDue)}` } : normalizedTask;
   });
   const [phase, setPhase] = useState(currentPhaseLabel);
   const [stream, setStream] = useState("전체");
@@ -529,11 +583,18 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   const [completedOnly, setCompletedOnly] = useState(false);
   const [localQuery, setLocalQuery] = useState("");
   const [alertFilter, setAlertFilter] = useState("전체");
+  const [collapsedTaskGroups, setCollapsedTaskGroups] = useState([]);
+  const [taskSection, setTaskSection] = useState("list");
   const [startDateDraft, setStartDateDraft] = useState(taskPage.project?.startDate || "");
   const [startDateSaving, setStartDateSaving] = useState(false);
   const [startDateError, setStartDateError] = useState("");
   useEffect(() => setStartDateDraft(taskPage.project?.startDate || ""), [taskPage.project?.startDate]);
   useEffect(() => setPhase(currentPhaseLabel), [taskPage.project?.id, taskPage.project?.startDate, currentPhaseLabel]);
+  useEffect(() => setTaskSection("list"), [taskPage.project?.id]);
+  useEffect(() => setCollapsedTaskGroups([]), [taskPage.project?.id]);
+  useEffect(() => {
+    if (taskSection === "activity" && activityState?.status === "idle") onLoadActivity?.();
+  }, [taskSection, activityState?.status, onLoadActivity]);
   const phaseOrder = ["구축", "운영 1개월차", "운영 2개월차", "운영 3개월차"];
   const streamOrder = ["마케팅", "디자인", "영상", "공통", "유튜브", "인스타그램", "SEO"];
   const orderedValues = (values, order) => [...new Set(values)].sort((a, b) => {
@@ -601,8 +662,8 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
     && (category === "전체" || task.parent === category)
     && (completedOnly ? isDone(task) : (!hideDone || !isDone(task)))
     && alertMatches(task, alertFilter)
-    && (!globalNeedle || `${task.title} ${task.parent} ${task.owner} ${task.assigneeName} ${task.sourceTaskId || ""}`.toLowerCase().includes(globalNeedle))
-    && (!localNeedle || `${task.title} ${task.parent} ${task.owner} ${task.assigneeName} ${task.sourceTaskId || ""}`.toLowerCase().includes(localNeedle))), [phase, stream, category, hideDone, completedOnly, alertFilter, globalNeedle, localNeedle, tasks]);
+    && (!globalNeedle || `${task.title} ${task.parent} ${task.owner} ${task.responsibleOrg || ""} ${task.sourceTaskId || ""}`.toLowerCase().includes(globalNeedle))
+    && (!localNeedle || `${task.title} ${task.parent} ${task.owner} ${task.responsibleOrg || ""} ${task.sourceTaskId || ""}`.toLowerCase().includes(localNeedle))), [phase, stream, category, hideDone, completedOnly, alertFilter, globalNeedle, localNeedle, tasks]);
   const groupedTasks = streamStats.map((item) => ({
     ...item,
     tasks: visibleTasks.filter((task) => task.stream === item.name),
@@ -617,7 +678,11 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
   const hasPartialTaskData = Number(taskPage.total || 0) > tasks.length;
   const streamColor = { 마케팅: "#22bc7e", 디자인: "#3b82f6", 영상: "#7c9a32", 공통: "#77837d", 유튜브: "#ff4d4f", 인스타그램: "#d946ef", SEO: "#f59e0b" };
   const phaseDay = currentSchedule?.end ? Math.ceil((currentSchedule.end.getTime() - now.getTime()) / 86400000) : null;
-  const selectStream = (value) => { setStream(value); setCompletedOnly(false); };
+  const selectStream = (value) => {
+    setStream(value);
+    setCompletedOnly(false);
+    setCollapsedTaskGroups((current) => expandSelectedTaskGroup(current, value));
+  };
   const toggleCompletedOnly = () => {
     const next = !completedOnly;
     setCompletedOnly(next);
@@ -627,7 +692,6 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
       setAlertFilter("전체");
     }
   };
-  const resetFilters = () => { setPhase("전체"); setStream("전체"); setCategory("전체"); setHideDone(false); setCompletedOnly(false); setLocalQuery(""); setAlertFilter("전체"); };
   const saveProjectStartDate = async () => {
     if (!canEditProject || !onProjectUpdate || !startDateDraft) return;
     setStartDateSaving(true);
@@ -643,8 +707,13 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
 
   return <div className="view-stack tracker-view">
     <ViewHeader eyebrow="업무 관리" title="업무" description="90일 진행 흐름과 실행 항목을 한 화면에서 관리합니다.">
+      <CreateButton entityType="task-completed" onOpen={onCreate} enabled={editable}>완료 업무 추가</CreateButton>
       <CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton>
     </ViewHeader>
+
+    {role !== "client" && <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button></div>}
+
+    {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : <>
 
     <section className="tracker-control-panel panel" aria-label="업무 요약 및 90일 진행 흐름">
       <div className="tracker-control-top">
@@ -681,16 +750,21 @@ function TasksView({ role, query, taskPage, onCreate, canWrite, onUpdate, onProj
           {primaryStreamStats.map((item) => <button type="button" key={item.name} className={!completedOnly && stream === item.name ? "is-active" : ""} onClick={() => selectStream(item.name)} style={{ "--team-color": streamColor[item.name] || "var(--accent)" }}><span>{item.name}</span><strong>{item.done}/{item.total}</strong></button>)}
           <button type="button" className={completedOnly ? "is-active" : ""} aria-pressed={completedOnly} onClick={toggleCompletedOnly} style={{ "--team-color": "#0d9f6e" }}><Check size={12} /><span>완료된 작업</span><strong>{overallDone}</strong></button>
         </div>
-        <div className="tracker-filter"><ListFilter size={15} /><select aria-label="업무 구분" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="tracker-inline-search"><Search size={14} /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="업무 검색" /></label><label className="tracker-hide-done"><input type="checkbox" checked={hideDone} onChange={(event) => { setHideDone(event.target.checked); if (event.target.checked) setCompletedOnly(false); }} />완료 숨김</label><button className="tracker-filter-reset" type="button" onClick={resetFilters}>초기화</button><span className="result-count">{visibleTasks.length}건</span></div>
+        <div className="tracker-filter"><ListFilter size={15} /><select aria-label="업무 구분" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="tracker-inline-search"><Search size={14} /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="업무 검색" /></label><label className="tracker-hide-done"><input type="checkbox" checked={hideDone} onChange={(event) => { setHideDone(event.target.checked); if (event.target.checked) setCompletedOnly(false); }} />완료 숨김</label><span className="result-count">{visibleTasks.length}건</span></div>
       </div>
 
-      {groupedTasks.length ? <div className="tracker-task-groups">{groupedTasks.map((group) => <section className="tracker-task-group panel" key={group.name} style={{ "--team-color": streamColor[group.name] || "var(--accent)" }}>
-        <header><div><span className="tracker-team-dot" /><h3>{group.name}</h3></div><strong>{group.tasks.filter(isDone).length} / {group.tasks.length}</strong></header>
-        <div className="tracker-task-grid">{group.tasks.map((task) => <TrackerTaskRow key={task.id} task={task} role={role} canWrite={editable} onUpdate={onUpdate} isDone={isDone(task)} memberOptions={memberOptions} />)}</div>
-      </section>)}</div> : <EmptyState title="조건에 맞는 업무가 없습니다" description="필터를 바꾸거나 원장에 업무를 등록해 주세요." />}
+      {groupedTasks.length ? <div className="tracker-task-groups">{groupedTasks.map((group, index) => {
+        const collapsed = collapsedTaskGroups.includes(group.name);
+        const panelId = `task-group-${taskPage.project?.id || "project"}-${index}`;
+        return <section className={`tracker-task-group panel${collapsed ? " is-collapsed" : ""}`} key={group.name} style={{ "--team-color": streamColor[group.name] || "var(--accent)" }}>
+          <header><button className="tracker-task-group-toggle" type="button" aria-expanded={!collapsed} aria-controls={panelId} onClick={() => setCollapsedTaskGroups((current) => toggleCollapsedTaskGroup(current, group.name))}><div><span className="tracker-team-dot" /><h3>{group.name}</h3></div><span className="tracker-task-group-summary"><strong>{group.tasks.filter(isDone).length} / {group.tasks.length}</strong><DisclosureChevron expanded={!collapsed} className="tracker-group-chevron" size={17} /></span></button></header>
+          {!collapsed && <div className="tracker-task-grid" id={panelId}>{group.tasks.map((task) => <TrackerTaskRow key={task.id} task={task} role={role} canWrite={editable} onUpdate={onUpdate} isDone={isDone(task)} />)}</div>}
+        </section>;
+      })}</div> : <EmptyState title="조건에 맞는 업무가 없습니다" description="필터를 바꾸거나 원장에 업무를 등록해 주세요." />}
     </section>
 
     <section className="tracker-publishing panel" aria-label="단계별 콘텐츠 발행 현황"><div className="panel-heading"><div><h3>콘텐츠 발행 현황</h3></div><span className="panel-note">자동 집계</span></div>{taskPage.publishing?.phases?.length ? <div className="tracker-publishing-grid">{taskPage.publishing.phases.map((item) => <article key={item.phaseCode}><header><strong>{item.phase}</strong><span>{item.actual.total} / {item.target.total}</span></header><ProgressBar value={item.target.total ? Math.min(100, Math.round(item.actual.total / item.target.total * 100)) : 0} color="var(--accent)" /><div><span>롱폼 {item.actual.longForm}/{item.target.longForm}</span><span>숏폼 {item.actual.shortForm}/{item.target.shortForm}</span><span>인스타 {item.actual.instagram}/{item.target.instagram}</span><span>블로그 {item.actual.blog}/{item.target.blog}</span></div></article>)}</div> : <div className="tracker-publishing-empty">콘텐츠 원장 집계가 연결되면 표시됩니다.</div>}</section>
+    </>}
   </div>;
 }
 
@@ -702,12 +776,177 @@ function ContentView({ role, query, contents, onCreate, canWrite }) {
   return <div className="view-stack"><ViewHeader eyebrow="콘텐츠 관리" title="콘텐츠" description="채널별 콘텐츠의 기획·검수·게시 상태를 확인합니다.">{role !== "client" && <CreateButton entityType="content" onOpen={onCreate} enabled={canWrite}>콘텐츠 추가</CreateButton>}</ViewHeader><section className="content-summary"><div className="content-summary-title"><span>현재 조회</span><strong>{published} / {contents.length}</strong><small>발행 완료 / 전체 콘텐츠</small></div></section><div className="filter-bar"><ListFilter size={16} /><div className="segmented-control">{channels.map((item) => <button key={item} className={channel === item ? "is-active" : ""} onClick={() => setChannel(item)}>{item}</button>)}</div><span className="result-count">{visibleContents.length}건 표시</span></div>{visibleContents.length ? <div className="content-grid">{visibleContents.map((content) => <article className="content-card" key={content.id}><header><span>{content.channel}</span><i className={statusClass[content.status] || "status status-muted"}>{content.status}</i></header><p>{content.format}</p><h3>{content.title}</h3><footer><span><CalendarDays size={14} /> {content.date}</span><span>{role === "client" ? "포켓컴퍼니" : content.owner}</span></footer></article>)}</div> : <EmptyState title="등록된 콘텐츠가 없습니다" description="선택한 조건에 해당하는 콘텐츠가 없습니다." />}</div>;
 }
 
-function PerformanceView({ performance }) {
+function KpiSettingsModal({ kpis, onClose, onSave, onArchive }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = kpis.find((item) => item.id === selectedId) || null;
+  const [fields, setFields] = useState(() => kpiInitialFields());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const selectKpi = (kpi) => {
+    setSelectedId(kpi?.id || null);
+    setFields(kpiInitialFields(kpi));
+    setError(null);
+  };
+  const setField = (name, value) => setFields((current) => ({ ...current, [name]: value }));
+  const submit = async (event) => {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const nextFields = kpiSubmissionFields(fields);
+      if (!nextFields.metric_name) throw new Error("KPI 이름을 입력해 주세요.");
+      await onSave(selected, nextFields);
+      onClose();
+    } catch (saveError) {
+      setError(saveError);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const archive = async () => {
+    if (!selected || !window.confirm(`‘${selected.name}’ KPI를 보관할까요?`)) return;
+    setError(null);
+    setSaving(true);
+    try {
+      await onArchive(selected);
+      onClose();
+    } catch (archiveError) {
+      setError(archiveError);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal kpi-settings-modal" role="dialog" aria-modal="true" aria-labelledby="kpi-settings-title"><header><div><p className="editorial-kicker">Google Sheets KPI 정의</p><h2 id="kpi-settings-title">핵심 KPI 설정</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><div className="kpi-settings-layout"><aside><button type="button" className={!selected ? "is-active" : ""} onClick={() => selectKpi(null)}><Plus size={15} /> 새 KPI</button>{kpis.map((kpi) => <button type="button" key={kpi.id} className={selected?.id === kpi.id ? "is-active" : ""} onClick={() => selectKpi(kpi)}><span><strong>{kpi.name}</strong><small>목표 {kpi.target.toLocaleString()}{kpi.unit}</small></span><Pencil size={14} /></button>)}</aside><form onSubmit={submit}>
+    <label className="create-field is-wide"><span>KPI 이름</span><input autoFocus required maxLength={100} value={fields.metric_name} onChange={(event) => setField("metric_name", event.target.value)} placeholder="예: 쇼룸 방문 예약" /></label>
+    <label className="create-field"><span>목표값</span><input type="number" min="0" step="any" required value={fields.target_value} onChange={(event) => setField("target_value", event.target.value)} placeholder="0" /></label>
+    <FormSelect label="단위" value={fields.unit_code} onChange={(value) => setField("unit_code", value)} options={KPI_UNIT_OPTIONS} />
+    <FormSelect label="측정 주기" value={fields.period_type_code} onChange={(value) => setField("period_type_code", value)} options={KPI_PERIOD_OPTIONS} />
+    <FormSelect label="적용 채널" value={fields.channel_code} onChange={(value) => setField("channel_code", value)} options={KPI_CHANNEL_OPTIONS} />
+    <label className="kpi-visibility-field is-wide"><input type="checkbox" checked={fields.customer_visible} onChange={(event) => setField("customer_visible", event.target.checked)} /><span><strong>고객사 화면에 공개</strong><small>끄면 포켓·NS 운영 계정에만 표시됩니다.</small></span></label>
+    {error && <div className="form-error"><AlertCircle size={15} /><span>{error.message || "저장하지 못했습니다."}</span></div>}
+    <footer>{selected ? <button className="danger-button" type="button" onClick={archive} disabled={saving}><Trash2 size={14} /> 보관</button> : <p>프로젝트별 KPI로 저장됩니다.</p>}<div><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.metric_name.trim() || fields.target_value === ""}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : selected ? "변경 저장" : "KPI 추가"}</button></div></footer>
+  </form></div></section></div>;
+}
+
+function PerformanceView({ performance, canWrite, onKpiSave, onKpiArchive }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const kpis = performance.items || [];
   const attained = kpis.filter((item) => item.target > 0).map((item) => Math.min(100, item.value / item.target * 100));
   const average = attained.length ? Math.round(attained.reduce((sum, value) => sum + value, 0) / attained.length) : 0;
   const channelTotals = (performance.channels || []).reduce((total, item) => ({ impressions: total.impressions + Number(item.impressions || 0), engagements: total.engagements + Number(item.engagements || 0), clicks: total.clicks + Number(item.clicks || 0), inquiries: total.inquiries + Number(item.inquiries || 0) }), { impressions: 0, engagements: 0, clicks: 0, inquiries: 0 });
-  return <div className="view-stack"><ViewHeader eyebrow="성과 요약" title="성과" description="Google Sheets에 기록된 채널 성과를 목표 대비로 확인합니다."><button className="secondary-button" disabled><CalendarDays size={15} /> {performance.range ? `${performance.range.start} — ${performance.range.end}` : "최근 31일"}</button></ViewHeader><section className="performance-intro panel"><div><h3>핵심 KPI</h3><p>값이 없는 KPI는 0이 아니라 ‘데이터 없음’으로 구분됩니다.</p></div><div className="performance-score"><strong>{average}<small>%</small></strong><span>평균 달성률</span></div></section>{kpis.length ? <section className="kpi-grid">{kpis.map((kpi) => { const percent = kpi.target ? Math.min(100, Math.round(kpi.value / kpi.target * 100)) : 0; return <article key={kpi.id} className="kpi-card"><header><span>{kpi.state}</span></header><h3>{kpi.name}</h3><div className="kpi-value"><strong>{kpi.value.toLocaleString()}</strong><small>{kpi.unit}</small><span>/ 목표 {kpi.target.toLocaleString()}</span></div><ProgressBar value={percent} color={percent >= 70 ? "var(--success)" : "var(--accent)"} /><footer><span>{percent}% 달성</span><span>{kpi.source}</span></footer></article>; })}</section> : <EmptyState title="성과 데이터가 없습니다" description="KPI 정의와 실적이 원장에 입력되면 표시됩니다." />}{(performance.channels || []).length > 0 && <section className="panel funnel-panel"><div className="panel-heading"><div><h3>채널 반응 흐름</h3></div><span className="panel-note">선택 기간 합계</span></div><div className="funnel-flow">{[{ label: "노출", value: channelTotals.impressions }, { label: "반응", value: channelTotals.engagements }, { label: "클릭", value: channelTotals.clicks }, { label: "문의", value: channelTotals.inquiries }].map((item, index) => <article key={item.label}><strong>{item.value.toLocaleString()}</strong><small>{item.label}</small>{index < 3 && <ArrowRight size={17} />}</article>)}</div></section>}</div>;
+  return <div className="view-stack"><ViewHeader eyebrow="성과 요약" title="성과" description="Google Sheets에 기록된 채널 성과를 목표 대비로 확인합니다."><button className="secondary-button" disabled><CalendarDays size={15} /> {performance.range ? `${performance.range.start} — ${performance.range.end}` : "최근 31일"}</button>{canWrite && <button className="primary-button" type="button" onClick={() => setSettingsOpen(true)}><Settings2 size={15} /> KPI 설정</button>}</ViewHeader><section className="performance-intro panel"><div><h3>핵심 KPI</h3><p>값이 없는 KPI는 0이 아니라 ‘데이터 없음’으로 구분됩니다.</p></div><div className="performance-score"><strong>{average}<small>%</small></strong><span>평균 달성률</span></div></section>{kpis.length ? <section className="kpi-grid">{kpis.map((kpi) => { const percent = kpi.target ? Math.min(100, Math.round(kpi.value / kpi.target * 100)) : 0; return <article key={kpi.id} className="kpi-card"><header><span>{kpi.state}</span></header><h3>{kpi.name}</h3><div className="kpi-value"><strong>{kpi.value.toLocaleString()}</strong><small>{kpi.unit}</small><span>/ 목표 {kpi.target.toLocaleString()}</span></div><ProgressBar value={percent} color={percent >= 70 ? "var(--success)" : "var(--accent)"} /><footer><span>{percent}% 달성</span><span>{kpi.source}</span></footer></article>; })}</section> : <EmptyState title="설정된 KPI가 없습니다" description={canWrite ? "KPI 설정에서 이 프로젝트의 핵심 목표를 추가해 주세요." : "운영팀이 KPI를 설정하면 이곳에 표시됩니다."} />}{(performance.channels || []).length > 0 && <section className="panel funnel-panel"><div className="panel-heading"><div><h3>채널 반응 흐름</h3></div><span className="panel-note">선택 기간 합계</span></div><div className="funnel-flow">{[{ label: "노출", value: channelTotals.impressions }, { label: "반응", value: channelTotals.engagements }, { label: "클릭", value: channelTotals.clicks }, { label: "문의", value: channelTotals.inquiries }].map((item, index) => <article key={item.label}><strong>{item.value.toLocaleString()}</strong><small>{item.label}</small>{index < 3 && <ArrowRight size={17} />}</article>)}</div></section>}{settingsOpen && <KpiSettingsModal kpis={kpis} onClose={() => setSettingsOpen(false)} onSave={onKpiSave} onArchive={onKpiArchive} />}</div>;
+}
+
+function TrackingTrendChart({ rows, metric }) {
+  const series = dailyMetricSeries(rows, metric);
+  if (!series.length) return <EmptyState title="추이 데이터가 없습니다" description="12_성과일별 원장에 날짜별 성과를 입력하면 선 그래프가 표시됩니다." />;
+  const width = 760;
+  const height = 230;
+  const horizontalPadding = 24;
+  const verticalPadding = 28;
+  const maximum = Math.max(...series.map((item) => item.value), 1);
+  const points = series.map((item, index) => ({
+    ...item,
+    x: horizontalPadding + (series.length === 1 ? (width - horizontalPadding * 2) / 2 : index / (series.length - 1) * (width - horizontalPadding * 2)),
+    y: height - verticalPadding - item.value / maximum * (height - verticalPadding * 2),
+  }));
+  const line = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const labels = points.filter((_, index) => index === 0 || index === points.length - 1 || index % Math.max(1, Math.ceil(points.length / 5)) === 0);
+  return <div className="tracking-chart-wrap"><svg className="tracking-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${TRACKING_METRICS.find((item) => item.id === metric)?.label || metric} 일별 추이`}><line x1={horizontalPadding} y1={height - verticalPadding} x2={width - horizontalPadding} y2={height - verticalPadding} className="tracking-chart-axis" /><polyline points={line} className="tracking-chart-line" />{points.map((point) => <circle key={point.date} cx={point.x} cy={point.y} r="3.5" className="tracking-chart-point"><title>{point.date} · {point.value.toLocaleString()}</title></circle>)}{labels.map((point) => <text key={`label-${point.date}`} x={point.x} y={height - 6} textAnchor="middle">{point.date.slice(5).replace("-", ".")}</text>)}</svg><div className="tracking-chart-scale"><strong>{maximum.toLocaleString()}</strong><span>0</span></div></div>;
+}
+
+function TrackingView({ tracking }) {
+  const [metric, setMetric] = useState("impressions");
+  const totals = tracking.totals || {};
+  const funnel = trackingFunnel(totals);
+  const signals = trackingSignals({ totals, channels: tracking.channels || [] });
+  const firstStage = funnel[0]?.value || 0;
+  const latestPerformanceDate = (tracking.daily || []).at(-1)?.date || null;
+  const dataAvailable = tracking.dataAvailable !== false && (tracking.daily || []).length > 0;
+  const metricValue = (value, suffix = "") => dataAvailable ? `${Number(value || 0).toLocaleString()}${suffix}` : "—";
+  const formatMoney = (value) => `${Math.round(Number(value || 0)).toLocaleString()}원`;
+  return <div className="view-stack tracking-view"><ViewHeader eyebrow="Outcome tracking" title="성과 추적" description="실행이 콘텐츠 발행과 실제 반응·문의로 이어지는지 확인합니다."><button className="secondary-button" disabled><CalendarDays size={15} /> {tracking.range ? `${tracking.range.start} — ${tracking.range.end}` : "최근 90일"}</button></ViewHeader>
+    <section className={`tracking-source-notice ${dataAvailable ? "is-ready" : "is-empty"}`}><span /><div><strong>{dataAvailable ? "Google Sheets 성과 원장 연결됨" : "Google Sheets 연결됨 · 성과 데이터 0건"}</strong><p>{dataAvailable ? `${tracking.source || "12_성과일별"}에서 ${tracking.daily.length}일·${tracking.channels.length}개 채널을 집계했습니다.` : `${tracking.source || "12_성과일별"}에 현재 프로젝트의 일별 성과 행이 없습니다. 값이 입력되면 이 화면에 바로 집계됩니다.`}</p></div></section>
+    <section className="tracking-score-grid">
+      <article><span className="tracking-score-icon"><BarChart3 size={17} /></span><div><small>총 광고비</small><strong>{dataAvailable ? formatMoney(totals.spend) : "—"}</strong><p>{dataAvailable ? "선택 기간 합계" : "데이터 없음"}</p></div></article>
+      <article><span className="tracking-score-icon is-purple"><Activity size={17} /></span><div><small>총 노출</small><strong>{metricValue(totals.impressions)}</strong><p>{dataAvailable ? "매체 일별 원장 합계" : "데이터 없음"}</p></div></article>
+      <article><span className="tracking-score-icon is-cyan"><MousePointerClick size={17} /></span><div><small>클릭</small><strong>{metricValue(totals.clicks)}</strong><p>{dataAvailable ? "선택 기간 합계" : "데이터 없음"}</p></div></article>
+      <article><span className="tracking-score-icon is-green"><TrendingUp size={17} /></span><div><small>문의·전환</small><strong>{dataAvailable ? <>{metricValue(totals.inquiries)}<em> / {metricValue(totals.conversions)}</em></> : "—"}</strong><p>{dataAvailable ? "문의 / 최종 전환" : "데이터 없음"}</p></div></article>
+    </section>
+    <section className="tracking-main-grid">
+      <article className="panel tracking-funnel-panel"><div className="panel-heading"><div><h3>성과 흐름</h3><p>각 단계는 직전 단계 대비 전환율입니다.</p></div><span className="panel-note">12_성과일별 합계</span></div>{firstStage > 0 ? <div className="tracking-funnel-list">{funnel.map((stage, index) => <div className="tracking-funnel-stage" key={stage.id}><div className="tracking-funnel-label"><span>{index + 1}</span><strong>{stage.label}</strong><b>{stage.value.toLocaleString()}</b></div><div className="tracking-funnel-bar"><i style={{ width: `${Math.max(3, stage.value / firstStage * 100)}%` }} /></div><div className="tracking-funnel-rate">{stage.conversionRate === null ? "시작 단계" : `${stage.conversionRate.toFixed(1)}% 전환`}</div></div>)}</div> : <EmptyState title="성과 흐름 데이터가 없습니다" description="노출·반응·클릭·문의가 기록되면 단계별 전환을 계산합니다." />}</article>
+      <article className="panel tracking-signal-panel"><div className="panel-heading"><div><h3>현재 성과 신호</h3><p>고정 문구가 아닌 선택 기간의 원장값으로 판정합니다.</p></div></div>{signals.length ? <div className="tracking-signal-list">{signals.map((signal) => <div key={signal.id} className={`tracking-signal is-${signal.tone}`}><span /><div><small>{signal.label}</small><strong>{signal.value}</strong><p>{signal.detail}</p></div></div>)}</div> : <EmptyState title="판정할 데이터가 없습니다" description="성과와 실행 데이터가 쌓이면 병목과 기여 채널을 표시합니다." />}</article>
+    </section>
+    <section className="panel tracking-trend-panel"><div className="panel-heading"><div><h3>일별 성과 추이</h3><p>급증·하락이 발생한 날짜를 확인합니다.</p></div><div className="tracking-metric-tabs">{TRACKING_METRICS.map((item) => <button type="button" key={item.id} className={metric === item.id ? "is-active" : ""} onClick={() => setMetric(item.id)}>{item.label}</button>)}</div></div><TrackingTrendChart rows={tracking.daily || []} metric={metric} /></section>
+    <section className="tracking-bottom-grid"><article className="panel tracking-channel-panel"><div className="panel-heading"><div><h3>채널별 성과 기여</h3><p>비용과 문의 성과를 같은 기준으로 비교합니다.</p></div></div>{(tracking.channels || []).length ? <div className="tracking-table-scroll"><table className="tracking-channel-table"><thead><tr><th>채널</th><th>광고비</th><th>노출</th><th>반응</th><th>클릭</th><th>CTR</th><th>문의</th><th>문의당 비용</th></tr></thead><tbody>{tracking.channels.map((channel) => { const ctr = channel.impressions ? channel.clicks / channel.impressions * 100 : null; const cpl = channel.inquiries ? channel.spend / channel.inquiries : null; return <tr key={channel.channelCode}><td><span className="tracking-channel-dot" />{channel.label}</td><td>{formatMoney(channel.spend)}</td><td>{channel.impressions.toLocaleString()}</td><td>{channel.engagements.toLocaleString()}</td><td>{channel.clicks.toLocaleString()}</td><td>{ctr === null ? "-" : `${ctr.toFixed(2)}%`}</td><td><strong>{channel.inquiries.toLocaleString()}</strong></td><td>{cpl === null ? "-" : formatMoney(cpl)}</td></tr>; })}</tbody></table></div> : <EmptyState title="채널별 데이터가 없습니다" description="성과일별 원장에 채널 코드와 실적을 입력하면 비교표가 표시됩니다." />}</article>
+      <article className="panel tracking-goal-panel"><div className="panel-heading"><div><h3>데이터 상태</h3><p>화면에 사용된 Google Sheets 원장 범위입니다.</p></div></div><div className="tracking-data-state"><div><span>원장</span><strong>12_성과일별</strong></div><div><span>최신 실적일</span><strong>{latestPerformanceDate || "데이터 없음"}</strong></div><div><span>기록 일수</span><strong>{(tracking.daily || []).length.toLocaleString()}일</strong></div><div><span>집계 채널</span><strong>{(tracking.channels || []).length.toLocaleString()}개</strong></div></div></article></section>
+  </div>;
+}
+
+function AccessAccountModal({ account, projects, onClose, onSave }) {
+  const firstAccess = account?.accesses?.[0] || null;
+  const [fields, setFields] = useState(() => ({
+    account: account?.account || "",
+    displayName: account?.displayName || "",
+    accessCode: "",
+    projectId: firstAccess?.projectId || projects[0]?.id || "",
+    membershipId: firstAccess?.id || "",
+    allowedPages: normalizeAllowedPages(firstAccess?.allowedPages?.length ? firstAccess.allowedPages : ["overview", "plan", "tasks", "content", "tracking", "performance", "files"]),
+    enabled: account?.enabled !== false,
+  }));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const setField = (key, value) => setFields((current) => ({ ...current, [key]: value }));
+  const togglePage = (page) => setFields((current) => ({
+    ...current,
+    allowedPages: current.allowedPages.includes(page)
+      ? current.allowedPages.filter((item) => item !== page)
+      : normalizeAllowedPages([...current.allowedPages, page]),
+  }));
+  const submit = async (event) => {
+    event.preventDefault();
+    setError(null);
+    if (!account && !fields.accessCode) return setError(new Error("신규 계정의 임시 비밀번호를 입력해 주세요."));
+    if (!fields.allowedPages.length) return setError(new Error("접근 가능한 페이지를 하나 이상 선택해 주세요."));
+    setSaving(true);
+    try {
+      await onSave(accountSubmission(fields));
+      onClose();
+    } catch (saveError) {
+      setError(saveError);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const disable = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ ...accountSubmission(fields), operation: "DISABLE", enabled: false });
+      onClose();
+    } catch (saveError) {
+      setError(saveError);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal access-account-modal" role="dialog" aria-modal="true" aria-labelledby="access-account-title"><header><div><p className="editorial-kicker">Google Sheets 계정·권한 원장</p><h2 id="access-account-title">{account ? "고객사 계정 관리" : "고객사 계정 생성"}</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
+    <div className="access-form-grid"><label className="create-field"><span>로그인 아이디</span><input value={fields.account} onChange={(event) => setField("account", event.target.value)} placeholder="예: und-client" disabled={Boolean(account)} required /></label><label className="create-field"><span>표시 이름</span><input value={fields.displayName} onChange={(event) => setField("displayName", event.target.value)} placeholder="예: UND 담당자" required /></label><label className="create-field"><span>{account ? "새 비밀번호 · 변경할 때만" : "임시 비밀번호"}</span><input type="password" autoComplete="new-password" value={fields.accessCode} onChange={(event) => setField("accessCode", event.target.value)} placeholder="8자 이상" required={!account} /></label><FormSelect label="계정 상태" value={fields.enabled ? "ACTIVE" : "DISABLED"} onChange={(value) => setField("enabled", value === "ACTIVE")} options={[["ACTIVE", "사용 중"], ["DISABLED", "사용 중지"]]} /><FormSelect label="접근 프로젝트" value={fields.projectId} onChange={(value) => setField("projectId", value)} options={projects.map((project) => [project.id, project.name])} /></div>
+    <fieldset className="access-page-fieldset"><legend>접근 가능한 페이지</legend><p>체크하지 않은 페이지는 메뉴에서 숨기고 서버 조회도 차단합니다.</p><div>{ACCESS_PAGE_OPTIONS.map((page) => <label key={page.id}><input type="checkbox" checked={fields.allowedPages.includes(page.id)} onChange={() => togglePage(page.id)} /><span>{page.label}</span></label>)}</div></fieldset>
+    {error && <div className="form-error"><AlertCircle size={14} />{error.message}</div>}
+    <footer>{account && <button type="button" className="danger-button" onClick={disable} disabled={saving || !fields.projectId}>계정 비활성화</button>}<span /><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.account.trim() || !fields.displayName.trim() || !fields.projectId || !fields.allowedPages.length}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "권한 저장"}</button></footer>
+  </form></section></div>;
+}
+
+function PermissionsView({ access, onSave }) {
+  const [editing, setEditing] = useState(undefined);
+  const accounts = access.accounts || [];
+  const pageLabel = Object.fromEntries(ACCESS_PAGE_OPTIONS.map((page) => [page.id, page.label]));
+  const activeCount = accounts.filter((account) => account.enabled).length;
+  return <div className="view-stack"><ViewHeader eyebrow="고객 계정 관리" title="권한 관리" description="고객사 계정을 만들고 프로젝트별로 볼 수 있는 페이지를 지정합니다."><button className="primary-button" type="button" onClick={() => setEditing(null)}><Plus size={15} /> 고객사 계정 생성</button></ViewHeader><section className="access-summary"><article><span>고객 계정</span><strong>{accounts.length}</strong></article><article><span>활성 계정</span><strong>{activeCount}</strong></article><article><span>배정 프로젝트</span><strong>{access.projects?.length || 0}</strong></article></section><section className="panel access-panel"><div className="panel-heading"><div><h3>계정별 접근 범위</h3><p>비밀번호 원문은 저장하거나 다시 표시하지 않습니다.</p></div></div>{accounts.length ? <div className="access-account-list">{accounts.map((account) => {
+    const primaryAccess = account.accesses?.[0];
+    return <button type="button" key={account.id} className="access-account-row" onClick={() => setEditing(account)}><span className={`access-account-state ${account.enabled ? "is-active" : ""}`}><ShieldCheck size={16} /></span><span className="access-account-identity"><strong>{account.displayName}</strong><small>{account.account}</small></span><span className="access-account-project"><small>프로젝트</small><strong>{primaryAccess?.projectName || "미배정"}</strong></span><span className="access-page-badges">{(primaryAccess?.allowedPages || []).map((page) => <i key={page}>{pageLabel[page] || page}</i>)}</span><span className={`status ${account.enabled ? "status-success" : "status-muted"}`}>{account.enabled ? "사용 중" : "중지"}</span><Pencil size={15} /></button>;
+  })}</div> : <EmptyState title="등록된 고객사 계정이 없습니다" description="고객사 계정 생성 버튼에서 첫 계정을 추가하세요." />}</section>{editing !== undefined && <AccessAccountModal account={editing} projects={access.projects || []} onClose={() => setEditing(undefined)} onSave={onSave} />}</div>;
 }
 
 function FilesView({ role, files, activities, onCreate, canWrite }) {
@@ -799,51 +1038,23 @@ function PlanView({ plan, project, planVariant }) {
   </div>;
 }
 
-function AppContent({ view, planVariant, project, role, search, setView, pageState, onRetry, onCreate, onTaskUpdate, onProjectUpdate, canWrite }) {
+function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onProjectUpdate, onKpiSave, onKpiArchive, onAccessSave, canWrite }) {
   if (pageState.status === "loading" && !pageState.data) return <LoadingState />;
   if (pageState.status === "error" && !pageState.data) return <ErrorState error={pageState.error} onRetry={onRetry} />;
   const data = pageState.data || {};
   if (view === "plan") return <PlanView plan={data} project={project} planVariant={planVariant} />;
-  if (view === "tasks") return <TasksView role={role} query={search} taskPage={{ ...data, project: data.project || { id: project.id, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion } }} onCreate={onCreate} onUpdate={onTaskUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} />;
+  if (view === "tasks") return <TasksView role={role} query={search} taskPage={{ ...data, project: data.project || { id: project.id, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} />;
   if (view === "content") return <ContentView role={role} query={search} contents={data.items || []} onCreate={onCreate} canWrite={canWrite} />;
-  if (view === "performance") return <PerformanceView performance={data} />;
+  if (view === "tracking") return <TrackingView tracking={data} />;
+  if (view === "performance") return <PerformanceView performance={data} canWrite={canWrite && role !== "client"} onKpiSave={onKpiSave} onKpiArchive={onKpiArchive} />;
+  if (view === "permissions") return role === "pocket" ? <PermissionsView access={data} onSave={onAccessSave} /> : <ErrorState error={new Error("포켓 운영 계정만 접근할 수 있습니다.")} />;
   if (view === "files") return <FilesView role={role} files={data.files?.items || []} activities={data.activities?.items || []} onCreate={onCreate} canWrite={canWrite} />;
   return <OverviewView project={data.project || project} role={role} activities={data.activities || []} onNavigate={setView} />;
 }
 
 const blankPage = { status: "idle", data: null, error: null, resource: null, projectId: null };
+const blankTaskActivity = { status: "idle", data: null, error: null, projectId: null };
 const RESOURCE_CACHE_TTL_MS = 10 * 60_000;
-const WORKSPACE_FALLBACK_DELAY_MS = 4_000;
-
-function workspaceFirstRequest(workspaceRequest, resource, fallback) {
-  if (!workspaceRequest) return fallback();
-  let fallbackRequest = null;
-  const runFallback = () => {
-    if (!fallbackRequest) fallbackRequest = fallback();
-    return fallbackRequest;
-  };
-  return new Promise((resolve, reject) => {
-    let fallbackStarted = false;
-    const startFallback = () => {
-      if (fallbackStarted) return;
-      fallbackStarted = true;
-      runFallback().then(resolve, reject);
-    };
-    const timer = window.setTimeout(startFallback, WORKSPACE_FALLBACK_DELAY_MS);
-    workspaceRequest.then((views) => {
-      if (views && Object.prototype.hasOwnProperty.call(views, resource)) {
-        window.clearTimeout(timer);
-        resolve(views[resource]);
-        return;
-      }
-      window.clearTimeout(timer);
-      startFallback();
-    }, () => {
-      window.clearTimeout(timer);
-      startFallback();
-    });
-  });
-}
 
 export function App() {
   const [{ source, error: configError }] = useState(sourceFactory);
@@ -856,6 +1067,7 @@ export function App() {
   const [bootstrapState, setBootstrapState] = useState(blankPage);
   const [overviewState, setOverviewState] = useState(blankPage);
   const [resourceState, setResourceState] = useState(blankPage);
+  const [taskActivityState, setTaskActivityState] = useState(blankTaskActivity);
   const [activeClient, setActiveClient] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const initialLocation = typeof window !== "undefined" ? parseViewLocation(window.location.hash) : { view: "overview", planVariant: DEFAULT_PLAN_VARIANT };
@@ -876,6 +1088,7 @@ export function App() {
   const resourceRequestRef = useRef(new Map());
   const workspaceRequestRef = useRef(new Map());
   const resourceCacheEpochRef = useRef(0);
+  const taskActivityRequestRef = useRef(null);
   const live = Boolean(source);
   const compactViewport = useMediaQuery("(max-width: 900px)");
   const actorRole = bootstrapState.data?.actor?.role || "client";
@@ -912,6 +1125,14 @@ export function App() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [navigation.isDrawerOpen]);
+  useEffect(() => {
+    if (bootstrapState.status !== "ready" || actorRole !== "client" || !activeProjectId) return;
+    const allowedPages = bootstrapState.data?.projects?.[activeProjectId]?.allowedPages || [];
+    if (isViewAllowed(view, allowedPages)) return;
+    const fallbackView = firstAllowedView(allowedPages);
+    setView(fallbackView);
+    setPlanVariant(DEFAULT_PLAN_VARIANT);
+  }, [bootstrapState.status, bootstrapState.data, actorRole, activeProjectId, view]);
 
   const applyBootstrapEnvelope = useCallback((envelope) => {
     const data = bootstrapViewModel(envelope);
@@ -929,6 +1150,8 @@ export function App() {
     // as soon as the small client/project envelope arrives.
     setOverviewState(blankPage);
     setResourceState(blankPage);
+    setTaskActivityState(blankTaskActivity);
+    taskActivityRequestRef.current = null;
     resourceCacheEpochRef.current += 1;
     resourceCacheRef.current.clear();
     resourceRequestRef.current.clear();
@@ -1023,11 +1246,13 @@ export function App() {
   }, [source, activeProjectId, view, bootstrapState.status, bootstrapState.data, overviewState.status, overviewState.projectId, pageRefreshKey]);
 
   useEffect(() => {
-    if (!source || !activeProjectId || bootstrapState.status !== "ready") return undefined;
-    const overviewPending = view === "overview" && !(
-      overviewState.status === "ready" && overviewState.projectId === activeProjectId
-    );
-    if (overviewPending) return undefined;
+    if (!source || !activeProjectId || bootstrapState.status !== "ready" || view === "permissions") return undefined;
+    const activeViewReady = view === "overview"
+      ? overviewState.status === "ready" && overviewState.projectId === activeProjectId
+      : resourceState.status === "ready" && resourceState.resource === activeResource && resourceState.projectId === activeProjectId;
+    // The snapshot is only a later-navigation cache warmer. Never let it
+    // compete with the focused screen's first request.
+    if (!activeViewReady) return undefined;
 
     const requestKey = `${activeProjectId}:${pageRefreshKey}`;
     if (workspaceRequestRef.current.has(requestKey)) return undefined;
@@ -1062,7 +1287,7 @@ export function App() {
       .catch(() => null);
     workspaceRequestRef.current.set(requestKey, request);
     return undefined;
-  }, [source, activeProjectId, view, bootstrapState.status, bootstrapState.data, overviewState.status, overviewState.projectId, pageRefreshKey]);
+  }, [source, activeProjectId, view, activeResource, bootstrapState.status, bootstrapState.data, overviewState.status, overviewState.projectId, resourceState.status, resourceState.resource, resourceState.projectId, pageRefreshKey]);
 
   useEffect(() => {
     if (!source || !activeProjectId || view === "overview" || bootstrapState.status !== "ready") return undefined;
@@ -1086,15 +1311,16 @@ export function App() {
         if (view === "plan") return source.plan({ ...params, planType: PLAN_VARIANTS[authorizedPlanVariant].apiValue }).then(planViewModel);
         if (view === "tasks") return source.tasks(params).then(tasksViewModel);
         if (view === "content") return source.contents(params).then(contentsViewModel);
+        if (view === "tracking") return source.tracking(params).then(performanceTrackingViewModel);
         if (view === "performance") return source.performance(params).then(performanceViewModel);
         if (view === "files") return Promise.all([source.files(params), source.activity(params)]).then(([files, activity]) => ({ files: filesViewModel(files), activities: activityListViewModel(activity) }));
+        if (view === "permissions") return source.permissions().then(accessAdminViewModel);
         return Promise.reject(new Error(`Unsupported resource: ${view}`));
       };
-      request = workspaceFirstRequest(
-        workspaceRequestRef.current.get(`${activeProjectId}:${pageRefreshKey}`),
-        activeResource,
-        fallback,
-      );
+      // A focused endpoint is smaller and predictably faster than waiting for
+      // the all-tab project snapshot. The snapshot still warms later tabs in
+      // the background after this screen becomes usable.
+      request = fallback();
       resourceRequestRef.current.set(requestKey, request);
       request.finally(() => {
         if (resourceRequestRef.current.get(requestKey) === request) resourceRequestRef.current.delete(requestKey);
@@ -1125,9 +1351,10 @@ export function App() {
   const handleLogin = async (credentials) => {
     setLoginError(null);
     try {
-      await source.login(credentials);
+      const result = await source.login(credentials);
+      if (result.bootstrap) applyBootstrapEnvelope(result.bootstrap);
       setSession(source.getSession());
-      await loadBootstrap();
+      if (!result.bootstrap) await loadBootstrap();
     } catch (error) { setLoginError(error); }
   };
 
@@ -1138,6 +1365,8 @@ export function App() {
     setBootstrapState(blankPage);
     setOverviewState(blankPage);
     setResourceState(blankPage);
+    setTaskActivityState(blankTaskActivity);
+    taskActivityRequestRef.current = null;
     resourceCacheEpochRef.current += 1;
     resourceCacheRef.current.clear();
     resourceRequestRef.current.clear();
@@ -1183,6 +1412,43 @@ export function App() {
   const canWriteTasks = canWrite || (live && source.config.loginEnabled === false);
   const connectionReady = live && Boolean(sourceState.lastSuccessfulAt);
 
+  const loadTaskActivity = async () => {
+    const projectId = activeProjectId;
+    if (!source || !projectId) return null;
+    const requestKey = projectId;
+    if (taskActivityRequestRef.current?.key === requestKey) return taskActivityRequestRef.current.promise;
+
+    setTaskActivityState((current) => ({
+      status: "loading",
+      data: current.projectId === projectId ? current.data : null,
+      error: null,
+      projectId,
+    }));
+    const request = source.activity({ projectId, entityType: "TASK", limit: 100 })
+      .then((envelope) => {
+        if (activeProjectIdRef.current !== projectId) return null;
+        const data = activityListViewModel(envelope);
+        setTaskActivityState({ status: "ready", data, error: null, projectId });
+        return data;
+      })
+      .catch((error) => {
+        if (activeProjectIdRef.current !== projectId) return null;
+        if (error.code === "unauthorized") setSession(null);
+        setTaskActivityState((current) => ({
+          status: "error",
+          data: current.projectId === projectId ? current.data : null,
+          error,
+          projectId,
+        }));
+        return null;
+      })
+      .finally(() => {
+        if (taskActivityRequestRef.current?.promise === request) taskActivityRequestRef.current = null;
+      });
+    taskActivityRequestRef.current = { key: requestKey, promise: request };
+    return request;
+  };
+
   const createRecord = async (entityType, fields) => {
     const nextFields = entityType === "file" ? { ...fields, entity_type: "PROJECT", entity_id: activeProjectId } : fields;
     await source.mutate({
@@ -1196,6 +1462,7 @@ export function App() {
       activitySynced = false;
     }
     setSaveNotice(activitySynced ? "Google Sheets 원장에 저장했습니다." : "원장 저장은 완료됐지만 활동 목록 새로고침은 재시도가 필요합니다.");
+    if (entityType === "task") setTaskActivityState({ ...blankTaskActivity, projectId: activeProjectId });
     setPageRefreshKey((value) => value + 1);
   };
 
@@ -1251,7 +1518,9 @@ export function App() {
       patchTaskResource(projectId, task.id, (current) => canonicalTask
         ? { ...current, ...canonicalTask }
         : { ...taskWithMutationFields(current, fields), rowVersion: Number(current.rowVersion || 0) + 1 });
+      setTaskActivityState({ ...blankTaskActivity, projectId });
       setSaveNotice("업무 변경사항을 Google Sheets 원장에 저장했습니다.");
+      setPageRefreshKey((value) => value + 1);
       return canonicalTask;
     } catch (error) {
       patchTaskResource(projectId, task.id, () => previousTask);
@@ -1291,6 +1560,75 @@ export function App() {
     setPageRefreshKey((value) => value + 1);
   };
 
+  const saveKpiDefinition = async (kpi, fields) => {
+    if (!canWrite || role === "client") {
+      const readOnlyError = new Error("이 계정은 KPI를 설정할 권한이 없습니다.");
+      readOnlyError.code = "forbidden";
+      throw readOnlyError;
+    }
+    const mutation = kpi ? {
+      entityType: "kpi_definition",
+      operation: "UPDATE",
+      id: kpi.id,
+      expectedRowVersion: kpi.rowVersion,
+      fields,
+    } : {
+      entityType: "kpi_definition",
+      operation: "CREATE",
+      fields,
+    };
+    try {
+      await source.mutate({ projectId: activeProjectId, mutation });
+    } catch (error) {
+      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      throw error;
+    }
+    resourceCacheEpochRef.current += 1;
+    resourceCacheRef.current.delete(`${activeProjectId}:performance`);
+    setSaveNotice(kpi ? "KPI 목표를 Google Sheets 원장에 수정했습니다." : "새 KPI를 Google Sheets 원장에 추가했습니다.");
+    setPageRefreshKey((value) => value + 1);
+  };
+
+  const archiveKpiDefinition = async (kpi) => {
+    if (!canWrite || role === "client") {
+      const readOnlyError = new Error("이 계정은 KPI를 보관할 권한이 없습니다.");
+      readOnlyError.code = "forbidden";
+      throw readOnlyError;
+    }
+    try {
+      await source.mutate({
+        projectId: activeProjectId,
+        mutation: {
+          entityType: "kpi_definition",
+          operation: "ARCHIVE",
+          id: kpi.id,
+          expectedRowVersion: kpi.rowVersion,
+          fields: {},
+        },
+      });
+    } catch (error) {
+      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      throw error;
+    }
+    resourceCacheEpochRef.current += 1;
+    resourceCacheRef.current.delete(`${activeProjectId}:performance`);
+    setSaveNotice("KPI를 보관했습니다.");
+    setPageRefreshKey((value) => value + 1);
+  };
+
+  const saveAccessAccount = async (account) => {
+    if (role !== "pocket") {
+      const forbidden = new Error("포켓 운영 계정만 고객 권한을 관리할 수 있습니다.");
+      forbidden.code = "forbidden";
+      throw forbidden;
+    }
+    await source.accessAdminMutate({ operation: account.operation, account });
+    resourceCacheEpochRef.current += 1;
+    resourceCacheRef.current.delete(`${activeProjectId}:permissions`);
+    setSaveNotice(account.operation === "DISABLE" ? "고객사 계정을 비활성화했습니다." : "고객사 계정과 페이지 권한을 저장했습니다.");
+    setPageRefreshKey((value) => value + 1);
+  };
+
   const selectClient = (clientId) => {
     const client = bootstrapState.data.clients.find((item) => item.id === clientId);
     if (!client) return;
@@ -1299,12 +1637,16 @@ export function App() {
     activeProjectIdRef.current = client.projectId;
     setOverviewState({ ...blankPage, status: "loading", resource: "overview", projectId: client.projectId });
     setResourceState(blankPage);
+    setTaskActivityState({ ...blankTaskActivity, projectId: client.projectId });
+    taskActivityRequestRef.current = null;
     setView("overview");
     setSearch("");
     if (!navigation.usesDrawer) setDesktopNavigationLevel(2);
   };
 
   const navigateToView = (nextView, nextPlanVariant = planVariant) => {
+    if (role === "client" && !isViewAllowed(nextView, project.allowedPages)) return;
+    if (nextView === "permissions" && role !== "pocket") return;
     if (nextView === "plan") setPlanVariant(nextPlanVariant);
     setView(nextView);
   };
@@ -1320,9 +1662,9 @@ export function App() {
   return (
     <div className={`app-shell ${navigation.shellCollapsed ? "is-navigation-collapsed" : ""} ${navigation.clientRailCollapsed ? "is-client-rail-collapsed" : ""} ${navigation.projectSidebarCollapsed ? "is-project-sidebar-collapsed" : ""} ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""}`}>
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
-      <ProjectSidebar project={project} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
+      <ProjectSidebar project={project} role={role} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} canWrite={view === "tasks" ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={view === "tasks" ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
     </div>

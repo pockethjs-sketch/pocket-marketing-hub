@@ -43,6 +43,13 @@ function mhSetupInitialize() {
   return mhSetupValidate();
 }
 
+function mhSetupEnsurePermissionAccessColumn() {
+  var added = mhEnsureMembershipAccessHeader_();
+  mhUseFreshTables_();
+  mhAssertHeaders_(MH_SHEETS.MEMBERSHIPS, ['allowed_pages_json']);
+  return { ok: true, added: added, sheet: MH_SHEETS.MEMBERSHIPS, field: 'allowed_pages_json' };
+}
+
 function mhSetupRegisterStagedAccount() {
   var properties = PropertiesService.getScriptProperties();
   var email = mhNormalizeLoginAccount_(properties.getProperty('SETUP_ACCOUNT_EMAIL'));
@@ -133,7 +140,7 @@ function mhSetupProvisionSharedAccounts(pocketAccessCode, nsAccessCode) {
     MH_SETTINGS_MEMORY_CACHE = null;
     mhUseFreshTables_();
     mhAssertHeaders_(MH_SHEETS.USERS, ['user_id', 'email', 'role_code', 'status_code', 'archived_at']);
-    mhAssertHeaders_(MH_SHEETS.MEMBERSHIPS, ['membership_id', 'user_id', 'client_id', 'project_id', 'permission_code', 'status_code', 'archived_at']);
+    mhAssertHeaders_(MH_SHEETS.MEMBERSHIPS, ['membership_id', 'user_id', 'client_id', 'project_id', 'permission_code', 'status_code', 'allowed_pages_json', 'archived_at']);
     mhAssertUniqueKey_(MH_SHEETS.USERS, 'user_id');
     mhAssertUniqueKey_(MH_SHEETS.MEMBERSHIPS, 'membership_id');
     mhAssertUniqueMemberships_();

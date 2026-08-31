@@ -28,6 +28,16 @@ function doPost(e) {
       return mhJsonOutput_(mhSuccess_(requestId, null, null, mhHealth_(), mhRevision_()));
     }
     if (action === 'login') {
+      if (mhAsBoolean_(request.includeBootstrap)) {
+        var loginResult = mhLoginBootstrap_(request);
+        return mhJsonOutput_(mhSuccess_(
+          requestId,
+          loginResult.actor,
+          loginResult.scope,
+          loginResult.data,
+          mhRevision_()
+        ));
+      }
       return mhJsonOutput_(mhSuccess_(requestId, null, null, mhLogin_(request), mhRevision_()));
     }
     if (action === 'preview_session') {
@@ -64,6 +74,17 @@ function doPost(e) {
         throw mhApiError_('forbidden', 'deep_health_requires_manager', 403);
       }
       return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhDeepHealth_(), mhRevision_()));
+    }
+    if (action === 'access_admin') {
+      return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhReadPermissionAdmin_(actor), mhRevision_()));
+    }
+    if (action === 'access_admin_mutate') {
+      return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhPermissionAdminMutate_(request, actor), mhRevision_()));
+    }
+    if (action === 'provision_muguk') {
+      return mhJsonOutput_(mhSuccess_(
+        requestId, actor, null, mhProvisionMugukProject_(actor), mhRevision_()
+      ));
     }
     if (MH_READ_ACTIONS[action]) {
       var readResult = mhHandleRead_(action, request, actor);

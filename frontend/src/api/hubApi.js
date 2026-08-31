@@ -9,9 +9,11 @@ export const READ_ACTIONS = Object.freeze({
   plan: "project_plan",
   tasks: "tasks",
   contents: "contents",
+  tracking: "performance_tracking",
   performance: "performance",
   files: "files",
   activity: "activity",
+  permissions: "access_admin",
 });
 
 function scopeQuery(params = {}) {
@@ -25,6 +27,7 @@ function scopeQuery(params = {}) {
     query: params.query,
     status: params.status,
     channel: params.channel,
+    entityType: params.entityType,
     planType: params.planType,
   };
 }
@@ -56,11 +59,18 @@ export function createHubApi(config, options = {}) {
       body: {
         account: String(credentials.account || credentials.email || "").trim(),
         accessCode: String(credentials.accessCode || ""),
+        includeBootstrap: true,
       },
       signal: credentials.signal,
     });
-    sessionStore.write(response.data);
-    return response;
+    const payload = response.data || {};
+    const session = payload.session || payload;
+    sessionStore.write(session);
+    return {
+      ...response,
+      data: session,
+      bootstrap: payload.bootstrap ? { ...response, data: payload.bootstrap } : null,
+    };
   }
 
   async function previewSession(options = {}) {
@@ -141,6 +151,17 @@ export function createHubApi(config, options = {}) {
     });
   }
 
+  async function accessAdminMutate(input = {}) {
+    return http.request("access_admin_mutate", {
+      signal: input.signal,
+      body: {
+        auth: { sessionToken: sessionToken() },
+        operation: input.operation || input.account?.operation || "UPSERT",
+        account: input.account || input.fields || {},
+      },
+    });
+  }
+
   return Object.freeze({
     read,
     login,
@@ -155,9 +176,12 @@ export function createHubApi(config, options = {}) {
     plan: (params) => read("plan", params),
     tasks: (params) => read("tasks", params),
     contents: (params) => read("contents", params),
+    tracking: (params) => read("tracking", params),
     performance: (params) => read("performance", params),
     files: (params) => read("files", params),
     activity: (params) => read("activity", params),
+    permissions: (params) => read("permissions", params),
+    accessAdminMutate,
     mutate,
   });
 }

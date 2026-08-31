@@ -7,7 +7,7 @@ import { OfflineMutationError } from "../src/api/errors.js";
 import { HubApiError } from "../src/api/errors.js";
 import { createHubApi } from "../src/api/hubApi.js";
 import { createSessionStore } from "../src/api/session.js";
-import { bootstrapViewModel, overviewViewModel, tasksViewModel, workspaceViewModel } from "../src/api/viewModel.js";
+import { activityListViewModel, bootstrapViewModel, overviewViewModel, performanceTrackingViewModel, tasksViewModel, workspaceViewModel } from "../src/api/viewModel.js";
 
 test("API URL이 없으면 설정 오류를 명확히 반환한다", async () => {
   const config = readApiConfig({ VITE_POCKET_API_MODE: "auto" });
@@ -108,6 +108,7 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
       assert.ok(new URL(call.url).searchParams.get("_mh"), "Apps Script redirect cache buster is required");
     });
     assert.equal(calls[0].body.account, "pocket@hub.local");
+    assert.equal(calls[0].body.includeBootstrap, true);
     assert.equal(calls[1].body.auth.sessionToken, "session-token");
     assert.equal(calls[2].body.action, "mutate");
     assert.equal(calls[2].body.auth.sessionToken, "session-token");
@@ -119,6 +120,43 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
     assert.equal(calls[3].body.mutation.expectedRowVersion, 7);
     assert.deepEqual(calls[3].body.mutation.fields, { start_date: "2026-09-07" });
     assert.equal(JSON.stringify([...storageMap.values()]).includes("long-access-code"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("로그인은 세션과 최소 bootstrap을 한 응답으로 분리해 보관한다", async () => {
+  const originalFetch = globalThis.fetch;
+  const storageMap = new Map();
+  const storage = {
+    getItem: (key) => storageMap.get(key) || null,
+    setItem: (key, value) => storageMap.set(key, value),
+    removeItem: (key) => storageMap.delete(key),
+  };
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    assert.equal(body.action, "login");
+    assert.equal(body.includeBootstrap, true);
+    return new Response(JSON.stringify({
+      ok: true,
+      generatedAt: "2026-08-31T10:00:00+09:00",
+      actor: { userId: "U-1", displayName: "포켓", role: "POCKET_MANAGER" },
+      data: {
+        session: { token: "combined-token", expiresIn: 3600, user: { userId: "U-1", displayName: "포켓", role: "POCKET_MANAGER" } },
+        bootstrap: { currentUser: { userId: "U-1" }, clients: [], projects: [], channels: [] },
+      },
+    }), { status: 200 });
+  };
+
+  try {
+    const api = createHubApi(
+      { endpoint: "https://example.invalid/api", timeoutMs: 3000, credentials: "omit" },
+      { sessionStore: createSessionStore(storage) },
+    );
+    const result = await api.login({ account: "pocket", accessCode: "access-code" });
+    assert.equal(result.data.token, "combined-token");
+    assert.deepEqual(result.bootstrap.data.clients, []);
+    assert.equal(api.getSession().token, "combined-token");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -153,6 +191,41 @@ test("workspace 조회는 project_snapshot 액션으로 프로젝트 범위를 �
     assert.equal(calls[1].projectId, "P-1");
     assert.equal(calls[1].limit, 200);
     assert.equal(calls[1].auth.sessionToken, "session-token");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("업무 로그 조회는 TASK 엔터티 필터를 API에 전달한다", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const storageMap = new Map();
+  const storage = {
+    getItem: (key) => storageMap.get(key) || null,
+    setItem: (key, value) => storageMap.set(key, value),
+    removeItem: (key) => storageMap.delete(key),
+  };
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body);
+    const data = body.action === "login"
+      ? { token: "session-token", expiresIn: 3600, user: { userId: "U-1", role: "POCKET_MANAGER" } }
+      : { items: [] };
+    return new Response(JSON.stringify({ ok: true, generatedAt: "2026-08-26T10:00:00+09:00", data }), { status: 200 });
+  };
+
+  try {
+    const api = createHubApi(
+      { endpoint: "https://example.invalid/api", timeoutMs: 3000, credentials: "omit" },
+      { sessionStore: createSessionStore(storage) },
+    );
+    await api.login({ account: "manager@example.com", accessCode: "access-code" });
+    await api.activity({ projectId: "P-1", entityType: "TASK", limit: 100 });
+
+    assert.equal(calls[1].action, "activity");
+    assert.equal(calls[1].projectId, "P-1");
+    assert.equal(calls[1].entityType, "TASK");
+    assert.equal(calls[1].limit, 100);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -407,6 +480,152 @@ test("Sheets 응답을 Pocket 화면 뷰모델로 변환한다", () => {
   assert.equal(taskPage.publishing.phases[0].actual.total, 7);
 });
 
+test("업무 뷰모델은 개인 assignee와 별개로 담당 조직 코드를 고정 라벨로 보존한다", () => {
+  const taskPage = tasksViewModel({
+    data: {
+      items: [
+        { task_id: "T-1", title: "포켓 업무", responsible_org_code: "POCKET", assignee_user_id: "USR-1" },
+        { task_id: "T-2", title: "NS 업무", responsible_org_code: "NS", assignee_user_id: "USR-2" },
+        { task_id: "T-3", title: "고객 업무", responsible_org_code: "CLIENT", assignee_user_id: "USR-3" },
+      ],
+    },
+  });
+
+  assert.deepEqual(
+    taskPage.items.map((task) => [task.responsibleOrgCode, task.responsibleOrg]),
+    [["POCKET", "포켓"], ["NS", "NS"], ["CLIENT", "UND"]],
+  );
+});
+
+test("업무 활동 뷰모델은 제목, 행위자, 동작, 변경값을 보존한다", () => {
+  const activity = activityListViewModel({
+    generatedAt: "2026-08-26T11:00:00+09:00",
+    data: {
+      items: [{
+        event_id: "EVT-1",
+        entity_type: "TASK",
+        entity_id: "T-1",
+        task_title: "촬영 일정 확정",
+        actor_display_name: "홍길동",
+        action_code: "UPDATED",
+        summary: "업무가 수정됨",
+        changes: [
+          { field: "status_code", label: "상태", before: "진행", after: "완료" },
+          { field: "responsible_org_code", label: "담당", before: "NS", after: "포켓" },
+        ],
+        created_at: "2026-08-26T10:30:00+09:00",
+      }],
+    },
+  });
+
+  assert.deepEqual(activity.items[0], {
+    id: "EVT-1",
+    type: "task",
+    entityId: "T-1",
+    taskTitle: "촬영 일정 확정",
+    title: "업무가 수정됨",
+    actionCode: "UPDATED",
+    action: "수정",
+    actor: "홍길동",
+    changes: [
+      { field: "status_code", label: "상태", before: "진행", after: "완료" },
+      { field: "responsible_org_code", label: "담당", before: "NS", after: "포켓" },
+    ],
+    createdAt: "2026-08-26T10:30:00+09:00",
+    meta: activity.items[0].meta,
+    internalMeta: "Google Sheets 활동로그",
+  });
+});
+
+test("업무 활동 뷰모델은 actor_name 별칭과 비어 있는 변경 목록을 허용한다", () => {
+  const activity = activityListViewModel({
+    data: {
+      items: [{
+        event_id: "EVT-2",
+        entity_type: "task",
+        entity_id: "T-2",
+        task_title: "자료 취합",
+        actor_name: "운영자",
+        action_code: "CREATED",
+        created_at: "2026-08-26T09:00:00+09:00",
+      }],
+    },
+  });
+
+  assert.equal(activity.items[0].actor, "운영자");
+  assert.equal(activity.items[0].action, "추가");
+  assert.deepEqual(activity.items[0].changes, []);
+});
+
+test("제목·변경값·변경자가 모두 없는 불완전 업무 로그는 화면 목록에서 제외한다", () => {
+  const activity = activityListViewModel({
+    data: {
+      items: [{
+        event_id: "EVT-INCOMPLETE",
+        entity_type: "TASK",
+        entity_id: "TSK-UND-P0-MKT-1",
+        action_code: "UPDATED",
+        created_at: "2026-08-26T18:12:00+09:00",
+      }, {
+        event_id: "EVT-COMPLETE",
+        entity_type: "TASK",
+        entity_id: "TSK-UND-P0-MKT-2",
+        task_title: "콘텐츠 일정 조정",
+        actor_display_name: "포켓",
+        action_code: "UPDATED",
+        changes: [{ field: "due_date", label: "마감일", before: "2026-08-28", after: "2026-08-30" }],
+        created_at: "2026-08-26T18:13:00+09:00",
+      }],
+    },
+  });
+
+  assert.deepEqual(activity.items.map((item) => item.id), ["EVT-COMPLETE"]);
+});
+
+test("완료 상태로 바뀐 업무 로그는 수정 대신 완료 동작으로 분류한다", () => {
+  const activity = activityListViewModel({
+    data: {
+      items: [{
+        event_id: "EVT-3",
+        entity_type: "TASK",
+        entity_id: "T-3",
+        task_title: "최종 검수",
+        actor_display_name: "운영자",
+        action_code: "UPDATED",
+        changes: [
+          { field: "status_code", label: "상태", before: "IN_PROGRESS", after: "DONE" },
+          { field: "responsible_org_code", label: "담당 조직", before: "POCKET", after: "CLIENT" },
+        ],
+        created_at: "2026-08-26T12:00:00+09:00",
+      }],
+    },
+  });
+
+  assert.equal(activity.items[0].action, "완료");
+});
+
+test("업무 로그 변경값의 상태·담당 조직 코드를 화면 라벨로 변환한다", () => {
+  const activity = activityListViewModel({
+    data: {
+      items: [{
+        event_id: "EVT-4",
+        entity_type: "TASK",
+        entity_id: "T-4",
+        action_code: "UPDATED",
+        changes: [
+          { field: "status_code", label: "상태", before: "IN_PROGRESS", after: "DONE" },
+          { field: "responsible_org_code", label: "담당 조직", before: "POCKET", after: "CLIENT" },
+        ],
+      }],
+    },
+  });
+
+  assert.deepEqual(activity.items[0].changes, [
+    { field: "status_code", label: "상태", before: "진행", after: "완료" },
+    { field: "responsible_org_code", label: "담당 조직", before: "포켓", after: "UND" },
+  ]);
+});
+
 test("project_snapshot을 탭별 캐시 뷰모델로 분해한다", () => {
   const views = workspaceViewModel({
     generatedAt: "2026-08-26T11:00:00+09:00",
@@ -416,16 +635,42 @@ test("project_snapshot을 탭별 캐시 뷰모델로 분해한다", () => {
       tasks: { totalMatching: 1, items: [{ task_id: "T-1", title: "업무", status_code: "IN_PROGRESS" }] },
       contents: { totalMatching: 1, items: [{ content_id: "C-1", title: "콘텐츠", status_code: "PLANNED" }] },
       performance: { definitions: [], actuals: [], channels: [] },
+      tracking: {
+        range: { start: "2026-06-01", end: "2026-08-27" },
+        execution: { total: 12, done: 7 },
+        totals: { impressions: 1000, clicks: 44, inquiries: 5 },
+        channels: [{ channel_code: "INSTAGRAM", label: "Instagram", clicks: 44, inquiries: 5 }],
+      },
       files: { totalMatching: 1, items: [{ file_id: "F-1", title: "자료" }] },
       activity: { items: [{ event_id: "E-1", summary: "자료 변경", created_at: "2026-08-26T10:00:00+09:00" }] },
     },
   });
 
-  assert.deepEqual(Object.keys(views).sort(), ["content", "files", "performance", "plan-client", "plan-internal", "tasks"]);
+  assert.deepEqual(Object.keys(views).sort(), ["content", "files", "performance", "plan-client", "plan-internal", "tasks", "tracking"]);
   assert.equal(views["plan-client"].id, "PLAN-1");
   assert.equal(views["plan-internal"].id, "PLAN-2");
   assert.equal(views.tasks.items[0].id, "T-1");
   assert.equal(views.content.items[0].id, "C-1");
   assert.equal(views.files.files.items[0].id, "F-1");
   assert.equal(views.files.activities.items[0].id, "E-1");
+  assert.equal(views.tracking.totals.impressions, 1000);
+  assert.equal(views.tracking.channels[0].inquiries, 5);
+});
+
+test("성과 추적 뷰모델은 원장 숫자와 미측정 KPI를 구분한다", () => {
+  const tracking = performanceTrackingViewModel({
+    data: {
+      totals: { spend: "120000", video_views: "37", inquiries: "3" },
+      goals: [
+        { kpi_id: "K-1", metric_name: "문의", target_value: "10", actual_value: "3", unit_code: "COUNT" },
+        { kpi_id: "K-2", metric_name: "매출", target_value: "1000000", actual_value: null, unit_code: "KRW" },
+      ],
+    },
+  });
+
+  assert.equal(tracking.totals.spend, 120000);
+  assert.equal(tracking.totals.videoViews, 37);
+  assert.equal(tracking.goals[0].value, 3);
+  assert.equal(tracking.goals[1].value, null);
+  assert.equal(tracking.dataAvailable, false);
 });

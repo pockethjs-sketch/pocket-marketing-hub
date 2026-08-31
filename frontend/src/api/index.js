@@ -5,13 +5,16 @@ export { createHubApi, createMutationId, READ_ACTIONS } from "./hubApi.js";
 export { createSessionStore, SESSION_STORAGE_KEY } from "./session.js";
 export {
   activityListViewModel,
+  accessAdminViewModel,
   actorRole,
   bootstrapViewModel,
   contentsViewModel,
   filesViewModel,
   overviewViewModel,
   planViewModel,
+  performanceTrackingViewModel,
   performanceViewModel,
+  taskResponsibleOrganization,
   tasksViewModel,
   workspaceViewModel,
 } from "./viewModel.js";

@@ -5,9 +5,9 @@
  * This file is safe to keep in a public repository.
  */
 
-var MH_CONTRACT_VERSION = '2026-08-26-login-alias-v8';
-var MH_SCHEMA_VERSION = '2026-08-26-v3';
-var MH_BACKEND_VERSION = '2026-08-26-login-alias-v17';
+var MH_CONTRACT_VERSION = '2026-08-27-outcome-tracking-v11';
+var MH_SCHEMA_VERSION = '2026-08-27-page-access-v4';
+var MH_BACKEND_VERSION = '2026-08-31-fast-login-v23';
 
 // Login is required. Public preview sessions cannot read internal plans or
 // mutate tasks even if stale preview configuration remains in Script Properties.
@@ -84,6 +84,7 @@ var MH_READ_ACTIONS = {
   contents: true,
   approvals: true,
   performance: true,
+  performance_tracking: true,
   files: true,
   activity: true
 };
@@ -154,6 +155,21 @@ var MH_ENTITY_SPECS = {
     required: [
       'entity_type', 'entity_id', 'requested_at', 'status_code',
       'visibility_code'
+    ]
+  },
+  kpi_definition: {
+    sheet: '11_KPI정의',
+    idField: 'kpi_id',
+    idPrefix: 'KPI',
+    operations: ['CREATE', 'UPDATE', 'ARCHIVE'],
+    fields: [
+      'phase_code', 'channel_code', 'metric_code', 'metric_name',
+      'unit_code', 'period_type_code', 'baseline_value', 'target_value',
+      'aggregation_code', 'display_order', 'customer_visible'
+    ],
+    required: [
+      'metric_code', 'metric_name', 'unit_code', 'period_type_code',
+      'target_value', 'aggregation_code', 'display_order'
     ]
   },
   file: {

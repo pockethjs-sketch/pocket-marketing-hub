@@ -13,7 +13,7 @@ export function parseViewLocation(hash = "") {
   const value = String(hash).replace(/^#/, "").trim().toLowerCase();
   if (value === "plan/internal") return { view: "plan", planVariant: "internal" };
   if (value === "plan/client" || value === "plan") return { view: "plan", planVariant: "client" };
-  if (["overview", "tasks", "content", "performance", "files"].includes(value)) {
+  if (["overview", "tasks", "content", "tracking", "performance", "files", "permissions"].includes(value)) {
     return { view: value, planVariant: DEFAULT_PLAN_VARIANT };
   }
   return { view: "overview", planVariant: DEFAULT_PLAN_VARIANT };
@@ -26,4 +26,3 @@ export function viewLocationHash(view, planVariant = DEFAULT_PLAN_VARIANT) {
 export function viewResourceKey(view, planVariant = DEFAULT_PLAN_VARIANT) {
   return view === "plan" ? `plan-${normalizePlanVariant(planVariant)}` : view;
 }
-

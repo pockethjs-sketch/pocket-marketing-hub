@@ -452,3 +452,92 @@ function mhTrackerNewTemplateTask_(sample, plan, now) {
   record.updated_at = now;
   return record;
 }
+
+/**
+ * Adds the real Muguk customer/project shell and mirrors the active UND
+ * operator memberships. The operation is manager-only and idempotent.
+ */
+function mhProvisionMugukProject_(actor) {
+  if (!actor || (actor.role !== 'MASTER' && actor.role !== 'POCKET_MANAGER')) {
+    throw mhApiError_('forbidden', 'muguk_provision_requires_manager', 403);
+  }
+  var clientId = 'CLT-MUGUK';
+  var projectId = 'PRJ-MUGUK-MKT-001';
+  var sourceProjectId = 'PRJ-UND-90D-001';
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) {
+    throw mhApiError_('conflict', 'project_provision_lock_timeout', 409);
+  }
+  try {
+    mhUseFreshTables_();
+    var now = mhNowIso_();
+    var clientResult = mhProvisionUpsert_(MH_SHEETS.CLIENTS, 'client_id', clientId, {
+      client_id: clientId,
+      display_name: '무극',
+      status_code: 'ACTIVE',
+      is_demo: false,
+      archived_at: ''
+    }, now);
+    var projectResult = mhProvisionUpsert_(MH_SHEETS.PROJECTS, 'project_id', projectId, {
+      project_id: projectId,
+      client_id: clientId,
+      project_name: '무극 통합 마케팅 운영',
+      service_type_code: 'CONTENT_MARKETING',
+      objective: '콘텐츠 생성과 채널 운영 업무를 한 화면에서 관리합니다.',
+      phase_code: 'P0',
+      status_code: 'ACTIVE',
+      client_view_enabled: true,
+      archived_at: ''
+    }, now);
+
+    var sourceMemberships = mhActiveRows_(MH_SHEETS.MEMBERSHIPS).filter(function (row) {
+      return mhAsText_(row.project_id) === sourceProjectId &&
+        mhAsText_(row.status_code).toUpperCase() === 'ACTIVE';
+    });
+    if (!sourceMemberships.length) {
+      throw mhApiError_('configuration_error', 'und_operator_memberships_missing', 500);
+    }
+    var membershipResults = sourceMemberships.map(function (source) {
+      var membershipId = 'MEM-MUGUK-' + mhAsText_(source.user_id);
+      return mhProvisionUpsert_(MH_SHEETS.MEMBERSHIPS, 'membership_id', membershipId, {
+        membership_id: membershipId,
+        user_id: source.user_id,
+        client_id: clientId,
+        project_id: projectId,
+        permission_code: source.permission_code,
+        status_code: 'ACTIVE',
+        archived_at: ''
+      }, now);
+    });
+    return {
+      ok: true,
+      clientId: clientId,
+      projectId: projectId,
+      client: clientResult,
+      project: projectResult,
+      memberships: membershipResults
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function mhProvisionUpsert_(sheetName, idField, id, target, now) {
+  var found = mhFindRecord_(sheetName, idField, id);
+  if (!found.row) {
+    target.created_at = now;
+    target.updated_at = now;
+    target.row_version = 1;
+    mhAppendRecord_(sheetName, target);
+    return 'CREATED';
+  }
+  var changed = Object.keys(target).some(function (field) {
+    return mhStableJson_(mhToIsoValue_(found.row[field])) !== mhStableJson_(mhToIsoValue_(target[field]));
+  });
+  if (!changed) return 'UNCHANGED';
+  target.created_at = found.row.created_at || now;
+  target.updated_at = now;
+  target.row_version = Number(found.row.row_version || 0) + 1;
+  mhUpdateRecord_(found.table, found.row.__sheetRow, target);
+  return 'UPDATED';
+}
