@@ -24,6 +24,7 @@ function mhPageForReadAction_(action, request) {
   if (action === 'project_overview') return 'overview';
   if (action === 'project_plan') return 'plan';
   if (action === 'tasks') return 'tasks';
+  if (action === 'daily_meetings') return 'tasks';
   if (action === 'contents' || action === 'approvals') return 'content';
   if (action === 'performance_tracking') return 'tracking';
   if (action === 'performance') return 'performance';

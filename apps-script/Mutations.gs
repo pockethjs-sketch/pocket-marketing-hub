@@ -180,6 +180,7 @@ function mhApplyCreateDefaults_(record, entityType, actor, now) {
   }
   if (entityType === 'approval') record.requested_by_user_id = actor.userId;
   if (entityType === 'file') record.uploaded_by_user_id = actor.userId;
+  if (entityType === 'daily_meeting') record.created_by_user_id = actor.userId;
   if (entityType === 'kpi_definition') {
     if (!mhNonEmpty_(record.metric_code)) {
       record.metric_code = 'CUSTOM_' + mhAsText_(record.kpi_id).replace(/[^A-Za-z0-9]+/g, '_').toUpperCase();
@@ -206,7 +207,7 @@ function mhValidateMutationRecord_(record, spec, entityType, actor, project, bef
   mhValidateRecordFieldTypes_(record, entityType);
   mhValidateStatusTransition_(record, before, entityType);
   mhValidateApprovalTransition_(record, before, entityType, actor);
-  ['start_date', 'planned_start_date', 'due_date', 'planned_date', 'shoot_date', 'review_due_date', 'publish_due_date'].forEach(function (field) {
+  ['start_date', 'planned_start_date', 'due_date', 'planned_date', 'shoot_date', 'review_due_date', 'publish_due_date', 'meeting_date'].forEach(function (field) {
     if (!mhNonEmpty_(record[field])) return;
     // Sheets returns date-formatted cells as Date objects. Normalize them to
     // the business date before validating or any unrelated task edit will be

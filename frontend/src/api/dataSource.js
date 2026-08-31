@@ -234,6 +234,7 @@ export function createHubDataSource(options = {}) {
     overview: (params) => load("overview", params),
     plan: (params) => load("plan", params),
     tasks: (params) => load("tasks", params),
+    dailyMeetings: (params) => load("dailyMeetings", params),
     contents: (params) => load("contents", params),
     tracking: (params) => load("tracking", params),
     performance: (params) => load("performance", params),

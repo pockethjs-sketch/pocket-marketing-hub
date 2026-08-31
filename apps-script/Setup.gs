@@ -50,6 +50,21 @@ function mhSetupEnsurePermissionAccessColumn() {
   return { ok: true, added: added, sheet: MH_SHEETS.MEMBERSHIPS, field: 'allowed_pages_json' };
 }
 
+function mhSetupEnsureDailyMeetingsSheet() {
+  var headers = [
+    'meeting_id', 'client_id', 'project_id', 'meeting_date', 'title',
+    'attendees_text', 'discussion_text', 'decisions_text', 'action_items_text',
+    'created_by_user_id', 'visibility_code', 'created_at', 'updated_at',
+    'row_version', 'archived_at'
+  ];
+  var sheet = mhPlanEnsureSheet_(mhSpreadsheet_(), MH_SHEETS.DAILY_MEETINGS, headers);
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, headers.length);
+  mhInvalidateTableCache_(MH_SHEETS.DAILY_MEETINGS);
+  mhAssertHeaders_(MH_SHEETS.DAILY_MEETINGS, headers);
+  return { ok: true, sheet: MH_SHEETS.DAILY_MEETINGS, headers: headers.length };
+}
+
 function mhSetupRegisterStagedAccount() {
   var properties = PropertiesService.getScriptProperties();
   var email = mhNormalizeLoginAccount_(properties.getProperty('SETUP_ACCOUNT_EMAIL'));
@@ -355,7 +370,8 @@ function mhSetupMigrateVisibilityCodes() {
 function mhSetupProtectApiManagedSheets() {
   var names = [
     MH_SHEETS.TASKS, MH_SHEETS.CONTENTS, MH_SHEETS.APPROVALS,
-    MH_SHEETS.FILES, MH_SHEETS.ACTIVITY, MH_SHEETS.PLANS, MH_SHEETS.PLAN_SECTIONS
+    MH_SHEETS.FILES, MH_SHEETS.ACTIVITY, MH_SHEETS.PLANS, MH_SHEETS.PLAN_SECTIONS,
+    MH_SHEETS.DAILY_MEETINGS
   ];
   names.forEach(function (name) {
     var sheet = mhSheet_(name);

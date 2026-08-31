@@ -226,6 +226,7 @@ function mhSchemaCheck_() {
     if (entityType === 'task') required.push('source_code');
     if (entityType === 'approval') required.push('requested_by_user_id');
     if (entityType === 'file') required.push('uploaded_by_user_id');
+    if (entityType === 'daily_meeting') required.push('created_by_user_id');
     mhAssertHeaders_(spec.sheet, required);
   });
   mhAssertHeaders_(MH_SHEETS.ACTIVITY, [
@@ -255,7 +256,7 @@ function mhSchemaCheck_() {
     [MH_SHEETS.DAILY_PERFORMANCE, 'performance_id'], [MH_SHEETS.KPI_ACTUALS, 'kpi_actual_id'],
     [MH_SHEETS.FILES, 'file_id'], [MH_SHEETS.ACTIVITY, 'event_id'],
     [MH_SHEETS.SYNC_STATUS, 'sync_status_id'], [MH_SHEETS.PLANS, 'plan_id'],
-    [MH_SHEETS.PLAN_SECTIONS, 'plan_section_id']
+    [MH_SHEETS.PLAN_SECTIONS, 'plan_section_id'], [MH_SHEETS.DAILY_MEETINGS, 'meeting_id']
   ].forEach(function (entry) { mhAssertUniqueKey_(entry[0], entry[1]); });
   mhAssertUniqueMemberships_();
   mhAssertTenantScopes_();
@@ -290,7 +291,8 @@ function mhAssertTenantScopes_() {
     MH_SHEETS.CHANNELS, MH_SHEETS.TASKS, MH_SHEETS.TASK_DEPENDENCIES,
     MH_SHEETS.CONTENTS, MH_SHEETS.CONTENT_VERSIONS, MH_SHEETS.APPROVALS, MH_SHEETS.KPI_DEFINITIONS,
     MH_SHEETS.DAILY_PERFORMANCE, MH_SHEETS.KPI_ACTUALS, MH_SHEETS.FILES,
-    MH_SHEETS.ACTIVITY, MH_SHEETS.SYNC_STATUS, MH_SHEETS.PLANS, MH_SHEETS.PLAN_SECTIONS
+    MH_SHEETS.ACTIVITY, MH_SHEETS.SYNC_STATUS, MH_SHEETS.PLANS, MH_SHEETS.PLAN_SECTIONS,
+    MH_SHEETS.DAILY_MEETINGS
   ].forEach(function (sheetName) {
     mhActiveRows_(sheetName).forEach(function (row) {
       var key = mhAsText_(row.client_id) + '|' + mhAsText_(row.project_id);

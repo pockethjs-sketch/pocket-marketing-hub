@@ -441,6 +441,29 @@ export function tasksViewModel(envelope) {
   };
 }
 
+export function dailyMeetingsViewModel(envelope) {
+  const data = envelope?.data || {};
+  return {
+    items: (data.items || []).map((row) => ({
+      id: row.meeting_id,
+      date: row.meeting_date ? String(row.meeting_date).slice(0, 10) : null,
+      title: row.title || "제목 없는 회의",
+      attendees: row.attendees_text || "",
+      discussion: row.discussion_text || "",
+      decisions: row.decisions_text || "",
+      actionItems: row.action_items_text || "",
+      authorId: row.created_by_user_id || null,
+      authorName: row.author_name || "확인되지 않은 사용자",
+      visibilityCode: String(row.visibility_code || "PROJECT_TEAM").toUpperCase(),
+      createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null,
+      rowVersion: Number(row.row_version || 0),
+    })),
+    total: Number(data.totalMatching || 0),
+    generatedAt: envelope?.generatedAt || null,
+  };
+}
+
 export function planViewModel(envelope) {
   const data = envelope?.data || {};
   const plan = data.plan || {};

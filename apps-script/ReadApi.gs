@@ -18,6 +18,7 @@ function mhHandleRead_(action, request, actor) {
   else if (action === 'performance') data = mhReadPerformance_(request, actor, access.project);
   else if (action === 'files') data = mhReadFiles_(request, actor, access.project);
   else if (action === 'activity') data = mhReadActivity_(request, actor, access.project);
+  else if (action === 'daily_meetings') data = mhReadDailyMeetings_(request, actor, access.project);
   else throw mhApiError_('invalid_request', 'unsupported_read_action', 400);
   mhRememberClientRead_(action, request, actor, projectId, data);
   return { scope: scope, data: data };
@@ -703,6 +704,36 @@ function mhReadFiles_(request, actor, project) {
     }),
     nextCursor: page.nextCursor,
     totalMatching: rows.length
+  };
+}
+
+function mhReadDailyMeetings_(request, actor, project) {
+  var users = {};
+  mhActiveRows_(MH_SHEETS.USERS).forEach(function (user) {
+    users[mhAsText_(user.user_id)] = mhAsText_(user.display_name || user.email || user.user_id);
+  });
+  var rows = mhProjectRows_(MH_SHEETS.DAILY_MEETINGS, project.client_id, project.project_id, actor);
+  rows.sort(function (left, right) {
+    var dateCompare = mhDateOnly_(right.meeting_date).localeCompare(mhDateOnly_(left.meeting_date));
+    if (dateCompare) return dateCompare;
+    return mhAsText_(right.created_at).localeCompare(mhAsText_(left.created_at));
+  });
+  var total = rows.length;
+  var limit = Math.min(Math.max(Number(request.limit || 100), 1), MH_PAGE_MAX);
+  return {
+    items: rows.slice(0, limit).map(function (row) {
+      var projected = mhNormalizeRow_(mhPick_(row, [
+        'meeting_id', 'meeting_date', 'title', 'attendees_text', 'discussion_text',
+        'decisions_text', 'action_items_text', 'created_by_user_id',
+        'visibility_code', 'created_at', 'updated_at', 'row_version'
+      ]));
+      projected.meeting_date = mhDateOnly_(row.meeting_date) || null;
+      projected.author_name = users[mhAsText_(row.created_by_user_id)] || '확인되지 않은 사용자';
+      if (actor.role === 'CLIENT_VIEWER') delete projected.created_by_user_id;
+      return projected;
+    }),
+    totalMatching: total,
+    nextCursor: total > limit ? String(limit) : null
   };
 }
 

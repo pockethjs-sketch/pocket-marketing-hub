@@ -7,7 +7,7 @@
 
 var MH_CONTRACT_VERSION = '2026-08-27-outcome-tracking-v11';
 var MH_SCHEMA_VERSION = '2026-08-27-page-access-v4';
-var MH_BACKEND_VERSION = '2026-08-31-muguk-schedule-v25';
+var MH_BACKEND_VERSION = '2026-08-31-daily-meetings-v26';
 
 // Login is required. Public preview sessions cannot read internal plans or
 // mutate tasks even if stale preview configuration remains in Script Properties.
@@ -47,7 +47,8 @@ var MH_SHEETS = {
   ACTIVITY: '15_활동로그',
   SYNC_STATUS: '16_동기화상태',
   PLANS: '17_실행계획',
-  PLAN_SECTIONS: '18_실행계획섹션'
+  PLAN_SECTIONS: '18_실행계획섹션',
+  DAILY_MEETINGS: '19_데일리회의록'
 };
 
 var MH_VISIBILITY_LEVEL = {
@@ -86,7 +87,8 @@ var MH_READ_ACTIONS = {
   performance: true,
   performance_tracking: true,
   files: true,
-  activity: true
+  activity: true,
+  daily_meetings: true
 };
 
 var MH_WRITE_PERMISSIONS = { ADMIN: true, EDIT: true };
@@ -184,6 +186,18 @@ var MH_ENTITY_SPECS = {
     required: [
       'entity_type', 'entity_id', 'title', 'storage_provider_code',
       'visibility_code'
+    ]
+  },
+  daily_meeting: {
+    sheet: '19_데일리회의록',
+    idField: 'meeting_id',
+    idPrefix: 'MTG',
+    fields: [
+      'meeting_date', 'title', 'attendees_text', 'discussion_text',
+      'decisions_text', 'action_items_text', 'visibility_code'
+    ],
+    required: [
+      'meeting_date', 'title', 'discussion_text', 'visibility_code'
     ]
   }
 };

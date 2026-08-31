@@ -361,6 +361,154 @@ select:focus-visible {
   text-align: center;
 }
 
+.project-nav button.is-nested {
+  width: calc(100% - 20px);
+  margin-left: 20px;
+  min-height: 38px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.project-nav button.is-nested::after {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: -8px;
+  width: 10px;
+  height: 27px;
+  border-left: 1px solid #dbe2ea;
+  border-bottom: 1px solid #dbe2ea;
+  border-radius: 0 0 0 6px;
+}
+
+.daily-meeting-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.daily-meeting-summary article {
+  display: grid;
+  gap: 4px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.daily-meeting-summary span,
+.daily-meeting-summary small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.daily-meeting-summary strong {
+  color: var(--ink);
+  font-size: 21px;
+}
+
+.daily-meeting-list {
+  display: grid;
+  gap: 14px;
+}
+
+.daily-meeting-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.daily-meeting-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+.daily-meeting-card > header > div,
+.daily-meeting-date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-meeting-date {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.daily-meeting-visibility {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #eaf0f7;
+  color: #42546a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.daily-meeting-title {
+  padding: 18px 20px 0;
+}
+
+.daily-meeting-title h3 {
+  margin: 0 0 5px;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.daily-meeting-title span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.daily-meeting-sections {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.daily-meeting-sections section {
+  min-height: 110px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #fbfcfe;
+}
+
+.daily-meeting-sections section.is-action {
+  border-color: #cbd8e7;
+  background: #f1f5f9;
+}
+
+.daily-meeting-sections h4 {
+  margin: 0 0 9px;
+  color: #526174;
+  font-size: 12px;
+}
+
+.daily-meeting-sections p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.daily-meeting-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+
+@media (max-width: 800px) {
+  .daily-meeting-summary,
+  .daily-meeting-sections {
+    grid-template-columns: 1fr;
+  }
+}
+
 .sidebar-section {
   margin: 6px 20px;
   padding-top: 18px;

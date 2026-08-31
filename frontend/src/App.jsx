@@ -22,6 +22,7 @@ import {
   LogOut,
   MoreHorizontal,
   MousePointerClick,
+  NotebookPen,
   Pencil,
   Plus,
   RefreshCw,
@@ -39,6 +40,7 @@ import {
   accessAdminViewModel,
   bootstrapViewModel,
   contentsViewModel,
+  dailyMeetingsViewModel,
   createHubDataSource,
   filesViewModel,
   overviewViewModel,
@@ -68,6 +70,7 @@ const navItems = [
   { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
   { id: "plan", label: "실행계획", icon: BookOpenText, children: Object.values(PLAN_VARIANTS) },
   { id: "tasks", label: "업무", icon: ClipboardCheck },
+  { id: "daily", label: "데일리 회의록", icon: NotebookPen, permissionId: "tasks", nested: true },
   { id: "content", label: "콘텐츠", icon: GalleryHorizontalEnd },
   { id: "tracking", label: "성과 추적", icon: TrendingUp },
   { id: "performance", label: "성과", icon: BarChart3 },
@@ -185,7 +188,7 @@ function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, 
   const visibleNavItems = navItems.filter((item) => {
     if (item.pocketOnly) return role === "pocket";
     if (role !== "client") return true;
-    return isViewAllowed(item.id, project.allowedPages);
+    return isViewAllowed(item.permissionId || item.id, project.allowedPages);
   });
 
   return (
@@ -194,7 +197,7 @@ function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, 
       <div className="project-switcher"><div><span className="project-dot" /><strong>{project.status}</strong></div><ChevronDown size={15} /></div>
       <nav className="project-nav"><p className="nav-label">프로젝트</p>{visibleNavItems.map((item) => {
         const Icon = item.icon;
-        if (item.id !== "plan") return <button key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
+        if (item.id !== "plan") return <button key={item.id} className={`${activeView === item.id ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
         return <div key={item.id} className={`project-nav-tree ${planExpanded ? "is-expanded" : ""}`}>
           <button type="button" className={activeView === "plan" ? "is-active" : ""} onClick={() => {
             if (activeView !== "plan") onView("plan", DEFAULT_PLAN_VARIANT);
@@ -790,6 +793,60 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
   </div>;
 }
 
+function localDateValue() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function DailyMeetingModal({ meeting, role, onClose, onSave }) {
+  const [fields, setFields] = useState(() => ({
+    meeting_date: meeting?.date || localDateValue(),
+    title: meeting?.title || "데일리 미팅",
+    attendees_text: meeting?.attendees || "",
+    discussion_text: meeting?.discussion || "",
+    decisions_text: meeting?.decisions || "",
+    action_items_text: meeting?.actionItems || "",
+    visibility_code: meeting?.visibilityCode || "PROJECT_TEAM",
+  }));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const setField = (name, value) => setFields((current) => ({ ...current, [name]: value }));
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(meeting || null, fields);
+      onClose();
+    } catch (saveError) {
+      setError(saveError);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal daily-meeting-modal" role="dialog" aria-modal="true" aria-labelledby="daily-meeting-title"><header><div><p className="editorial-kicker">Google Sheets 데일리 기록</p><h2 id="daily-meeting-title">{meeting ? "회의록 수정" : "회의록 작성"}</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
+    <label className="create-field"><span>회의 날짜</span><input type="date" required value={fields.meeting_date} onChange={(event) => setField("meeting_date", event.target.value)} /></label>
+    <label className="create-field"><span>회의 제목</span><input required maxLength={200} value={fields.title} onChange={(event) => setField("title", event.target.value)} /></label>
+    <label className="create-field is-wide"><span>참석자</span><input maxLength={500} value={fields.attendees_text} onChange={(event) => setField("attendees_text", event.target.value)} placeholder="예: 포켓 김OO, NS 이OO" /></label>
+    <label className="create-field is-wide"><span>회의 내용</span><textarea required rows="6" maxLength={10000} value={fields.discussion_text} onChange={(event) => setField("discussion_text", event.target.value)} placeholder="논의한 내용을 항목별로 정리하세요" /></label>
+    <label className="create-field is-wide"><span>결정사항</span><textarea rows="4" maxLength={10000} value={fields.decisions_text} onChange={(event) => setField("decisions_text", event.target.value)} placeholder="확정된 내용과 기준을 적어 주세요" /></label>
+    <label className="create-field is-wide"><span>후속 업무</span><textarea rows="4" maxLength={10000} value={fields.action_items_text} onChange={(event) => setField("action_items_text", event.target.value)} placeholder="담당자와 기한을 함께 적어 주세요" /></label>
+    {role === "pocket" && <FormSelect label="공개 범위" value={fields.visibility_code} onChange={(value) => setField("visibility_code", value)} options={[["PROJECT_TEAM", "프로젝트 팀"], ["CLIENT", "고객 공개"], ["POCKET_ONLY", "포켓 전용"]]} />}
+    {error && <div className="form-error"><AlertCircle size={15} /><span>{error.message || "저장하지 못했습니다."}</span></div>}
+    <footer><p>저장·수정 내역은 활동로그에도 기록됩니다.</p><div><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.meeting_date || !fields.title.trim() || !fields.discussion_text.trim()}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "회의록 저장"}</button></div></footer>
+  </form></section></div>;
+}
+
+function DailyMeetingsView({ role, meetings, canWrite, onSave }) {
+  const [editing, setEditing] = useState(undefined);
+  const visibilityLabel = { CLIENT: "고객 공개", PROJECT_TEAM: "프로젝트 팀", POCKET_ONLY: "포켓 전용" };
+  return <div className="view-stack daily-meeting-view"><ViewHeader eyebrow="업무 기록" title="데일리 회의록" description="날짜별 논의 내용, 결정사항과 후속 업무를 한곳에 남깁니다.">{canWrite && <button className="primary-button" type="button" onClick={() => setEditing(null)}><Plus size={15} /> 회의록 작성</button>}</ViewHeader>
+    <section className="daily-meeting-summary"><article><span>전체 회의록</span><strong>{meetings.length}</strong><small>Google Sheets 저장 건수</small></article><article><span>최근 기록</span><strong>{meetings[0]?.date || "-"}</strong><small>{meetings[0]?.authorName || "기록 없음"}</small></article></section>
+    {meetings.length ? <section className="daily-meeting-list">{meetings.map((meeting) => <article className="daily-meeting-card panel" key={meeting.id}><header><div className="daily-meeting-date"><CalendarDays size={17} /><span>{meeting.date}</span></div><div><span className="daily-meeting-visibility">{visibilityLabel[meeting.visibilityCode] || meeting.visibilityCode}</span>{canWrite && <button className="icon-button" type="button" onClick={() => setEditing(meeting)} aria-label={`${meeting.title} 수정`}><Pencil size={15} /></button>}</div></header><div className="daily-meeting-title"><h3>{meeting.title}</h3><span>{meeting.authorName}{meeting.attendees ? ` · 참석 ${meeting.attendees}` : ""}</span></div><div className="daily-meeting-sections"><section><h4>회의 내용</h4><p>{meeting.discussion}</p></section>{meeting.decisions && <section><h4>결정사항</h4><p>{meeting.decisions}</p></section>}{meeting.actionItems && <section className="is-action"><h4>후속 업무</h4><p>{meeting.actionItems}</p></section>}</div></article>)}</section> : <EmptyState title="작성된 회의록이 없습니다" description={canWrite ? "오늘 회의 내용을 첫 기록으로 남겨 주세요." : "운영팀이 회의록을 작성하면 이곳에 표시됩니다."} />}
+    {editing !== undefined && <DailyMeetingModal meeting={editing} role={role} onClose={() => setEditing(undefined)} onSave={onSave} />}
+  </div>;
+}
+
 function ContentView({ role, query, contents, onCreate, canWrite }) {
   const [channel, setChannel] = useState("전체");
   const channels = ["전체", ...new Set(contents.map((item) => item.channel))];
@@ -1060,12 +1117,13 @@ function PlanView({ plan, project, planVariant }) {
   </div>;
 }
 
-function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onProjectUpdate, onKpiSave, onKpiArchive, onAccessSave, canWrite }) {
+function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onProjectUpdate, onDailyMeetingSave, onKpiSave, onKpiArchive, onAccessSave, canWrite }) {
   if (pageState.status === "loading" && !pageState.data) return <LoadingState />;
   if (pageState.status === "error" && !pageState.data) return <ErrorState error={pageState.error} onRetry={onRetry} />;
   const data = pageState.data || {};
   if (view === "plan") return <PlanView plan={data} project={project} planVariant={planVariant} />;
   if (view === "tasks") return <TasksView role={role} query={search} taskPage={{ ...data, project: data.project || { id: project.id, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} />;
+  if (view === "daily") return <DailyMeetingsView role={role} meetings={data.items || []} canWrite={canWrite && role !== "client"} onSave={onDailyMeetingSave} />;
   if (view === "content") return <ContentView role={role} query={search} contents={data.items || []} onCreate={onCreate} canWrite={canWrite} />;
   if (view === "tracking") return <TrackingView tracking={data} />;
   if (view === "performance") return <PerformanceView performance={data} canWrite={canWrite && role !== "client"} onKpiSave={onKpiSave} onKpiArchive={onKpiArchive} />;
@@ -1349,6 +1407,7 @@ export function App() {
       const fallback = () => {
         if (view === "plan") return source.plan({ ...params, planType: PLAN_VARIANTS[authorizedPlanVariant].apiValue }).then(planViewModel);
         if (view === "tasks") return source.tasks(params).then(tasksViewModel);
+        if (view === "daily") return source.dailyMeetings({ ...params, limit: 100 }).then(dailyMeetingsViewModel);
         if (view === "content") return source.contents(params).then(contentsViewModel);
         if (view === "tracking") return source.tracking(params).then(performanceTrackingViewModel);
         if (view === "performance") return source.performance(params).then(performanceViewModel);
@@ -1599,6 +1658,35 @@ export function App() {
     setPageRefreshKey((value) => value + 1);
   };
 
+  const saveDailyMeeting = async (meeting, fields) => {
+    if (!canWriteTasks || role === "client") {
+      const readOnlyError = new Error("이 계정은 회의록을 저장할 권한이 없습니다.");
+      readOnlyError.code = "forbidden";
+      throw readOnlyError;
+    }
+    const mutation = meeting ? {
+      entityType: "daily_meeting",
+      operation: "UPDATE",
+      id: meeting.id,
+      expectedRowVersion: meeting.rowVersion,
+      fields,
+    } : {
+      entityType: "daily_meeting",
+      operation: "CREATE",
+      fields,
+    };
+    try {
+      await source.mutate({ projectId: activeProjectId, mutation });
+    } catch (error) {
+      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      throw error;
+    }
+    resourceCacheEpochRef.current += 1;
+    resourceCacheRef.current.delete(`${activeProjectId}:daily`);
+    setSaveNotice(meeting ? "회의록을 Google Sheets 원장에 수정했습니다." : "회의록을 Google Sheets 원장에 저장했습니다.");
+    setPageRefreshKey((value) => value + 1);
+  };
+
   const saveKpiDefinition = async (kpi, fields) => {
     if (!canWrite || role === "client") {
       const readOnlyError = new Error("이 계정은 KPI를 설정할 권한이 없습니다.");
@@ -1703,7 +1791,7 @@ export function App() {
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
       <ProjectSidebar project={project} role={role} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={view === "tasks" ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
     </div>

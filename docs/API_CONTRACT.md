@@ -56,6 +56,7 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 | `performance` | 성과 | 최대 366일의 집계 KPI·추이·채널 분해 |
 | `files` | 자료 | 공개 범위가 허용된 파일 링크만 |
 | `activity` | 활동·업무 로그 | 안전한 요약 문장으로 투영한 COMMIT 이벤트만; `entityType=TASK` 지원 |
+| `daily_meetings` | 데일리 회의록 | 프로젝트별 날짜 역순 회의 내용·결정사항·후속업무; 최대 200건 |
 | `access_admin` | 고객 계정·권한 원장 | `MASTER`·`POCKET_MANAGER` 전용; 고객 계정, 프로젝트, 페이지 허용 범위 |
 
 Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `action`, `projectId`로 라우팅한다. 인증 세션도 query string이나 커스텀 헤더가 아니라 JSON 본문의 `auth.sessionToken`으로 전달한다. 프런트는 각 요청 URL에 데이터 의미와 무관한 `_mh` 난수를 붙여 만료된 Apps Script 302 리다이렉트가 재사용되는 것을 막는다.
@@ -99,6 +100,8 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 `tasks`는 업무 목록 외에 프로젝트 일정 기준과 콘텐츠 발행 집계를 함께 반환합니다.
 
 프로젝트와 업무의 날짜 필드는 `yyyy-MM-dd` 날짜 전용 문자열입니다. 프런트의 `일정` 보기는 같은 `tasks` 응답의 `planned_start_date`·`due_date`를 사용해 간트를 계산하며 별도 일정 API나 복제 테이블을 사용하지 않습니다.
+
+`daily_meetings`는 업무 페이지 권한을 상속합니다. 저장은 `daily_meeting` 엔터티의 CREATE/UPDATE/ARCHIVE mutation을 사용하고, 고객 역할은 `visibility_code = CLIENT` 행만 읽으며 쓰기는 허용하지 않습니다.
 
 ```json
 {

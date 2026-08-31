@@ -81,6 +81,12 @@ function doPost(e) {
     if (action === 'access_admin_mutate') {
       return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhPermissionAdminMutate_(request, actor), mhRevision_()));
     }
+    if (action === 'ensure_daily_meetings') {
+      if (actor.role !== 'MASTER' && actor.role !== 'POCKET_MANAGER') {
+        throw mhApiError_('forbidden', 'daily_meeting_setup_requires_manager', 403);
+      }
+      return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhSetupEnsureDailyMeetingsSheet(), mhRevision_()));
+    }
     if (action === 'provision_muguk') {
       return mhJsonOutput_(mhSuccess_(
         requestId, actor, null, mhProvisionMugukProject_(actor), mhRevision_()

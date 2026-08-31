@@ -31,6 +31,7 @@
 | 16_동기화상태 | API·수동연동 상태 | sync_id | source_code, project_id |
 | 17_실행계획 | 고객 공유 승인 계획의 버전·목표 | plan_id | client_id, project_id |
 | 18_실행계획섹션 | 계획별 목차와 정제된 본문 | plan_section_id | plan_id, client_id, project_id |
+| 19_데일리회의록 | 날짜별 회의 내용·결정·후속업무 | meeting_id | client_id, project_id, created_by_user_id |
 | 91_업무템플릿 | 프로젝트 생성용 표준업무 | template_task_id | service_type_code |
 | 98_운영점검 | 참조 무결성·건수 점검 | - | 전 탭 |
 
@@ -66,6 +67,10 @@
 마감일은 저장된 `due_date`를 우선 사용합니다. 값이 없으면 P0는 착수일부터 영업일 기준 `plan_week × 5`, M1~M3는 각 월 단계 시작일과 `plan_week`를 기준으로 화면에서 계산합니다.
 
 업무 일정 화면은 별도 일정 원장이나 셀 색상 복제를 만들지 않고 `06_업무.planned_start_date`와 `06_업무.due_date`를 직접 읽어 일 단위 간트로 투영합니다. Apps Script는 Sheets Date 객체를 KST `yyyy-MM-dd`로 정규화해 브라우저 시간대에 따른 하루 밀림을 방지합니다.
+
+## 데일리 회의록
+
+`19_데일리회의록`은 프로젝트별 일일 회의 기록을 한 행씩 저장합니다. `meeting_date`, `title`, `attendees_text`, `discussion_text`, `decisions_text`, `action_items_text`, `created_by_user_id`, `visibility_code`를 분리하며 수정은 `row_version`, 생성·수정은 `15_활동로그` PREPARE/COMMIT으로 추적합니다. 기본 공개 범위는 `PROJECT_TEAM`이고 포켓 운영자만 고객 공개 또는 포켓 전용으로 변경할 수 있습니다.
 
 ## 콘텐츠 발행 집계
 
