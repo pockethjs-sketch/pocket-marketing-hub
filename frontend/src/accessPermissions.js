@@ -22,7 +22,7 @@ export function firstAllowedView(value) {
 export function isViewAllowed(view, allowedPages) {
   const normalized = String(view || "overview").toLowerCase();
   if (normalized === "permissions") return false;
-  if (normalized === "daily") return normalizeAllowedPages(allowedPages).includes("tasks");
+  if (normalized === "daily" || normalized === "schedule") return normalizeAllowedPages(allowedPages).includes("tasks");
   return normalizeAllowedPages(allowedPages).includes(normalized);
 }
 

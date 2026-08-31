@@ -70,6 +70,7 @@ const navItems = [
   { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
   { id: "plan", label: "실행계획", icon: BookOpenText, children: Object.values(PLAN_VARIANTS) },
   { id: "tasks", label: "업무", icon: ClipboardCheck },
+  { id: "schedule", label: "일정표", icon: CalendarDays, permissionId: "tasks", nested: true },
   { id: "daily", label: "데일리 회의록", icon: NotebookPen, permissionId: "tasks", nested: true },
   { id: "content", label: "콘텐츠", icon: GalleryHorizontalEnd },
   { id: "tracking", label: "성과 추적", icon: TrendingUp },
@@ -197,7 +198,7 @@ function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, 
       <div className="project-switcher"><div><span className="project-dot" /><strong>{project.status}</strong></div><ChevronDown size={15} /></div>
       <nav className="project-nav"><p className="nav-label">프로젝트</p>{visibleNavItems.map((item) => {
         const Icon = item.icon;
-        if (item.id !== "plan") return <button key={item.id} className={`${activeView === item.id ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
+        if (item.id !== "plan") return <button key={item.id} className={`${activeView === item.id || (item.id === "tasks" && activeView === "schedule") ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
         return <div key={item.id} className={`project-nav-tree ${planExpanded ? "is-expanded" : ""}`}>
           <button type="button" className={activeView === "plan" ? "is-active" : ""} onClick={() => {
             if (activeView !== "plan") onView("plan", DEFAULT_PLAN_VARIANT);
@@ -599,23 +600,44 @@ function TaskScheduleTimeline({ tasks, project }) {
   const done = tasks.filter((task) => task.status === "완료").length;
   const inProgress = tasks.filter((task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)).length;
   const onHold = tasks.filter((task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode)).length;
+  const datedRows = new Map(timeline.rows.map((row) => [row.task.id, row]));
+  const days = [];
+  if (timeline.start && timeline.end) {
+    const cursor = trackerDate(timeline.start);
+    const end = trackerDate(timeline.end);
+    while (cursor && end && cursor <= end) {
+      const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+      days.push({ iso, day: cursor.getDate(), weekday: ["일", "월", "화", "수", "목", "금", "토"][cursor.getDay()], monthKey: iso.slice(0, 7), weekend: cursor.getDay() === 0 || cursor.getDay() === 6 });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+  const months = days.reduce((items, day) => {
+    const last = items[items.length - 1];
+    if (last?.key === day.monthKey) last.count += 1;
+    else items.push({ key: day.monthKey, label: `${Number(day.monthKey.slice(0, 4))}년 ${Number(day.monthKey.slice(5, 7))}월`, count: 1 });
+    return items;
+  }, []);
+  const today = localDateValue();
+  const scheduleClass = (task) => {
+    if (task.statusCode === "DONE") return "is-done";
+    if (["ON_HOLD", "BLOCKED"].includes(task.statusCode)) return "is-hold";
+    if (task.streamCode === "YOUTUBE") return "is-youtube";
+    if (task.streamCode === "INSTAGRAM") return "is-instagram";
+    if (task.streamCode === "SEO") return "is-seo";
+    return "is-active";
+  };
   return <section className="task-timeline panel" aria-label="업무 일정">
-    <header className="task-timeline-summary"><div><span>프로젝트 표·일정</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무 원장의 9개 필드를 표와 일정 막대로 함께 표시합니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span></div></header>
-    <div className="task-sheet-scroll"><table className="task-sheet-table"><thead><tr><th>업무</th><th>세부내용</th><th>시작일</th><th>종료일</th><th>기간(일)</th><th>진행률</th><th>상태</th><th>완료링크</th><th>비고</th></tr></thead><tbody>{tasks.map((task) => { const duration = taskDurationDays(task.plannedStartDate, task.dueDate); const progress = task.progressPercent ?? (task.statusCode === "DONE" ? 100 : task.statusCode === "NOT_STARTED" ? 0 : null); return <tr key={task.id}><td><strong>{task.title}</strong></td><td>{task.description || "-"}</td><td>{task.plannedStartDate || "-"}</td><td>{task.dueDate || "-"}</td><td>{duration ?? "-"}</td><td>{progress === null ? "-" : <span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span>}</td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td>{task.completionUrl ? <a href={task.completionUrl} target="_blank" rel="noreferrer">완료링크</a> : "-"}</td><td>{task.remarks || "-"}</td></tr>; })}</tbody></table></div>
-    {timeline.rows.length ? <div className="task-timeline-scroll">
-      <div className="task-timeline-grid" style={{ "--timeline-days": timeline.dayCount }}>
-        <div className="task-timeline-corner"><span>업무</span><small>{timeline.rows.length}건</small></div>
-        <div className="task-timeline-axis">{timeline.ticks.map((tick) => <span key={tick.date} style={{ left: `${tick.left}%` }}>{tick.label}</span>)}{timeline.todayLeft !== null && <i className="task-timeline-today" style={{ left: `${timeline.todayLeft}%` }}><em>오늘</em></i>}</div>
-        {timeline.rows.map(({ task, startDate, endDate, left, width }) => <Fragment key={task.id}>
-          <div className="task-timeline-label"><span>{task.parent}</span><strong>{task.title}</strong><small>{trackerDateLabel(startDate)} — {trackerDateLabel(endDate)}</small></div>
-          <div className="task-timeline-track">{timeline.todayLeft !== null && <i className="task-timeline-today is-row" style={{ left: `${timeline.todayLeft}%` }} />}<span className={`task-timeline-bar is-${String(task.statusCode || "not-started").toLowerCase()}`} style={{ left: `${left}%`, width: `${width}%` }} title={`${task.title} · ${startDate}~${endDate}`}><b>{task.status}</b></span></div>
-        </Fragment>)}
-      </div>
-    </div> : <EmptyState title="표시할 일정 막대가 없습니다" description="업무 시작일과 종료일을 입력하면 표 아래에 자동으로 표시됩니다." />}
+    <header className="task-timeline-summary"><div><span>프로젝트 일정표</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무 정보와 일자별 실행 기간을 같은 행에서 확인합니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span></div></header>
+    {days.length ? <div className="task-schedule-matrix-scroll"><table className="task-schedule-matrix"><thead><tr><th rowSpan="2">업무</th><th rowSpan="2">세부내용</th><th rowSpan="2">시작일</th><th rowSpan="2">종료일</th><th rowSpan="2">기간(일)</th><th rowSpan="2">진행률</th><th rowSpan="2">상태</th><th rowSpan="2">완료링크</th><th rowSpan="2">비고</th>{months.map((month) => <th className="task-schedule-month" colSpan={month.count} key={month.key}>{month.label}</th>)}</tr><tr>{days.map((day) => <th key={day.iso} className={`task-schedule-day-head ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""}`}><strong>{day.day}</strong><small>{day.weekday}</small></th>)}</tr></thead><tbody>{tasks.map((task) => {
+      const row = datedRows.get(task.id);
+      const duration = taskDurationDays(task.plannedStartDate, task.dueDate);
+      const progress = task.progressPercent ?? (task.statusCode === "DONE" ? 100 : task.statusCode === "NOT_STARTED" ? 0 : null);
+      return <tr key={task.id}><td><strong>{task.title}</strong><small>{task.parent || task.stream}</small></td><td>{task.description || "-"}</td><td>{task.plannedStartDate || "-"}</td><td>{task.dueDate || "-"}</td><td>{duration ?? "-"}</td><td>{progress === null ? "-" : <span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span>}</td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td>{task.completionUrl ? <a href={task.completionUrl} target="_blank" rel="noreferrer">열기</a> : "-"}</td><td>{task.remarks || "-"}</td>{days.map((day) => { const active = row && day.iso >= row.startDate && day.iso <= row.endDate; return <td key={`${task.id}-${day.iso}`} className={`task-schedule-cell ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""} ${active ? `has-schedule ${scheduleClass(task)}` : ""}`} title={active ? `${task.title} · ${row.startDate}~${row.endDate}` : day.iso}>{active ? <i /> : null}</td>; })}</tr>;
+    })}</tbody></table></div> : <EmptyState title="표시할 일정이 없습니다" description="업무 시작일과 종료일을 입력하면 날짜 칸에 실행 기간이 표시됩니다." />}
   </section>;
 }
 
-function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCreate, canWrite, onUpdate, onProjectUpdate }) {
+function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCreate, canWrite, onUpdate, onProjectUpdate, initialSection = "list" }) {
   const editable = Boolean(canWrite);
   const canEditProject = Boolean(canWrite && role === "pocket");
   const schedule = trackerSchedule(taskPage.project?.startDate);
@@ -636,13 +658,13 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
   const [localQuery, setLocalQuery] = useState("");
   const [alertFilter, setAlertFilter] = useState("전체");
   const [collapsedTaskGroups, setCollapsedTaskGroups] = useState([]);
-  const [taskSection, setTaskSection] = useState("list");
+  const [taskSection, setTaskSection] = useState(initialSection);
   const [startDateDraft, setStartDateDraft] = useState(taskPage.project?.startDate || "");
   const [startDateSaving, setStartDateSaving] = useState(false);
   const [startDateError, setStartDateError] = useState("");
   useEffect(() => setStartDateDraft(taskPage.project?.startDate || ""), [taskPage.project?.startDate]);
   useEffect(() => setPhase(currentPhaseLabel), [taskPage.project?.id, taskPage.project?.startDate, currentPhaseLabel]);
-  useEffect(() => setTaskSection("list"), [taskPage.project?.id]);
+  useEffect(() => setTaskSection(initialSection), [taskPage.project?.id, initialSection]);
   useEffect(() => setCollapsedTaskGroups([]), [taskPage.project?.id]);
   useEffect(() => {
     if (taskSection === "activity" && activityState?.status === "idle") onLoadActivity?.();
@@ -763,7 +785,7 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
       <CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton>
     </ViewHeader>
 
-    <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>표·일정</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
+    <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>일정표</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
 
     {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} /> : <>
 
@@ -1149,7 +1171,7 @@ function AppContent({ view, planVariant, project, role, search, setView, pageSta
   if (pageState.status === "error" && !pageState.data) return <ErrorState error={pageState.error} onRetry={onRetry} />;
   const data = pageState.data || {};
   if (view === "plan") return <PlanView plan={data} project={project} planVariant={planVariant} />;
-  if (view === "tasks") return <TasksView role={role} query={search} taskPage={{ ...data, project: data.project || { id: project.id, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} />;
+  if (view === "tasks" || view === "schedule") return <TasksView role={role} query={search} taskPage={{ ...data, project: data.project || { id: project.id, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} initialSection={view === "schedule" ? "schedule" : "list"} />;
   if (view === "daily") return <DailyMeetingsView role={role} meetings={data.items || []} canWrite={canWrite && role !== "client"} onSave={onDailyMeetingSave} />;
   if (view === "content") return <ContentView role={role} query={search} contents={data.items || []} onCreate={onCreate} canWrite={canWrite} />;
   if (view === "tracking") return <TrackingView tracking={data} />;
@@ -1433,7 +1455,7 @@ export function App() {
     if (!request) {
       const fallback = () => {
         if (view === "plan") return source.plan({ ...params, planType: PLAN_VARIANTS[authorizedPlanVariant].apiValue }).then(planViewModel);
-        if (view === "tasks") return source.tasks(params).then(tasksViewModel);
+        if (view === "tasks" || view === "schedule") return source.tasks(params).then(tasksViewModel);
         if (view === "daily") return source.dailyMeetings({ ...params, limit: 100 }).then(dailyMeetingsViewModel);
         if (view === "content") return source.contents(params).then(contentsViewModel);
         if (view === "tracking") return source.tracking(params).then(performanceTrackingViewModel);
@@ -1818,7 +1840,7 @@ export function App() {
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
       <ProjectSidebar project={project} role={role} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
     </div>

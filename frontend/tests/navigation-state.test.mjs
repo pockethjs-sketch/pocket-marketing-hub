@@ -49,8 +49,11 @@ test("실행계획 하위 화면은 URL과 캐시 키에서 서로 분리된다"
   assert.deepEqual(parseViewLocation("#plan/client"), { view: "plan", planVariant: "client" });
   assert.deepEqual(parseViewLocation("#plan/internal"), { view: "plan", planVariant: "internal" });
   assert.deepEqual(parseViewLocation("#plan"), { view: "plan", planVariant: "client" });
+  assert.deepEqual(parseViewLocation("#tasks/schedule"), { view: "schedule", planVariant: "client" });
   assert.deepEqual(parseViewLocation("#daily"), { view: "daily", planVariant: "client" });
   assert.equal(viewLocationHash("plan", "internal"), "plan/internal");
+  assert.equal(viewLocationHash("schedule"), "tasks/schedule");
+  assert.equal(viewResourceKey("schedule"), "tasks");
   assert.equal(viewResourceKey("plan", "client"), "plan-client");
   assert.equal(viewResourceKey("plan", "internal"), "plan-internal");
 });

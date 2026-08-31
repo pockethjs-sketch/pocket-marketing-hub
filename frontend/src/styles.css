@@ -5858,6 +5858,80 @@ table tbody tr:hover {
   text-align: right;
 }
 
+.task-schedule-matrix-scroll {
+  max-height: calc(100vh - 250px);
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+
+.task-schedule-matrix {
+  width: max-content;
+  min-width: 100%;
+  border-spacing: 0;
+  border-collapse: separate;
+  table-layout: fixed;
+  color: var(--text);
+  font-size: 10px;
+}
+
+.task-schedule-matrix th,
+.task-schedule-matrix td {
+  height: 48px;
+  padding: 7px 8px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.task-schedule-matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 32px;
+  padding: 5px 7px;
+  background: #f1f4f8;
+  color: #5f6f86;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.task-schedule-matrix thead tr:nth-child(2) th { top: 32px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(1), .task-schedule-matrix tbody td:nth-child(1) { width: 180px; min-width: 180px; max-width: 180px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(2), .task-schedule-matrix tbody td:nth-child(2) { width: 240px; min-width: 240px; max-width: 240px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(3), .task-schedule-matrix tbody td:nth-child(3), .task-schedule-matrix thead tr:first-child > th:nth-child(4), .task-schedule-matrix tbody td:nth-child(4) { width: 92px; min-width: 92px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(5), .task-schedule-matrix tbody td:nth-child(5) { width: 62px; min-width: 62px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(6), .task-schedule-matrix tbody td:nth-child(6) { width: 118px; min-width: 118px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(7), .task-schedule-matrix tbody td:nth-child(7) { width: 78px; min-width: 78px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(8), .task-schedule-matrix tbody td:nth-child(8) { width: 76px; min-width: 76px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(9), .task-schedule-matrix tbody td:nth-child(9) { width: 180px; min-width: 180px; max-width: 180px; }
+.task-schedule-matrix tbody td:nth-child(1), .task-schedule-matrix tbody td:nth-child(2), .task-schedule-matrix tbody td:nth-child(9) { overflow: hidden; text-align: left; text-overflow: ellipsis; }
+.task-schedule-matrix thead tr:first-child > th:first-child, .task-schedule-matrix tbody td:first-child { position: sticky; left: 0; z-index: 3; box-shadow: 1px 0 0 var(--line); }
+.task-schedule-matrix thead tr:first-child > th:first-child { z-index: 8; }
+.task-schedule-matrix tbody tr:nth-child(even) td:not(.task-schedule-cell) { background: #fbfcfd; }
+.task-schedule-matrix tbody tr:hover td:not(.task-schedule-cell) { background: #f5f8fc; }
+.task-schedule-matrix td:first-child strong, .task-schedule-matrix td:first-child small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-schedule-matrix td:first-child strong { font-size: 11px; }
+.task-schedule-matrix td:first-child small { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
+.task-schedule-matrix a { color: var(--accent); font-weight: 800; text-decoration: none; }
+.task-schedule-matrix .task-schedule-month { height: 32px; border-bottom-color: #cbd5e1; background: #17233b; color: #fff; letter-spacing: .02em; }
+.task-schedule-matrix .task-schedule-day-head, .task-schedule-matrix .task-schedule-cell { width: 30px; min-width: 30px; max-width: 30px; padding: 0; }
+.task-schedule-day-head strong, .task-schedule-day-head small { display: block; line-height: 1.25; }
+.task-schedule-day-head small { margin-top: 2px; color: #94a3b8; font-size: 8px; }
+.task-schedule-day-head.is-weekend, .task-schedule-cell.is-weekend { background: #f8fafc; }
+.task-schedule-day-head.is-today { box-shadow: inset 2px 0 #ef4444, inset -2px 0 #ef4444; color: #dc2626; }
+.task-schedule-cell { position: relative; height: 48px; }
+.task-schedule-cell.is-today::after { position: absolute; inset: 0 auto 0 50%; width: 1px; background: rgba(239, 68, 68, .7); content: ""; }
+.task-schedule-cell.has-schedule { background: #c7d5f4; }
+.task-schedule-cell.has-schedule.is-youtube { background: #f5c7c7; }
+.task-schedule-cell.has-schedule.is-instagram { background: #e5c8ee; }
+.task-schedule-cell.has-schedule.is-seo { background: #ccebcf; }
+.task-schedule-cell.has-schedule.is-done { background: #bfe6d6; }
+.task-schedule-cell.has-schedule.is-hold { background: #f7dfaa; }
+.task-schedule-cell.has-schedule i { position: absolute; inset: 7px 0; border-top: 2px solid rgba(23, 35, 59, .2); border-bottom: 2px solid rgba(23, 35, 59, .2); }
+
 .task-timeline-summary > div:first-child > span {
   color: var(--accent);
   font-size: 12px;

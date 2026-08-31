@@ -21,6 +21,7 @@ test("고객에게 허용된 첫 화면과 실행계획 하위 경로를 판정�
   assert.equal(isViewAllowed("plan", ["plan"]), true);
   assert.equal(isViewAllowed("tasks", ["plan"]), false);
   assert.equal(isViewAllowed("daily", ["tasks"]), true);
+  assert.equal(isViewAllowed("schedule", ["tasks"]), true);
   assert.equal(isViewAllowed("permissions", ACCESS_PAGE_KEYS), false);
 });
 
