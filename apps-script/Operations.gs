@@ -5,7 +5,8 @@ var MH_MUTATION_REGISTRY_HEADERS = [
 ];
 
 var MH_BACKUP_LOG_HEADERS = [
-  'backup_id', 'file_id', 'file_name', 'size_bytes', 'status_code', 'message', 'created_at'
+  'backup_id', 'file_id', 'file_name', 'size_bytes', 'status_code', 'message', 'created_at',
+  'manifest_json', 'verified_at', 'verification_status'
 ];
 
 function mhEnsureSheetWithHeaders_(sheetName, headers) {
@@ -72,6 +73,7 @@ function mhRunOperationsMaintenance_(request, actor) {
   }
   if (operation === 'ensure_operations') return mhSetupEnsureOperationsSheets();
   if (operation === 'backfill_mutations') return mhSetupBackfillMutationRegistry();
+  if (operation === 'audit_mutations') return mhAuditMutationRegistry_();
   if (operation === 'repair_dependency_schema') return mhSetupRepairTaskDependencySchema();
   if (operation === 'repair_sync_status_schema') return mhSetupRepairSyncStatusSchema();
   if (operation === 'split_internal_roles') return mhSetupSplitInternalRoles();
@@ -211,6 +213,30 @@ function mhSetupBackfillMutationRegistry() {
   return { ok: true, indexedMutations: Object.keys(latest).length, inserted: inserts.length, updated: updated };
 }
 
+function mhAuditMutationRegistry_() {
+  var rows = mhReadTable_(MH_SHEETS.MUTATIONS).rows;
+  var cutoff = Date.now() - 15 * 60 * 1000;
+  var counts = { total: rows.length, commit: 0, prepare: 0, failed: 0, unknown: 0 };
+  var stalePrepareIds = [];
+  rows.forEach(function (row) {
+    var status = mhAsText_(row.event_status_code).toUpperCase();
+    if (status === 'COMMIT') counts.commit += 1;
+    else if (status === 'PREPARE') {
+      counts.prepare += 1;
+      var createdAt = Date.parse(mhAsText_(row.updated_at || row.created_at));
+      if (!isFinite(createdAt) || createdAt < cutoff) stalePrepareIds.push(mhAsText_(row.mutation_id));
+    } else if (status === 'FAILED') counts.failed += 1;
+    else counts.unknown += 1;
+  });
+  return {
+    ok: stalePrepareIds.length === 0 && counts.unknown === 0,
+    counts: counts,
+    stalePrepareCount: stalePrepareIds.length,
+    stalePrepareIds: stalePrepareIds.slice(0, 20),
+    checkedAt: mhNowIso_()
+  };
+}
+
 function mhSetupInstallDailyBackup() {
   mhSetupEnsureOperationsSheets();
   return {
@@ -238,7 +264,9 @@ function mhRunScheduledBackup_(request) {
   if (!supplied || !expected || !mhConstantTimeEquals_(mhHashToken_(supplied), expected)) {
     throw mhApiError_('unauthorized', 'invalid_backup_runner', 401);
   }
-  return mhRunDailyBackup(false);
+  var result = mhRunDailyBackup(false);
+  result.verification = mhVerifyLatestBackup();
+  return result;
 }
 
 function mhRunDailyBackup(force) {
@@ -250,16 +278,34 @@ function mhRunDailyBackup(force) {
   if (!force && lastSuccessAt.slice(0, 10) === today) {
     return { ok: true, skipped: true, reason: 'already_backed_up_today', lastBackupAt: lastSuccessAt };
   }
-  var timestamp = Utilities.formatDate(now, 'Asia/Seoul', 'yyyyMMdd_HHmmss');
-  var copy = mhSpreadsheet_().copy('PocketMarketingHub_' + timestamp);
-  var createdAt = mhNowIso_();
-  mhAppendRecord_(MH_SHEETS.BACKUP_LOG, {
-    backup_id: mhNewId_('BKP'), file_id: copy.getId(), file_name: copy.getName(),
-    size_bytes: 0, status_code: 'SUCCESS', message: 'Google Drive 내 별도 스프레드시트 복제', created_at: createdAt
-  });
-  properties.setProperty(MH_PROPERTY_KEYS.BACKUP_LAST_SUCCESS_AT, createdAt);
-  MH_SETTINGS_MEMORY_CACHE = null;
-  return { ok: true, skipped: false, fileId: copy.getId(), fileName: copy.getName(), createdAt: createdAt };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) throw mhApiError_('lock_timeout', 'backup_lock_timeout', 409);
+  try {
+    var timestamp = Utilities.formatDate(now, 'Asia/Seoul', 'yyyyMMdd_HHmmss');
+    var source = mhSpreadsheet_();
+    var sourceManifest = mhSpreadsheetManifest_(source);
+    var copy = source.copy('PocketMarketingHub_' + timestamp);
+    var backupManifest = mhSpreadsheetManifest_(copy);
+    var comparison = mhCompareBackupManifests_(sourceManifest, backupManifest);
+    var createdAt = mhNowIso_();
+    var verifiedAt = comparison.ok ? createdAt : '';
+    mhAppendRecord_(MH_SHEETS.BACKUP_LOG, {
+      backup_id: mhNewId_('BKP'), file_id: copy.getId(), file_name: copy.getName(),
+      size_bytes: 0, status_code: comparison.ok ? 'SUCCESS' : 'FAILED',
+      message: comparison.ok ? '별도 스프레드시트 복제 및 셀 해시 검증' : '백업 검증 불일치: ' + comparison.mismatchedSheets.join(','),
+      created_at: createdAt, manifest_json: JSON.stringify(sourceManifest),
+      verified_at: verifiedAt, verification_status: comparison.ok ? 'VERIFIED' : 'MISMATCH'
+    });
+    if (!comparison.ok) throw mhApiError_('internal_error', 'backup_manifest_mismatch', 500);
+    properties.setProperty(MH_PROPERTY_KEYS.BACKUP_LAST_SUCCESS_AT, createdAt);
+    MH_SETTINGS_MEMORY_CACHE = null;
+    return {
+      ok: true, skipped: false, fileId: copy.getId(), fileName: copy.getName(),
+      createdAt: createdAt, verification: comparison
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function mhVerifyLatestBackup() {
@@ -269,7 +315,56 @@ function mhVerifyLatestBackup() {
   logs.sort(function (a, b) { return mhAsText_(b.created_at).localeCompare(mhAsText_(a.created_at)); });
   if (!logs[0]) throw new Error('검증할 백업 파일이 없습니다.');
   var spreadsheet = SpreadsheetApp.openById(mhAsText_(logs[0].file_id));
-  var required = [MH_SHEETS.CLIENTS, MH_SHEETS.PROJECTS, MH_SHEETS.USERS, MH_SHEETS.MEMBERSHIPS, MH_SHEETS.TASKS, MH_SHEETS.ACTIVITY];
-  var missing = required.filter(function (name) { return !spreadsheet.getSheetByName(name); });
-  return { ok: missing.length === 0, fileId: spreadsheet.getId(), fileName: spreadsheet.getName(), missingSheets: missing };
+  var actual = mhSpreadsheetManifest_(spreadsheet);
+  var expected = mhParseJson_(mhAsText_(logs[0].manifest_json), null);
+  var comparison = expected ? mhCompareBackupManifests_(expected, actual) : mhCompareBackupManifests_({ sheets: {} }, actual);
+  if (!expected) {
+    var required = [MH_SHEETS.CLIENTS, MH_SHEETS.PROJECTS, MH_SHEETS.USERS, MH_SHEETS.MEMBERSHIPS, MH_SHEETS.TASKS, MH_SHEETS.ACTIVITY];
+    comparison.missingSheets = required.filter(function (name) { return !spreadsheet.getSheetByName(name); });
+    comparison.ok = comparison.missingSheets.length === 0;
+    comparison.legacyManifest = true;
+  }
+  return {
+    ok: comparison.ok, fileId: spreadsheet.getId(), fileName: spreadsheet.getName(),
+    missingSheets: comparison.missingSheets || [], mismatchedSheets: comparison.mismatchedSheets || [],
+    verifiedSheets: comparison.verifiedSheets || 0, legacyManifest: !!comparison.legacyManifest
+  };
+}
+
+function mhSpreadsheetManifest_(spreadsheet) {
+  var names = Object.keys(MH_SHEETS).map(function (key) { return MH_SHEETS[key]; });
+  var sheets = {};
+  names.forEach(function (name) {
+    var sheet = spreadsheet.getSheetByName(name);
+    if (!sheet) return;
+    var rows = Math.max(sheet.getLastRow(), 1);
+    var columns = Math.max(sheet.getLastColumn(), 1);
+    var values = sheet.getRange(1, 1, rows, columns).getDisplayValues();
+    sheets[name] = {
+      rows: rows,
+      columns: columns,
+      digest: mhHashToken_(mhStableJson_(values))
+    };
+  });
+  return { schemaVersion: MH_SCHEMA_VERSION, sheets: sheets };
+}
+
+function mhCompareBackupManifests_(expected, actual) {
+  var expectedSheets = expected && expected.sheets ? expected.sheets : {};
+  var actualSheets = actual && actual.sheets ? actual.sheets : {};
+  var missing = [];
+  var mismatched = [];
+  Object.keys(expectedSheets).forEach(function (name) {
+    if (!actualSheets[name]) {
+      missing.push(name);
+      return;
+    }
+    if (mhStableJson_(expectedSheets[name]) !== mhStableJson_(actualSheets[name])) mismatched.push(name);
+  });
+  return {
+    ok: missing.length === 0 && mismatched.length === 0,
+    missingSheets: missing,
+    mismatchedSheets: mismatched,
+    verifiedSheets: Object.keys(expectedSheets).length - missing.length - mismatched.length
+  };
 }

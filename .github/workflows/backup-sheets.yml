@@ -21,4 +21,4 @@ jobs:
             -H 'Content-Type: text/plain;charset=utf-8' \
             --data "$payload" \
             "$POCKET_API_URL")
-          echo "$response" | jq -e '.ok == true and .data.ok == true'
+          echo "$response" | jq -e '.ok == true and .data.ok == true and .data.verification.ok == true'

@@ -78,6 +78,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
     mhAssertApproverAssignmentAllowed_(entityType, fields, null, actor);
     mhApplyAllowedFields_(after, fields, spec, actor);
     mhApplyCreateDefaults_(after, entityType, actor, now);
+    mhApplyTaskCompletionStamp_(after, null, entityType, now);
     mhValidateMutationRecord_(after, spec, entityType, actor, project, null);
   } else {
     if (!before || mhNonEmpty_(before.archived_at)) throw mhApiError_('not_found', 'record_not_found', 404);
@@ -107,6 +108,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
     if (operation === 'ARCHIVE') after.archived_at = now;
     after.updated_at = now;
     after.row_version = currentVersion + 1;
+    mhApplyTaskCompletionStamp_(after, before, entityType, now);
     mhValidateMutationRecord_(after, spec, entityType, actor, project, before);
   }
 
@@ -129,6 +131,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
     );
     mhAppendRecord_(MH_SHEETS.ACTIVITY, commitLog);
     mhRememberMutationRegistry_(commitLog, requestHash);
+    mhInvalidateClientReadCache_(project.project_id);
     return {
       mutationId: mutationId,
       duplicate: false,
@@ -202,6 +205,17 @@ function mhApplyCreateDefaults_(record, entityType, actor, now) {
       record.customer_visible = true;
     }
   }
+}
+
+function mhApplyTaskCompletionStamp_(record, before, entityType, now) {
+  if (entityType !== 'task') return;
+  var next = mhAsText_(record.status_code).toUpperCase();
+  var previous = mhAsText_(before && before.status_code).toUpperCase();
+  if (next === 'DONE') {
+    if (previous !== 'DONE' || !mhNonEmpty_(record.completed_at)) record.completed_at = now;
+    return;
+  }
+  if (previous === 'DONE') record.completed_at = '';
 }
 
 function mhValidateMutationRecord_(record, spec, entityType, actor, project, before) {
@@ -490,6 +504,7 @@ function mhRecoverPreparedMutation_(prepareLog, actor, project, requestHash) {
   );
   mhAppendRecord_(MH_SHEETS.ACTIVITY, commit);
   mhRememberMutationRegistry_(commit, requestHash);
+  mhInvalidateClientReadCache_(project.project_id);
   return mhMutationReplay_(commit, actor);
 }
 

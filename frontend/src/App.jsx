@@ -60,7 +60,7 @@ import {
 } from "./planNavigation.js";
 import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
-import { buildTaskTimeline } from "./taskTimeline.js";
+import { buildTaskTimeline, withDisplayDeadline } from "./taskTimeline.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
 import { ACCESS_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
@@ -645,7 +645,9 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
   const tasks = (taskPage.items || []).map((task) => {
     const calculatedDue = trackerTaskDue(task, schedule);
     const normalizedTask = { ...task, status: task.statusCode === "CANCELLED" ? "취소" : task.status };
-    return calculatedDue ? { ...normalizedTask, dueDate: `${calculatedDue.getFullYear()}-${String(calculatedDue.getMonth() + 1).padStart(2, "0")}-${String(calculatedDue.getDate()).padStart(2, "0")}`, due: `${trackerTaskDueLabel(calculatedDue)} · ${trackerDdayLabel(calculatedDue)}` } : normalizedTask;
+    // A phase-derived deadline is display-only. Keeping dueDate untouched
+    // prevents an unrelated edit from persisting a calculated date as user input.
+    return withDisplayDeadline(normalizedTask, calculatedDue ? `${trackerTaskDueLabel(calculatedDue)} · ${trackerDdayLabel(calculatedDue)}` : "");
   });
   const [phase, setPhase] = useState(currentPhaseLabel);
   const [stream, setStream] = useState("전체");

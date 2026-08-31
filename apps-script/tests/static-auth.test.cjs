@@ -374,6 +374,14 @@ const internalPlanCacheKey = context.mhClientReadCacheKey_(
   'project_plan', { planType: 'INTERNAL' }, snapshotActor, 'PRJ-UND-90D-001',
 );
 assert.notEqual(clientPlanCacheKey, internalPlanCacheKey);
+const cacheKeyBeforeMutation = context.mhClientReadCacheKey_(
+  'project_overview', {}, snapshotActor, 'PRJ-UND-90D-001',
+);
+context.mhInvalidateClientReadCache_('PRJ-UND-90D-001');
+const cacheKeyAfterMutation = context.mhClientReadCacheKey_(
+  'project_overview', {}, snapshotActor, 'PRJ-UND-90D-001',
+);
+assert.notEqual(cacheKeyBeforeMutation, cacheKeyAfterMutation);
 
 const readApiSource = fs.readFileSync(path.join(root, 'ReadApi.gs'), 'utf8');
 assert.match(readApiSource, /action === 'project_snapshot'\) data = mhReadProjectSnapshot_/);
@@ -424,6 +432,7 @@ const mutationSource = fs.readFileSync(path.join(root, 'Mutations.gs'), 'utf8');
 assert.match(mutationSource, /spec\.operations && spec\.operations\.indexOf\(operation\) < 0/);
 assert.match(mutationSource, /\['start_date', 'planned_start_date'/);
 assert.match(mutationSource, /\['MASTER', 'POCKET_MANAGER', 'POCKET_EDITOR'\]\.indexOf\(actor\.role\) < 0/);
+assert.match(mutationSource, /mhInvalidateClientReadCache_\(project\.project_id\)/);
 
 // Task activity is a safe, task-specific audit projection: only committed
 // task events are returned, with the task title, actor display name, and

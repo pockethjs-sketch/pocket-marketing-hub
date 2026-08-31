@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildTaskTimeline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한다", () => {
   const timeline = buildTaskTimeline([
@@ -20,4 +20,11 @@ test("날짜가 없는 업무는 일정 축에서 제외한다", () => {
   const timeline = buildTaskTimeline([{ id: "A" }], {});
   assert.equal(timeline.rows.length, 0);
   assert.equal(timeline.dayCount, 0);
+});
+
+test("계산된 마감 표시는 실제 사용자 입력 종료일을 덮어쓰지 않는다", () => {
+  const task = { id: "A", dueDate: null, due: "미정" };
+  const decorated = withDisplayDeadline(task, "09.09 · D-8");
+  assert.equal(decorated.due, "09.09 · D-8");
+  assert.equal(decorated.dueDate, null);
 });

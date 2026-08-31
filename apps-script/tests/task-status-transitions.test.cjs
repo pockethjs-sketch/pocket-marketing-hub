@@ -53,4 +53,14 @@ assert.throws(
   /invalid_status_transition/,
 );
 
+const completed = { status_code: 'DONE', completed_at: '' };
+context.mhApplyTaskCompletionStamp_(completed, { status_code: 'IN_PROGRESS' }, 'task', '2026-09-01T01:00:00+09:00');
+assert.equal(completed.completed_at, '2026-09-01T01:00:00+09:00');
+context.mhApplyTaskCompletionStamp_(completed, { status_code: 'DONE' }, 'task', '2026-09-01T02:00:00+09:00');
+assert.equal(completed.completed_at, '2026-09-01T01:00:00+09:00');
+context.mhApplyTaskCompletionStamp_(completed, { status_code: 'DONE' }, 'task', '2026-09-01T03:00:00+09:00');
+completed.status_code = 'IN_PROGRESS';
+context.mhApplyTaskCompletionStamp_(completed, { status_code: 'DONE' }, 'task', '2026-09-01T03:00:00+09:00');
+assert.equal(completed.completed_at, '');
+
 console.log('Task status transition checks passed.');

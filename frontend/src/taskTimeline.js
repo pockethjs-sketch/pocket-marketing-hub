@@ -56,3 +56,7 @@ export function buildTaskTimeline(tasks = [], project = {}, todayValue = new Dat
   });
   return { start: isoDate(start), end: isoDate(end), dayCount, rows, ticks, todayLeft };
 }
+
+export function withDisplayDeadline(task, displayDeadline) {
+  return displayDeadline ? { ...task, due: displayDeadline } : task;
+}

@@ -29,13 +29,24 @@ context.mhHashToken_ = (value) => `hash:${value}`;
 context.mhConstantTimeEquals_ = (left, right) => left === right;
 context.mhSetting_ = () => context.mhHashToken_('runner-secret-that-is-long-enough-1234');
 context.mhRunDailyBackup = (force) => ({ ok: true, force });
+context.mhVerifyLatestBackup = () => ({ ok: true, verifiedSheets: 21 });
 assert.throws(
   () => context.mhRunScheduledBackup_({ runnerSecret: 'wrong-runner-secret' }),
   /invalid_backup_runner/,
 );
 assert.deepEqual(
   JSON.parse(JSON.stringify(context.mhRunScheduledBackup_({ runnerSecret: 'runner-secret-that-is-long-enough-1234' }))),
-  { ok: true, force: false },
+  { ok: true, force: false, verification: { ok: true, verifiedSheets: 21 } },
+);
+
+const manifest = { sheets: { A: { rows: 2, columns: 2, digest: 'same' } } };
+assert.deepEqual(
+  JSON.parse(JSON.stringify(context.mhCompareBackupManifests_(manifest, manifest))),
+  { ok: true, missingSheets: [], mismatchedSheets: [], verifiedSheets: 1 },
+);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(context.mhCompareBackupManifests_(manifest, { sheets: { A: { rows: 2, columns: 2, digest: 'different' } } }))),
+  { ok: false, missingSheets: [], mismatchedSheets: ['A'], verifiedSheets: 0 },
 );
 
 console.log('Operations maintenance authorization checks passed.');

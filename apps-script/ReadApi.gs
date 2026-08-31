@@ -27,6 +27,32 @@ function mhHandleRead_(action, request, actor) {
 var MH_CLIENT_READ_CACHE_TTL_SECONDS = 120;
 var MH_CLIENT_READ_CACHE_MAX_BYTES = 90000;
 
+function mhClientReadCacheEpochKey_(projectId) {
+  return 'CLIENT_READ_EPOCH_' + mhHashToken_(mhAsText_(projectId)).slice(0, 40);
+}
+
+function mhClientReadCacheEpoch_(projectId) {
+  var key = mhClientReadCacheEpochKey_(projectId);
+  try {
+    var cache = CacheService.getScriptCache();
+    var cached = cache.get(key);
+    if (cached) return cached;
+    var persisted = PropertiesService.getScriptProperties().getProperty(key) || '0';
+    cache.put(key, persisted, 21600);
+    return persisted;
+  } catch (ignored) {
+    return '0';
+  }
+}
+
+function mhInvalidateClientReadCache_(projectId) {
+  var key = mhClientReadCacheEpochKey_(projectId);
+  var epoch = String(Date.now());
+  try { PropertiesService.getScriptProperties().setProperty(key, epoch); } catch (ignored) {}
+  try { CacheService.getScriptCache().put(key, epoch, 21600); } catch (ignoredAgain) {}
+  return epoch;
+}
+
 function mhClientReadCacheTtl_(action) {
   return action === 'project_plan' || action === 'project_snapshot'
     ? 300
@@ -40,6 +66,7 @@ function mhClientReadCacheKey_(action, request, actor, projectId) {
     actor: mhAsText_(actor.userId),
     role: mhAsText_(actor.role),
     projectId: mhAsText_(projectId),
+    epoch: mhClientReadCacheEpoch_(projectId),
     filters: request.filters || null,
     startDate: request.startDate || request.start_date || null,
     endDate: request.endDate || request.end_date || null,
