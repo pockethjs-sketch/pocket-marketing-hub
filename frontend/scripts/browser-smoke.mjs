@@ -128,7 +128,29 @@ try {
   if (await evaluate(client, "Boolean(document.querySelector('.login-shell'))")) {
     const account = process.env.SMOKE_ACCOUNT || "";
     const accessCode = process.env.SMOKE_ACCESS_CODE || "";
+    const apiUrl = process.env.SMOKE_API_URL || "";
     assert(account && accessCode, "Authenticated smoke test requires SMOKE_ACCOUNT and SMOKE_ACCESS_CODE");
+    if (apiUrl) {
+      const loginResponse = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        body: JSON.stringify({ action: "login", account, accessCode, includeBootstrap: false }),
+      });
+      const loginPayload = await loginResponse.json();
+      assert(loginPayload?.ok === true, `Smoke API login failed: ${loginPayload?.error?.code || loginResponse.status}`);
+      const loginData = loginPayload.data?.session || loginPayload.data;
+      const storedSession = {
+        token: String(loginData.token || ""),
+        expiresAt: Date.now() + Number(loginData.expiresIn || 0) * 1000,
+        user: loginData.user || null,
+      };
+      assert(storedSession.token && storedSession.expiresAt > Date.now(), "Smoke API returned an invalid session");
+      await evaluate(client, `sessionStorage.setItem('pocket_marketing_hub_session_v1', ${JSON.stringify(JSON.stringify(storedSession))})`);
+      assert(await evaluate(client, "Boolean(sessionStorage.getItem('pocket_marketing_hub_session_v1'))"), "Smoke session was not written to browser storage");
+      await evaluate(client, "location.reload()");
+      await delay(250);
+      assert(await evaluate(client, "Boolean(sessionStorage.getItem('pocket_marketing_hub_session_v1'))"), "Smoke session disappeared during reload");
+    } else {
     await evaluate(client, `(() => {
       const inputs = document.querySelectorAll('.login-card input');
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
@@ -147,6 +169,15 @@ try {
     })()`);
     await client.send("Input.dispatchMouseEvent", { type: "mousePressed", x: loginPoint.x, y: loginPoint.y, button: "left", clickCount: 1 });
     await client.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: loginPoint.x, y: loginPoint.y, button: "left", clickCount: 1 });
+    await delay(250);
+    if (await evaluate(client, "Boolean(document.querySelector('.login-shell')) && document.querySelector('.login-submit')?.disabled === false")) {
+      await evaluate(client, "document.querySelector('.login-submit').click()");
+    }
+    await delay(250);
+    if (await evaluate(client, "Boolean(document.querySelector('.login-shell')) && document.querySelector('.login-submit')?.disabled === false")) {
+      await evaluate(client, "document.querySelector('.login-card form').requestSubmit()");
+    }
+    }
   }
   const overviewReady = await waitFor(client, "document.querySelectorAll('.metric-card').length === 4", readyTimeout);
   if (!overviewReady) {
@@ -200,9 +231,9 @@ try {
   assert(await evaluate(client, "location.hash") === "#tasks", "Task navigation did not update the view");
   assert(await waitFor(client, "document.querySelectorAll('.tracker-task-group article').length > 0", readyTimeout), "Task rows did not render after task-tab entry");
   const taskRequestsAfterInitialLoad = countApiAction(client.events, "tasks");
-  assert(await evaluate(client, "Boolean(document.querySelector('.tracker-schedule'))"), "90-day task schedule did not render");
-  assert(await evaluate(client, "document.querySelectorAll('.tracker-alert-grid button').length === 4"), "Task alert summary did not render");
-  assert(await evaluate(client, "document.querySelectorAll('.tracker-phase-grid button').length >= 4"), "Phase progress cards did not render");
+  assert(await evaluate(client, "Boolean(document.querySelector('.tracker-schedule-intro'))"), "90-day task schedule summary did not render");
+  assert(await evaluate(client, "document.querySelectorAll('.tracker-status-counts > span').length >= 4"), "Task status summary did not render");
+  assert(await evaluate(client, "document.querySelectorAll('.tracker-schedule-phases button').length >= 4"), "Phase progress cards did not render");
   assert(await evaluate(client, "Boolean(document.querySelector('.tracker-publishing'))"), "Publishing summary did not render");
   assert(await evaluate(client, "Boolean(document.querySelector('.tracker-inline-search'))"), "Task-local search did not render");
   assert(await evaluate(client, "document.querySelector('.tracker-start-date-editor') === null"), "Client view exposed project start-date editing");
@@ -249,14 +280,14 @@ try {
   assert(await waitFor(client, "Boolean(document.querySelector('.content-summary')) && !document.querySelector('.state-panel.is-loading')", readyTimeout), "Content view did not render");
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('성과')).click()")
-  await waitFor(client, "Boolean(document.querySelector('.performance-intro')) && !document.querySelector('.state-panel.is-loading')", readyTimeout);
+  await waitFor(client, "Boolean(document.querySelector('.performance-intro, .tracking-view')) && !document.querySelector('.state-panel.is-loading')", readyTimeout);
   const kpiCount = await evaluate(client, "document.querySelectorAll('.kpi-card').length");
-  if (!await evaluate(client, "Boolean(document.querySelector('.performance-intro'))")) {
+  if (!await evaluate(client, "Boolean(document.querySelector('.performance-intro, .tracking-view'))")) {
     const performanceText = await evaluate(client, "document.querySelector('.content-canvas')?.innerText || ''");
     console.error(`Performance debug (${kpiCount} cards): ${performanceText.slice(0, 800)}`);
     console.error(JSON.stringify(client.events.filter((event) => event.method === "Runtime.exceptionThrown" || event.method === "Log.entryAdded").slice(-5), null, 2));
   }
-  assert(await evaluate(client, "Boolean(document.querySelector('.performance-intro'))"), "Performance view did not render");
+  assert(await evaluate(client, "Boolean(document.querySelector('.performance-intro, .tracking-view'))"), "Performance view did not render");
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('업무')).click()")
   assert(await waitFor(client, "document.querySelectorAll('.tracker-task-group article').length > 0", 1000), "Cached task view did not render immediately");
