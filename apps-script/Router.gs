@@ -7,21 +7,31 @@
 
 function doGet(e) {
   var requestId = mhRequestId_();
+  var startedAt = Date.now();
+  var actionForLog = 'health';
+  var outcomeForLog = 'OK';
   try {
     var action = mhAsText_(e && e.parameter && e.parameter.action).toLowerCase();
     if (action && action !== 'health') throw mhApiError_('invalid_request', 'post_required', 405);
     return mhJsonOutput_(mhSuccess_(requestId, null, null, mhHealth_(), mhRevision_()));
   } catch (error) {
+    outcomeForLog = error.apiCode || 'internal_error';
     console.error('[marketing-hub] ' + requestId + ' ' + (error.stack || error));
     return mhJsonOutput_(mhFailure_(requestId, error));
+  } finally {
+    mhLogRequestMetric_(requestId, actionForLog, startedAt, outcomeForLog);
   }
 }
 
 function doPost(e) {
   var requestId = mhRequestId_();
+  var startedAt = Date.now();
+  var actionForLog = 'unknown';
+  var outcomeForLog = 'OK';
   try {
     var request = mhParsePostBody_(e);
     var action = mhAsText_(request.action).toLowerCase();
+    actionForLog = action || 'missing';
     if (!action) throw mhApiError_('invalid_request', 'action_required', 400);
 
     if (action === 'health') {
@@ -67,6 +77,9 @@ function doPost(e) {
       // Sessions are stateless. The client must delete its sessionStorage token.
       return mhJsonOutput_(mhSuccess_(requestId, null, null, { loggedOut: true }, mhRevision_()));
     }
+    if (action === 'scheduled_backup') {
+      return mhJsonOutput_(mhSuccess_(requestId, null, null, mhRunScheduledBackup_(request), mhRevision_()));
+    }
 
     var actor = mhResolveActor_(request);
     if (action === 'deep_health') {
@@ -80,6 +93,9 @@ function doPost(e) {
     }
     if (action === 'access_admin_mutate') {
       return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhPermissionAdminMutate_(request, actor), mhRevision_()));
+    }
+    if (action === 'ops_maintenance') {
+      return mhJsonOutput_(mhSuccess_(requestId, actor, null, mhRunOperationsMaintenance_(request, actor), mhRevision_()));
     }
     if (action === 'ensure_daily_meetings') {
       if (actor.role !== 'MASTER' && actor.role !== 'POCKET_MANAGER') {
@@ -112,8 +128,11 @@ function doPost(e) {
     }
     throw mhApiError_('invalid_request', 'unsupported_action', 400);
   } catch (error) {
+    outcomeForLog = error.apiCode || 'internal_error';
     console.error('[marketing-hub] ' + requestId + ' ' + (error.stack || error));
     return mhJsonOutput_(mhFailure_(requestId, error));
+  } finally {
+    mhLogRequestMetric_(requestId, actionForLog, startedAt, outcomeForLog);
   }
 }
 
@@ -142,7 +161,9 @@ function mhHealth_() {
     publicPreviewEnabled: String(
       mhSetting_(MH_PROPERTY_KEYS.PUBLIC_PREVIEW_ENABLED, 'false')
     ).toLowerCase() === 'true',
-    writesEnabled: String(mhSetting_(MH_PROPERTY_KEYS.ENABLE_WRITES, 'false')).toLowerCase() === 'true'
+    writesEnabled: String(mhSetting_(MH_PROPERTY_KEYS.ENABLE_WRITES, 'false')).toLowerCase() === 'true',
+    backupConfigured: !!mhSetting_(MH_PROPERTY_KEYS.BACKUP_RUNNER_DIGEST, ''),
+    lastBackupAt: mhSetting_(MH_PROPERTY_KEYS.BACKUP_LAST_SUCCESS_AT, '') || null
   };
 }
 
@@ -154,6 +175,20 @@ function mhDeepHealth_() {
     spreadsheetAccessible: true,
     schemaValid: true,
     enabledAccounts: Object.keys(mhAccessCodeDigests_()).length,
-    writesEnabled: String(mhSetting_(MH_PROPERTY_KEYS.ENABLE_WRITES, 'false')).toLowerCase() === 'true'
+    writesEnabled: String(mhSetting_(MH_PROPERTY_KEYS.ENABLE_WRITES, 'false')).toLowerCase() === 'true',
+    backupConfigured: !!mhSetting_(MH_PROPERTY_KEYS.BACKUP_RUNNER_DIGEST, ''),
+    lastBackupAt: mhSetting_(MH_PROPERTY_KEYS.BACKUP_LAST_SUCCESS_AT, '') || null
   };
+}
+
+function mhLogRequestMetric_(requestId, action, startedAt, outcome) {
+  try {
+    console.log('[marketing-hub-metric] ' + JSON.stringify({
+      requestId: requestId,
+      action: action,
+      durationMs: Math.max(0, Date.now() - Number(startedAt || Date.now())),
+      outcome: outcome,
+      backendVersion: MH_BACKEND_VERSION
+    }));
+  } catch (ignored) {}
 }

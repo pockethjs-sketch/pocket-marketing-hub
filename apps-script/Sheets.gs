@@ -68,11 +68,16 @@ function mhUseFreshTables_() {
   MH_TABLE_MEMORY_CACHE = {};
 }
 
-function mhBeginMutationTables_() {
+function mhBeginMutationTables_(sheetNames) {
   MH_FORCE_FRESH_TABLES = false;
   MH_TABLE_MEMORY_CACHE = {};
-  Object.keys(MH_SHEETS).forEach(function (key) {
-    mhInvalidateTableCache_(MH_SHEETS[key]);
+  var names = Array.isArray(sheetNames) && sheetNames.length
+    ? sheetNames : Object.keys(MH_SHEETS).map(function (key) { return MH_SHEETS[key]; });
+  var seen = {};
+  names.forEach(function (sheetName) {
+    if (!sheetName || seen[sheetName]) return;
+    seen[sheetName] = true;
+    mhInvalidateTableCache_(sheetName);
   });
 }
 
@@ -202,7 +207,13 @@ function mhAssertHeaders_(sheetName, requiredHeaders) {
   var missing = requiredHeaders.filter(function (header) {
     return headers.indexOf(header) < 0;
   });
-  if (missing.length) throw mhApiError_('schema_mismatch', 'missing_required_headers', 500);
+  if (missing.length) {
+    throw mhApiError_(
+      'schema_mismatch',
+      'missing_required_headers:' + sheetName + ':' + missing.join(','),
+      500
+    );
+  }
 }
 
 function mhSchemaCheck_() {
@@ -234,6 +245,14 @@ function mhSchemaCheck_() {
     'before_json', 'after_json', 'actor_user_id', 'actor_role_code',
     'event_status_code', 'created_at'
   ]);
+  mhAssertHeaders_(MH_SHEETS.MUTATIONS, [
+    'mutation_id', 'request_hash', 'event_status_code', 'entity_type', 'entity_id',
+    'project_id', 'action_code', 'before_json', 'after_json', 'actor_user_id',
+    'actor_role_code', 'created_at', 'updated_at'
+  ]);
+  mhAssertHeaders_(MH_SHEETS.BACKUP_LOG, [
+    'backup_id', 'file_id', 'file_name', 'size_bytes', 'status_code', 'message', 'created_at'
+  ]);
   mhAssertHeaders_(MH_SHEETS.SYNC_STATUS, ['sync_status_id', 'client_id', 'project_id', 'status_code', 'updated_at', 'archived_at']);
   mhAssertHeaders_(MH_SHEETS.PLANS, [
     'plan_id', 'client_id', 'project_id', 'version_label', 'title', 'summary',
@@ -256,7 +275,8 @@ function mhSchemaCheck_() {
     [MH_SHEETS.DAILY_PERFORMANCE, 'performance_id'], [MH_SHEETS.KPI_ACTUALS, 'kpi_actual_id'],
     [MH_SHEETS.FILES, 'file_id'], [MH_SHEETS.ACTIVITY, 'event_id'],
     [MH_SHEETS.SYNC_STATUS, 'sync_status_id'], [MH_SHEETS.PLANS, 'plan_id'],
-    [MH_SHEETS.PLAN_SECTIONS, 'plan_section_id'], [MH_SHEETS.DAILY_MEETINGS, 'meeting_id']
+    [MH_SHEETS.PLAN_SECTIONS, 'plan_section_id'], [MH_SHEETS.DAILY_MEETINGS, 'meeting_id'],
+    [MH_SHEETS.MUTATIONS, 'mutation_id'], [MH_SHEETS.BACKUP_LOG, 'backup_id']
   ].forEach(function (entry) { mhAssertUniqueKey_(entry[0], entry[1]); });
   mhAssertUniqueMemberships_();
   mhAssertTenantScopes_();
@@ -295,8 +315,20 @@ function mhAssertTenantScopes_() {
     MH_SHEETS.DAILY_MEETINGS
   ].forEach(function (sheetName) {
     mhActiveRows_(sheetName).forEach(function (row) {
-      var key = mhAsText_(row.client_id) + '|' + mhAsText_(row.project_id);
-      if (!projects[key]) throw mhApiError_('schema_mismatch', 'invalid_tenant_scope', 500);
+      var clientId = mhAsText_(row.client_id);
+      var projectId = mhAsText_(row.project_id);
+      if (sheetName === MH_SHEETS.ACTIVITY && !clientId && !projectId) return;
+      var key = clientId + '|' + projectId;
+      if (!projects[key]) {
+        var firstId = mhAsText_(row[Object.keys(row).filter(function (field) {
+          return field.slice(-3) === '_id' && field !== 'client_id' && field !== 'project_id';
+        })[0]]);
+        throw mhApiError_(
+          'schema_mismatch',
+          'invalid_tenant_scope:' + sheetName + ':' + firstId + ':' + key,
+          500
+        );
+      }
     });
   });
 }

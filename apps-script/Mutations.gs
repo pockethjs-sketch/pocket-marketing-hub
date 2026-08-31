@@ -1,13 +1,17 @@
 function mhHandleMutation_(request, actor) {
-  // Writes must never trust the short-lived read cache. Invalidate once, then
-  // reuse the freshly read tables for the remainder of this execution.
-  mhBeginMutationTables_();
   var mutation = request.mutation || request;
   var mutationId = mhAsText_(mutation.mutationId || mutation.mutation_id);
   var entityType = mhAsText_(mutation.entityType || mutation.entity_type).toLowerCase();
   var operation = mhAsText_(mutation.operation).toUpperCase();
   var projectId = mhAsText_(mutation.projectId || mutation.project_id);
   var spec = MH_ENTITY_SPECS[entityType];
+
+  // Invalidate only the authorization, target and audit ledgers needed by a
+  // write. Clearing every sheet made one status click pay for unrelated tabs.
+  mhBeginMutationTables_([
+    MH_SHEETS.USERS, MH_SHEETS.MEMBERSHIPS, MH_SHEETS.PROJECTS,
+    spec && spec.sheet, MH_SHEETS.ACTIVITY, MH_SHEETS.MUTATIONS
+  ]);
 
   if (!/^mut_[A-Za-z0-9_-]{8,120}$/i.test(mutationId)) {
     throw mhApiError_('validation_error', 'invalid_mutation_id', 400);
@@ -111,6 +115,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
     before, after, actor, project, 'PREPARE', now, requestHash
   );
   mhAppendRecord_(MH_SHEETS.ACTIVITY, prepareLog);
+  mhRememberMutationRegistry_(prepareLog, requestHash);
 
   try {
     if (operation === 'CREATE') {
@@ -123,6 +128,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
       before, after, actor, project, 'COMMIT', mhNowIso_(), requestHash
     );
     mhAppendRecord_(MH_SHEETS.ACTIVITY, commitLog);
+    mhRememberMutationRegistry_(commitLog, requestHash);
     return {
       mutationId: mutationId,
       duplicate: false,
@@ -138,6 +144,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
         'FAILED', mhNowIso_(), requestHash
       );
       mhAppendRecord_(MH_SHEETS.ACTIVITY, failedLog);
+      mhRememberMutationRegistry_(failedLog, requestHash);
     } catch (ignored) {}
     throw error;
   }
@@ -402,6 +409,8 @@ function mhRequireEntityReference_(entityType, id, project) {
 }
 
 function mhFindMutationLogs_(mutationId) {
+  var indexed = mhFindMutationRegistryLogs_(mutationId);
+  if (indexed && (indexed.commit || indexed.prepare)) return indexed;
   var rows = mhReadTable_(MH_SHEETS.ACTIVITY).rows;
   var found = { commit: null, prepare: null };
   for (var i = rows.length - 1; i >= 0; i -= 1) {
@@ -480,6 +489,7 @@ function mhRecoverPreparedMutation_(prepareLog, actor, project, requestHash) {
     'COMMIT', mhNowIso_(), requestHash
   );
   mhAppendRecord_(MH_SHEETS.ACTIVITY, commit);
+  mhRememberMutationRegistry_(commit, requestHash);
   return mhMutationReplay_(commit, actor);
 }
 

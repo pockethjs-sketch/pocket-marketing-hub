@@ -86,6 +86,86 @@ function mhSetupEnsureTaskTableFields() {
   return { ok: true, sheet: MH_SHEETS.TASKS, addedFields: fields, initializedProgressRows: updated };
 }
 
+/** Preserve the legacy task_id/depends_on_task_id columns while adding the
+ * directionally explicit dependency fields required by the current schema. */
+function mhSetupRepairTaskDependencySchema() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) throw new Error('업무 의존성 원장을 잠그지 못했습니다.');
+  try {
+    var sheet = mhPlanEnsureSheet_(
+      mhSpreadsheet_(),
+      MH_SHEETS.TASK_DEPENDENCIES,
+      ['predecessor_task_id', 'successor_task_id']
+    );
+    var rowCount = Math.max(0, sheet.getLastRow() - 1);
+    if (!rowCount) {
+      mhInvalidateTableCache_(MH_SHEETS.TASK_DEPENDENCIES);
+      return { ok: true, migratedRows: 0 };
+    }
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(mhAsText_);
+    var values = sheet.getRange(2, 1, rowCount, headers.length).getValues();
+    var legacyTaskIndex = headers.indexOf('task_id');
+    var legacyDependsIndex = headers.indexOf('depends_on_task_id');
+    var predecessorIndex = headers.indexOf('predecessor_task_id');
+    var successorIndex = headers.indexOf('successor_task_id');
+    if (legacyTaskIndex < 0 || legacyDependsIndex < 0 || predecessorIndex < 0 || successorIndex < 0) {
+      throw new Error('업무 의존성 열 구성이 마이그레이션 조건과 다릅니다.');
+    }
+    var predecessorValues = [];
+    var successorValues = [];
+    var migrated = 0;
+    values.forEach(function (row) {
+      var predecessor = mhAsText_(row[predecessorIndex]) || mhAsText_(row[legacyDependsIndex]);
+      var successor = mhAsText_(row[successorIndex]) || mhAsText_(row[legacyTaskIndex]);
+      predecessorValues.push([predecessor]);
+      successorValues.push([successor]);
+      if (predecessor || successor) migrated += 1;
+    });
+    sheet.getRange(2, predecessorIndex + 1, rowCount, 1).setValues(predecessorValues);
+    sheet.getRange(2, successorIndex + 1, rowCount, 1).setValues(successorValues);
+    SpreadsheetApp.flush();
+    mhInvalidateTableCache_(MH_SHEETS.TASK_DEPENDENCIES);
+    return { ok: true, migratedRows: migrated, legacyColumnsPreserved: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function mhSetupRepairSyncStatusSchema() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) throw new Error('동기화 상태 원장을 잠그지 못했습니다.');
+  try {
+    var sheet = mhPlanEnsureSheet_(
+      mhSpreadsheet_(),
+      MH_SHEETS.SYNC_STATUS,
+      ['sync_status_id', 'archived_at']
+    );
+    var rowCount = Math.max(0, sheet.getLastRow() - 1);
+    if (!rowCount) {
+      mhInvalidateTableCache_(MH_SHEETS.SYNC_STATUS);
+      return { ok: true, migratedRows: 0, legacyColumnsPreserved: true };
+    }
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(mhAsText_);
+    var legacyIndex = headers.indexOf('sync_id');
+    var targetIndex = headers.indexOf('sync_status_id');
+    if (legacyIndex < 0 || targetIndex < 0) throw new Error('동기화 상태 ID 열 구성이 예상과 다릅니다.');
+    var values = sheet.getRange(2, 1, rowCount, headers.length).getValues();
+    var ids = values.map(function (row) {
+      return [mhAsText_(row[targetIndex]) || mhAsText_(row[legacyIndex])];
+    });
+    sheet.getRange(2, targetIndex + 1, rowCount, 1).setValues(ids);
+    SpreadsheetApp.flush();
+    mhInvalidateTableCache_(MH_SHEETS.SYNC_STATUS);
+    return {
+      ok: true,
+      migratedRows: ids.filter(function (row) { return !!row[0]; }).length,
+      legacyColumnsPreserved: true
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /** One-time cleanup for progress values that were previously derived from
  * schedule elapsed time or task status. Progress is now manual-only. */
 function mhSetupResetDerivedTaskProgress() {
@@ -137,7 +217,9 @@ function mhSetupProvisionSharedAccounts(pocketAccessCode, nsAccessCode) {
       fallbackUserId: 'USR-POCKET-001',
       fallbackMembershipId: 'MEM-UND-POCKET-001',
       displayName: '포켓컴퍼니',
-      organizationCode: 'POCKET'
+      organizationCode: 'POCKET',
+      roleCode: 'POCKET_MANAGER',
+      permissionCode: 'ADMIN'
     },
     {
       account: 'ns',
@@ -146,7 +228,9 @@ function mhSetupProvisionSharedAccounts(pocketAccessCode, nsAccessCode) {
       fallbackUserId: 'USR-NS-001',
       fallbackMembershipId: 'MEM-UND-NS-001',
       displayName: 'NS마케팅',
-      organizationCode: 'NS'
+      organizationCode: 'NS',
+      roleCode: 'EXECUTOR_EDITOR',
+      permissionCode: 'EDIT'
     }
   ];
   specs.forEach(function (spec) {
@@ -179,7 +263,7 @@ function mhSetupProvisionSharedAccounts(pocketAccessCode, nsAccessCode) {
       return {
         account: spec.account,
         userId: user.user_id,
-        role: 'POCKET_MANAGER',
+        role: spec.roleCode,
         projectId: mhAsText_(project.project_id),
         permission: mhAsText_(membership.permission_code)
       };
@@ -256,7 +340,7 @@ function mhSetupUpsertSharedUser_(spec, now) {
     display_name: spec.displayName,
     email: spec.email,
     organization_code: spec.organizationCode,
-    role_code: 'POCKET_MANAGER',
+    role_code: spec.roleCode,
     status_code: 'ACTIVE',
     created_at: existing && mhNonEmpty_(existing.created_at) ? existing.created_at : now,
     updated_at: now,
@@ -288,7 +372,7 @@ function mhSetupUpsertSharedMembership_(spec, userId, project, now) {
     user_id: userId,
     client_id: clientId,
     project_id: projectId,
-    permission_code: 'ADMIN',
+    permission_code: spec.permissionCode,
     status_code: 'ACTIVE',
     created_at: existing && mhNonEmpty_(existing.created_at) ? existing.created_at : now,
     updated_at: now,
@@ -422,6 +506,65 @@ function mhSetupProtectApiManagedSheets() {
     if (protection.canDomainEdit()) protection.setDomainEdit(false);
   });
   return { ok: true, protectedSheets: names };
+}
+
+/**
+ * One-time role hardening for the shared internal accounts.
+ * Pocket remains the manager; NS keeps project edit access without account,
+ * schema, backup or other Pocket-only administration authority.
+ * Existing sessions are invalidated so the new role applies immediately.
+ */
+function mhSetupSplitInternalRoles() {
+  var specs = [
+    { email: 'pocket@hub.local', organization: 'POCKET', role: 'POCKET_MANAGER', permission: 'ADMIN' },
+    { email: 'ns@hub.local', organization: 'NS', role: 'EXECUTOR_EDITOR', permission: 'EDIT' }
+  ];
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) throw new Error('권한 원장을 잠그지 못했습니다. 잠시 후 다시 실행하세요.');
+  try {
+    mhUseFreshTables_();
+    var userTable = mhReadTable_(MH_SHEETS.USERS);
+    var membershipTable = mhReadTable_(MH_SHEETS.MEMBERSHIPS);
+    var now = mhNowIso_();
+    var result = [];
+
+    specs.forEach(function (spec) {
+      var users = userTable.rows.filter(function (row) {
+        return !mhNonEmpty_(row.archived_at) && mhAsText_(row.email).toLowerCase() === spec.email;
+      });
+      if (users.length !== 1) throw new Error(spec.email + ' 활성 사용자 행이 1개여야 합니다.');
+      var user = users[0];
+      var nextUser = {};
+      userTable.headers.forEach(function (header) { nextUser[header] = user[header]; });
+      nextUser.organization_code = spec.organization;
+      nextUser.role_code = spec.role;
+      nextUser.updated_at = now;
+      nextUser.row_version = Math.max(1, Number(user.row_version || 0) + 1);
+      mhUpdateRecord_(userTable, user.__rowNumber, nextUser);
+
+      var updatedMemberships = 0;
+      membershipTable.rows.filter(function (row) {
+        return !mhNonEmpty_(row.archived_at) && mhAsText_(row.user_id) === mhAsText_(user.user_id);
+      }).forEach(function (membership) {
+        var nextMembership = {};
+        membershipTable.headers.forEach(function (header) { nextMembership[header] = membership[header]; });
+        nextMembership.permission_code = spec.permission;
+        nextMembership.updated_at = now;
+        nextMembership.row_version = Math.max(1, Number(membership.row_version || 0) + 1);
+        mhUpdateRecord_(membershipTable, membership.__rowNumber, nextMembership);
+        updatedMemberships += 1;
+      });
+      result.push({ email: spec.email, role: spec.role, permission: spec.permission, memberships: updatedMemberships });
+    });
+
+    var properties = PropertiesService.getScriptProperties();
+    properties.setProperty(MH_PROPERTY_KEYS.SESSION_VERSION, String(Number(mhSessionVersion_() || 0) + 1));
+    MH_SETTINGS_MEMORY_CACHE = null;
+    mhUseFreshTables_();
+    return { ok: true, accounts: result, sessionsInvalidated: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function mhSetupValidate() {

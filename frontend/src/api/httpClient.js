@@ -66,7 +66,15 @@ export function createHttpClient(config) {
 
     const controller = new AbortController();
     const detachAbort = attachAbort(options.signal, controller);
-    const timer = setTimeout(() => controller.abort("timeout"), config.timeoutMs);
+    const actionTimeouts = {
+      login: 12000,
+      mutate: 15000,
+      access_admin_mutate: 15000,
+      project_plan: 10000,
+      daily_meetings: 10000,
+    };
+    const timeoutMs = Math.min(config.timeoutMs, actionTimeouts[action] || 8000);
+    const timer = setTimeout(() => controller.abort("timeout"), timeoutMs);
 
     const fetchOptions = {
       method,

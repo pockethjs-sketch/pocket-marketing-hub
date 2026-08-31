@@ -49,7 +49,6 @@ import {
   performanceViewModel,
   taskResponsibleOrganization,
   tasksViewModel,
-  workspaceViewModel,
 } from "./api/index.js";
 import { getNavigationPresentation, nextDesktopNavigationLevel } from "./navigationState.js";
 import {
@@ -592,10 +591,12 @@ function taskDurationDays(startValue, endValue) {
 }
 
 function TaskScheduleTimeline({ tasks, project }) {
+  const [showDetails, setShowDetails] = useState(false);
   const timeline = buildTaskTimeline(tasks, project);
   const done = tasks.filter((task) => task.status === "완료").length;
   const inProgress = tasks.filter((task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)).length;
   const onHold = tasks.filter((task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode)).length;
+  const missingSchedule = tasks.filter((task) => !task.plannedStartDate || !task.dueDate).length;
   const datedRows = new Map(timeline.rows.map((row) => [row.task.id, row]));
   const days = [];
   if (timeline.start && timeline.end) {
@@ -623,13 +624,13 @@ function TaskScheduleTimeline({ tasks, project }) {
     return "is-active";
   };
   return <section className="task-timeline panel" aria-label="업무 일정">
-    <header className="task-timeline-summary"><div><span>프로젝트 일정표</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무 정보와 일자별 실행 기간을 같은 행에서 확인합니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span></div></header>
-    {days.length ? <div className="task-schedule-matrix-scroll"><table className="task-schedule-matrix"><thead><tr><th rowSpan="2">업무</th><th rowSpan="2">세부내용</th><th rowSpan="2">시작일</th><th rowSpan="2">종료일</th><th rowSpan="2">기간(일)</th><th rowSpan="2">진행률</th><th rowSpan="2">상태</th><th rowSpan="2">완료링크</th><th rowSpan="2">비고</th>{months.map((month) => <th className="task-schedule-month" colSpan={month.count} key={month.key}>{month.label}</th>)}</tr><tr>{days.map((day) => <th key={day.iso} className={`task-schedule-day-head ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""}`}><strong>{day.day}</strong><small>{day.weekday}</small></th>)}</tr></thead><tbody>{tasks.map((task) => {
+    <header className="task-timeline-summary"><div><span>프로젝트 일정표</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무 정보와 일자별 실행 기간을 같은 행에서 확인합니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span>{missingSchedule > 0 && <span className="is-warning">일정 미등록 <strong>{missingSchedule}</strong></span>}{days.length > 0 && <button type="button" className="secondary-button task-schedule-detail-toggle" aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>{showDetails ? "일정 우선" : "상세 열 보기"}</button>}</div></header>
+    {days.length ? <div className="task-schedule-matrix-scroll"><table className={`task-schedule-matrix${showDetails ? " is-detailed" : " is-compact"}`}><thead><tr><th rowSpan="2">업무</th><th rowSpan="2">세부내용</th><th rowSpan="2">시작일</th><th rowSpan="2">종료일</th><th rowSpan="2">기간(일)</th><th rowSpan="2">진행률</th><th rowSpan="2">상태</th><th rowSpan="2">완료링크</th><th rowSpan="2">비고</th>{months.map((month) => <th className="task-schedule-month" colSpan={month.count} key={month.key}>{month.label}</th>)}</tr><tr>{days.map((day) => <th key={day.iso} className={`task-schedule-day-head ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""}`}><strong>{day.day}</strong><small>{day.weekday}</small></th>)}</tr></thead><tbody>{tasks.map((task) => {
       const row = datedRows.get(task.id);
       const duration = taskDurationDays(task.plannedStartDate, task.dueDate);
       const progress = task.progressPercent ?? 0;
       return <tr key={task.id}><td><strong>{task.title}</strong><small>{task.parent || task.stream}</small></td><td>{task.description || "-"}</td><td>{task.plannedStartDate || "-"}</td><td>{task.dueDate || "-"}</td><td>{duration ?? "-"}</td><td>{progress === null ? "-" : <span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span>}</td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td>{task.completionUrl ? <a href={task.completionUrl} target="_blank" rel="noreferrer">열기</a> : "-"}</td><td>{task.remarks || "-"}</td>{days.map((day) => { const active = row && day.iso >= row.startDate && day.iso <= row.endDate; return <td key={`${task.id}-${day.iso}`} className={`task-schedule-cell ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""} ${active ? `has-schedule ${scheduleClass(task)}` : ""}`} title={active ? `${task.title} · ${row.startDate}~${row.endDate}` : day.iso}>{active ? <i /> : null}</td>; })}</tr>;
-    })}</tbody></table></div> : <EmptyState title="표시할 일정이 없습니다" description="업무 시작일과 종료일을 입력하면 날짜 칸에 실행 기간이 표시됩니다." />}
+    })}</tbody></table></div> : <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="시작일과 종료일이 없어 일정표를 만들 수 없습니다. 업무 수정에서 두 날짜를 입력해 주세요." />}
   </section>;
 }
 
@@ -1180,6 +1181,34 @@ function AppContent({ view, planVariant, project, role, search, setView, pageSta
 const blankPage = { status: "idle", data: null, error: null, resource: null, projectId: null };
 const blankTaskActivity = { status: "idle", data: null, error: null, projectId: null };
 const RESOURCE_CACHE_TTL_MS = 10 * 60_000;
+const BOOTSTRAP_SESSION_CACHE_KEY = "pocket-marketing-hub.bootstrap.v1";
+
+function readBootstrapSessionCache(session) {
+  try {
+    const raw = globalThis.sessionStorage?.getItem(BOOTSTRAP_SESSION_CACHE_KEY);
+    const cached = raw ? JSON.parse(raw) : null;
+    if (!cached?.envelope || !cached?.userId || cached.userId !== session?.user?.userId) return null;
+    if (Date.now() - Number(cached.cachedAt || 0) > RESOURCE_CACHE_TTL_MS) return null;
+    return cached.envelope;
+  } catch {
+    return null;
+  }
+}
+
+function writeBootstrapSessionCache(session, envelope) {
+  try {
+    if (!session?.user?.userId || !envelope) return;
+    globalThis.sessionStorage?.setItem(BOOTSTRAP_SESSION_CACHE_KEY, JSON.stringify({
+      userId: session.user.userId,
+      cachedAt: Date.now(),
+      envelope,
+    }));
+  } catch {}
+}
+
+function clearBootstrapSessionCache() {
+  try { globalThis.sessionStorage?.removeItem(BOOTSTRAP_SESSION_CACHE_KEY); } catch {}
+}
 
 export function App() {
   const [{ source, error: configError }] = useState(sourceFactory);
@@ -1206,12 +1235,10 @@ export function App() {
   const [createEntity, setCreateEntity] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
   const activeProjectIdRef = useRef(null);
-  const activeViewRef = useRef(viewResourceKey(view, planVariant));
   const pageRefreshKeyRef = useRef(pageRefreshKey);
   const initializationRequestRef = useRef(null);
   const resourceCacheRef = useRef(new Map());
   const resourceRequestRef = useRef(new Map());
-  const workspaceRequestRef = useRef(new Map());
   const resourceCacheEpochRef = useRef(0);
   const taskActivityRequestRef = useRef(null);
   const live = Boolean(source);
@@ -1225,7 +1252,6 @@ export function App() {
   });
   const authorizedPlanVariant = planVariant;
   const activeResource = viewResourceKey(view, authorizedPlanVariant);
-  activeViewRef.current = activeResource;
   pageRefreshKeyRef.current = pageRefreshKey;
 
   useEffect(() => source?.subscribe(setSourceState), [source]);
@@ -1261,6 +1287,7 @@ export function App() {
 
   const applyBootstrapEnvelope = useCallback((envelope) => {
     const data = bootstrapViewModel(envelope);
+    writeBootstrapSessionCache(source?.getSession(), envelope);
     const currentProjectId = activeProjectIdRef.current;
     const nextProjectId = data.projects[currentProjectId]
       ? currentProjectId
@@ -1277,7 +1304,6 @@ export function App() {
     resourceCacheEpochRef.current += 1;
     resourceCacheRef.current.clear();
     resourceRequestRef.current.clear();
-    workspaceRequestRef.current.clear();
     if (data.initial?.projectId === nextProjectId) {
       const initialState = {
         status: "ready",
@@ -1299,7 +1325,7 @@ export function App() {
       }
     }
     return data;
-  }, []);
+  }, [source]);
 
   const loadBootstrap = useCallback(async (signal) => {
     if (!source || !source.getSession()) return;
@@ -1324,10 +1350,15 @@ export function App() {
     const initialize = async () => {
       const storedSession = source.getSession();
       if (!storedSession && source.config.loginEnabled) return;
+      const cachedBootstrap = storedSession ? readBootstrapSessionCache(storedSession) : null;
+      if (cachedBootstrap) {
+        applyBootstrapEnvelope(cachedBootstrap);
+        setSession(storedSession);
+      }
       const requestKey = `${bootstrapRetryKey}:${storedSession ? "session" : "preview"}`;
       if (!initializationRequestRef.current || initializationRequestRef.current.key !== requestKey) {
         setLoginError(null);
-        setBootstrapState({ status: "loading", data: null, error: null });
+        if (!cachedBootstrap) setBootstrapState({ status: "loading", data: null, error: null });
         initializationRequestRef.current = {
           key: requestKey,
           promise: storedSession
@@ -1388,50 +1419,6 @@ export function App() {
   }, [source, activeProjectId, view, bootstrapState.status, bootstrapState.data, overviewState.status, overviewState.projectId, pageRefreshKey]);
 
   useEffect(() => {
-    if (!source || !activeProjectId || bootstrapState.status !== "ready" || view === "permissions") return undefined;
-    const activeViewReady = view === "overview"
-      ? overviewState.status === "ready" && overviewState.projectId === activeProjectId
-      : resourceState.status === "ready" && resourceState.resource === activeResource && resourceState.projectId === activeProjectId;
-    // The snapshot is only a later-navigation cache warmer. Never let it
-    // compete with the focused screen's first request.
-    if (!activeViewReady) return undefined;
-
-    const requestKey = `${activeProjectId}:${pageRefreshKey}`;
-    if (workspaceRequestRef.current.has(requestKey)) return undefined;
-    const projectId = activeProjectId;
-    const requestEpoch = resourceCacheEpochRef.current;
-    const baseProject = bootstrapState.data.projects[projectId] || null;
-    const request = source.workspace({ projectId, limit: 200 })
-      .then((envelope) => {
-        if (resourceCacheEpochRef.current !== requestEpoch || pageRefreshKeyRef.current !== pageRefreshKey) return null;
-        const views = workspaceViewModel(envelope, baseProject);
-        const cachedAt = Date.now();
-        Object.entries(views).forEach(([resource, data]) => {
-          const nextState = { status: "ready", data, error: null, resource, projectId, refreshKey: pageRefreshKey };
-          const cacheKey = `${projectId}:${resource}`;
-          const currentCache = resourceCacheRef.current.get(cacheKey);
-          if (!currentCache || currentCache.refreshKey <= pageRefreshKey) {
-            resourceCacheRef.current.set(cacheKey, { state: nextState, cachedAt, refreshKey: pageRefreshKey });
-          }
-        });
-        if (activeProjectIdRef.current !== projectId) return views;
-        if (views.overview) {
-          setOverviewState({ status: "ready", data: views.overview, error: null, resource: "overview", projectId, refreshKey: pageRefreshKey });
-        }
-        const currentResource = activeViewRef.current;
-        if (currentResource !== "overview" && views[currentResource]) {
-          setResourceState({ status: "ready", data: views[currentResource], error: null, resource: currentResource, projectId, refreshKey: pageRefreshKey });
-        }
-        return views;
-      })
-      // Snapshot warming is an optimization only. Unsupported/staged servers
-      // and transient failures keep using the existing per-tab request path.
-      .catch(() => null);
-    workspaceRequestRef.current.set(requestKey, request);
-    return undefined;
-  }, [source, activeProjectId, view, activeResource, bootstrapState.status, bootstrapState.data, overviewState.status, overviewState.projectId, resourceState.status, resourceState.resource, resourceState.projectId, pageRefreshKey]);
-
-  useEffect(() => {
     if (!source || !activeProjectId || view === "overview" || bootstrapState.status !== "ready") return undefined;
     const cacheKey = `${activeProjectId}:${activeResource}`;
     const cached = resourceCacheRef.current.get(cacheKey) || null;
@@ -1460,9 +1447,8 @@ export function App() {
         if (view === "permissions") return source.permissions().then(accessAdminViewModel);
         return Promise.reject(new Error(`Unsupported resource: ${view}`));
       };
-      // A focused endpoint is smaller and predictably faster than waiting for
-      // the all-tab project snapshot. The snapshot still warms later tabs in
-      // the background after this screen becomes usable.
+      // Focused endpoints keep each tab payload bounded and avoid an expensive
+      // all-tab project snapshot before the requested screen is usable.
       request = fallback();
       resourceRequestRef.current.set(requestKey, request);
       request.finally(() => {
@@ -1503,6 +1489,7 @@ export function App() {
 
   const logout = () => {
     source.logout();
+    clearBootstrapSessionCache();
     activeProjectIdRef.current = null;
     setSession(null);
     setBootstrapState(blankPage);
@@ -1513,7 +1500,6 @@ export function App() {
     resourceCacheEpochRef.current += 1;
     resourceCacheRef.current.clear();
     resourceRequestRef.current.clear();
-    workspaceRequestRef.current.clear();
     setCreateEntity(null);
     setSaveNotice(null);
   };
@@ -1594,19 +1580,17 @@ export function App() {
 
   const createRecord = async (entityType, fields) => {
     const nextFields = entityType === "file" ? { ...fields, entity_type: "PROJECT", entity_id: activeProjectId } : fields;
-    await source.mutate({
+    const result = await source.mutate({
       projectId: activeProjectId,
       mutation: { entityType, operation: "CREATE", fields: nextFields },
     });
-    let activitySynced = true;
-    try {
-      await source.activity({ projectId: activeProjectId, limit: 20 });
-    } catch (error) {
-      activitySynced = false;
-    }
-    setSaveNotice(activitySynced ? "Google Sheets 원장에 저장했습니다." : "원장 저장은 완료됐지만 활동 목록 새로고침은 재시도가 필요합니다.");
+    // The canonical mutation response is the save acknowledgement. Activity
+    // refresh is secondary and must not keep the create modal blocked.
+    setSaveNotice("Google Sheets 원장에 저장했습니다.");
     if (entityType === "task") setTaskActivityState({ ...blankTaskActivity, projectId: activeProjectId });
     setPageRefreshKey((value) => value + 1);
+    source.activity({ projectId: activeProjectId, limit: 20 }).catch(() => {});
+    return result;
   };
 
   const patchTaskResource = (projectId, taskId, updater) => {

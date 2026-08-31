@@ -42,5 +42,15 @@ assert.throws(
   ),
   /page_access_denied/,
 );
+assert.doesNotThrow(() => context.mhAssertPermissionManager_({ role: 'MASTER', organization: 'POCKET' }));
+assert.doesNotThrow(() => context.mhAssertPermissionManager_({ role: 'POCKET_MANAGER', organization: 'POCKET' }));
+assert.throws(
+  () => context.mhAssertPermissionManager_({ role: 'POCKET_MANAGER', organization: 'NS' }),
+  /permission_admin_requires_manager/,
+);
+assert.throws(
+  () => context.mhAssertPermissionManager_({ role: 'EXECUTOR_EDITOR', organization: 'NS' }),
+  /permission_admin_requires_manager/,
+);
 
 console.log('Permission administration contract checks passed.');

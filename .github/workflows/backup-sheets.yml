@@ -1,0 +1,24 @@
+name: Backup marketing hub sheet
+
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create daily Google Sheets backup
+        env:
+          POCKET_API_URL: ${{ vars.POCKET_API_URL }}
+          BACKUP_RUNNER_SECRET: ${{ secrets.BACKUP_RUNNER_SECRET }}
+        run: |
+          test -n "$POCKET_API_URL"
+          test -n "$BACKUP_RUNNER_SECRET"
+          payload=$(jq -nc --arg secret "$BACKUP_RUNNER_SECRET" '{action:"scheduled_backup",runnerSecret:$secret}')
+          response=$(curl --silent --show-error --fail-with-body --retry 2 --max-time 90 \
+            -H 'Content-Type: text/plain;charset=utf-8' \
+            --data "$payload" \
+            "$POCKET_API_URL")
+          echo "$response" | jq -e '.ok == true and .data.ok == true'

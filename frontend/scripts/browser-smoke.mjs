@@ -124,6 +124,21 @@ try {
   await client.send("Page.enable");
   await client.send("Log.enable");
   await client.send("Network.enable");
+  await delay(250);
+  if (await evaluate(client, "Boolean(document.querySelector('.login-shell'))")) {
+    const account = process.env.SMOKE_ACCOUNT || "";
+    const accessCode = process.env.SMOKE_ACCESS_CODE || "";
+    assert(account && accessCode, "Authenticated smoke test requires SMOKE_ACCOUNT and SMOKE_ACCESS_CODE");
+    await evaluate(client, `(() => {
+      const inputs = document.querySelectorAll('.login-card input');
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setValue.call(inputs[0], ${JSON.stringify(account)});
+      inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+      setValue.call(inputs[1], ${JSON.stringify(accessCode)});
+      inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('.login-submit').click();
+    })()`);
+  }
   const overviewReady = await waitFor(client, "document.querySelectorAll('.metric-card').length === 4", readyTimeout);
   if (!overviewReady) {
     console.error(await evaluate(client, "document.body.innerText.slice(0, 1200)"));
@@ -145,7 +160,7 @@ try {
   assert(overviewReady, "Overview metrics did not render");
   console.log(`Overview ready in ${Date.now() - smokeStartedAt}ms`);
   await delay(100);
-  assert(countApiAction(client.events, "project_snapshot") === 1, "Project workspace snapshot must be prefetched exactly once");
+  assert(countApiAction(client.events, "project_snapshot") === 0, "Project workspace snapshot must not block the first screen");
   await capture(client, "01-main-only.png");
   const clientLabels = await evaluate(client, "Array.from(document.querySelectorAll('.client-button')).map((button) => button.textContent.trim())");
   assert(clientLabels.length > 0 && clientLabels.every((label) => label.length >= 2), "Client rail must show full client names");
@@ -238,7 +253,7 @@ try {
   assert(await waitFor(client, "document.querySelectorAll('.tracker-task-group article').length > 0", 1000), "Cached task view did not render immediately");
   await delay(250);
   assert(countApiAction(client.events, "tasks") === taskRequestsAfterInitialLoad, "Task-tab revisit issued a duplicate API request inside the cache window");
-  assert(countApiAction(client.events, "project_snapshot") === 1, "Tab navigation issued a duplicate workspace snapshot request");
+  assert(countApiAction(client.events, "project_snapshot") === 0, "Tab navigation issued an obsolete workspace snapshot request");
 
   if (clientLabels.length > 1) {
     await evaluate(client, "document.querySelectorAll('.client-button')[1].click()")

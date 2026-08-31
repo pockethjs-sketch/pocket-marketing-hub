@@ -32,6 +32,8 @@
 | 17_실행계획 | 고객 공유 승인 계획의 버전·목표 | plan_id | client_id, project_id |
 | 18_실행계획섹션 | 계획별 목차와 정제된 본문 | plan_section_id | plan_id, client_id, project_id |
 | 19_데일리회의록 | 날짜별 회의 내용·결정·후속업무 | meeting_id | client_id, project_id, created_by_user_id |
+| 20_뮤테이션 | mutation별 최신 저장 상태와 확정 응답 색인 | mutation_id | request_hash, event_status_code, entity_id |
+| 21_백업로그 | Drive 백업 파일 생성·검증 근거 | backup_id | file_id, status_code, created_at |
 | 91_업무템플릿 | 프로젝트 생성용 표준업무 | template_task_id | service_type_code |
 | 98_운영점검 | 참조 무결성·건수 점검 | - | 전 탭 |
 

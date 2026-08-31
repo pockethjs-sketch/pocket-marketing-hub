@@ -137,7 +137,7 @@ export function createHubApi(config, options = {}) {
       });
     }
 
-    return http.request("mutate", {
+    const requestOptions = {
       signal: input.signal,
       body: {
         auth: { sessionToken: sessionToken() },
@@ -151,7 +151,16 @@ export function createHubApi(config, options = {}) {
           fields: mutation.fields || mutation.values || {},
         },
       },
-    });
+    };
+    try {
+      return await http.request("mutate", requestOptions);
+    } catch (error) {
+      if (!error?.retriable || input.signal?.aborted) throw error;
+      // Reuse the exact mutation id. If the first request committed but its
+      // response was lost, the server returns the indexed canonical result.
+      await new Promise((resolve) => setTimeout(resolve, 250 + Math.random() * 250));
+      return http.request("mutate", requestOptions);
+    }
   }
 
   async function accessAdminMutate(input = {}) {

@@ -7,7 +7,7 @@
 
 var MH_CONTRACT_VERSION = '2026-08-27-outcome-tracking-v11';
 var MH_SCHEMA_VERSION = '2026-08-27-page-access-v4';
-var MH_BACKEND_VERSION = '2026-08-31-manual-progress-v30';
+var MH_BACKEND_VERSION = '2026-08-31-stability-v31';
 
 // Login is required. Public preview sessions cannot read internal plans or
 // mutate tasks even if stale preview configuration remains in Script Properties.
@@ -26,7 +26,11 @@ var MH_PROPERTY_KEYS = {
   SESSION_VERSION: 'SESSION_VERSION',
   PUBLIC_PREVIEW_ENABLED: 'PUBLIC_PREVIEW_ENABLED',
   PUBLIC_PREVIEW_EMAIL: 'PUBLIC_PREVIEW_EMAIL',
-  PUBLIC_PREVIEW_PROJECT_IDS: 'PUBLIC_PREVIEW_PROJECT_IDS'
+  PUBLIC_PREVIEW_PROJECT_IDS: 'PUBLIC_PREVIEW_PROJECT_IDS',
+  BACKUP_FOLDER_ID: 'BACKUP_FOLDER_ID',
+  BACKUP_RETENTION_DAYS: 'BACKUP_RETENTION_DAYS',
+  BACKUP_LAST_SUCCESS_AT: 'BACKUP_LAST_SUCCESS_AT',
+  BACKUP_RUNNER_DIGEST: 'BACKUP_RUNNER_DIGEST'
 };
 
 var MH_SHEETS = {
@@ -48,7 +52,9 @@ var MH_SHEETS = {
   SYNC_STATUS: '16_동기화상태',
   PLANS: '17_실행계획',
   PLAN_SECTIONS: '18_실행계획섹션',
-  DAILY_MEETINGS: '19_데일리회의록'
+  DAILY_MEETINGS: '19_데일리회의록',
+  MUTATIONS: '20_뮤테이션',
+  BACKUP_LOG: '21_백업로그'
 };
 
 var MH_VISIBILITY_LEVEL = {

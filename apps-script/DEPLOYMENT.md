@@ -30,6 +30,7 @@ Apps Script의 `프로젝트 설정 → 스크립트 속성`에 입력합니다.
 | `PUBLIC_PREVIEW_ENABLED` | `true`일 때 로그인 없는 고객 조회 세션 발급 | 선택 |
 | `PUBLIC_PREVIEW_EMAIL` | `CLIENT_VIEWER` 전용 사용자 이메일 | 미리보기 사용 시 필수 |
 | `PUBLIC_PREVIEW_PROJECT_IDS` | 공개 조회를 허용할 프로젝트 ID 목록(쉼표 구분) | 미리보기 사용 시 필수 |
+| `BACKUP_RUNNER_DIGEST` | GitHub Actions 백업 러너 비밀값의 SHA-256 digest | 자동 백업 사용 시 필수 |
 
 Script Properties가 비어 있으면 `Secrets.gs`의 `MH_LOCAL_SECRETS`를 fallback으로 읽습니다.
 
@@ -78,11 +79,13 @@ GitHub Pages에는 이 Web App URL만 공개 설정으로 넣습니다. `SHEET_I
 6. `ENABLE_WRITES=false`에서 mutate가 차단되는지 확인.
 7. `mhSetupMigrateVisibilityCodes`를 한 번 실행해 기존 `INTERNAL`과 시트 드롭다운을 마이그레이션합니다.
 8. `mhSetupProtectApiManagedSheets`를 실행해 API 관리 원장의 직접 편집을 막습니다.
-9. 인증된 관리자 계정으로 `deep_health` POST가 `READY`인지 확인합니다.
+9. 인증된 Pocket 관리자 계정으로 `deep_health` POST가 `READY`인지 확인합니다.
 10. 인자 없는 `mhSetupEnableWrites` 실행 후 테스트 업무 1건 생성·수정·보관.
 11. 대상 원장과 `15_활동로그`에 PREPARE/COMMIT가 함께 기록되는지 확인.
 12. 같은 `mutationId` 재전송 시 중복 행이 생기지 않는지 확인.
 13. 같은 행을 오래된 `expectedRowVersion`으로 수정해 conflict가 나는지 확인.
+14. `ops_maintenance`의 `status`, `schema_audit`, `verify_backup`을 확인합니다.
+15. GitHub Actions의 `Backup marketing hub sheet`를 수동 실행하고 `21_백업로그` 새 행을 확인합니다.
 
 ## 7. 사고 대응
 
@@ -99,4 +102,4 @@ GitHub Pages에는 이 Web App URL만 공개 설정으로 넣습니다. `SHEET_I
 - 고객 쓰기는 의도적으로 구현하지 않았습니다.
 - 사용자·프로젝트·권한 생성은 운영자가 시트에서 먼저 등록해야 합니다.
 - 운영자가 원장을 직접 수정하면 `row_version` 자동 증가와 API 활동로그가 생기지 않습니다. 운영 데이터 탭은 보호하고 일상 수정은 웹 UI를 사용해야 합니다.
-- 외부 채널 API 동기화와 매일 Drive 백업은 이 패키지 범위 밖입니다.
+- 외부 채널 API 동기화와 백업 파일 30일 자동 정리는 아직 구현하지 않았습니다.

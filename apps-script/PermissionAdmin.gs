@@ -1,7 +1,9 @@
 var MH_ACCESS_PAGES = ['overview', 'plan', 'tasks', 'content', 'tracking', 'performance', 'files'];
 
 function mhAssertPermissionManager_(actor) {
-  if (!actor || (actor.role !== 'MASTER' && actor.role !== 'POCKET_MANAGER')) {
+  var master = actor && actor.role === 'MASTER';
+  var pocketManager = actor && actor.role === 'POCKET_MANAGER' && actor.organization === 'POCKET';
+  if (!master && !pocketManager) {
     throw mhApiError_('forbidden', 'permission_admin_requires_manager', 403);
   }
 }

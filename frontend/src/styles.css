@@ -5899,6 +5899,14 @@ table tbody tr:hover {
 }
 
 .task-schedule-matrix thead tr:nth-child(2) th { top: 32px; }
+.task-schedule-matrix.is-compact thead tr:first-child > th:nth-child(2),
+.task-schedule-matrix.is-compact tbody td:nth-child(2),
+.task-schedule-matrix.is-compact thead tr:first-child > th:nth-child(6),
+.task-schedule-matrix.is-compact tbody td:nth-child(6),
+.task-schedule-matrix.is-compact thead tr:first-child > th:nth-child(8),
+.task-schedule-matrix.is-compact tbody td:nth-child(8),
+.task-schedule-matrix.is-compact thead tr:first-child > th:nth-child(9),
+.task-schedule-matrix.is-compact tbody td:nth-child(9) { display: none; }
 .task-schedule-matrix thead tr:first-child > th:nth-child(1), .task-schedule-matrix tbody td:nth-child(1) { width: 180px; min-width: 180px; max-width: 180px; }
 .task-schedule-matrix thead tr:first-child > th:nth-child(2), .task-schedule-matrix tbody td:nth-child(2) { width: 240px; min-width: 240px; max-width: 240px; }
 .task-schedule-matrix thead tr:first-child > th:nth-child(3), .task-schedule-matrix tbody td:nth-child(3), .task-schedule-matrix thead tr:first-child > th:nth-child(4), .task-schedule-matrix tbody td:nth-child(4) { width: 92px; min-width: 92px; }
@@ -5946,7 +5954,9 @@ table tbody tr:hover {
 .task-timeline-summary > div:last-child i.is-done { background: #0d9f6e; }
 .task-timeline-summary > div:last-child i.is-progress { background: #3153a4; }
 .task-timeline-summary > div:last-child i.is-hold { background: #d89a24; }
+.task-timeline-summary > div:last-child .is-warning { color: #b7791f; }
 .task-timeline-summary strong { color: var(--text); }
+.task-schedule-detail-toggle { min-height: 30px; margin-left: 4px; padding: 0 10px; font-size: 10px; }
 
 .task-timeline-scroll { overflow-x: auto; }
 .task-timeline-grid { display: grid; grid-template-columns: 270px minmax(720px, 1fr); min-width: 990px; }
