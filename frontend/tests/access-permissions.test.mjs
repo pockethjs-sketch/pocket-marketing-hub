@@ -7,6 +7,7 @@ import {
   firstAllowedView,
   isViewAllowed,
   normalizeAllowedPages,
+  removeAccessSubmission,
 } from "../src/accessPermissions.js";
 
 test("고객 권한은 알려진 페이지 코드만 중복 없이 보존한다", () => {
@@ -54,4 +55,20 @@ test("기존 고객 계정 수정은 현재 권한 행을 이어서 갱신한다
     allowedPages: ["overview", "performance"],
   });
   assert.equal(submission.membershipId, "MEM-UND-CLIENT");
+});
+
+test("프로젝트 권한 제거는 계정 전체가 아닌 선택한 멤버십만 지정한다", () => {
+  const submission = removeAccessSubmission(
+    { account: " und ", displayName: "UND" },
+    { id: "MEM-MUGUK-USR-UND", projectId: "PRJ-MUGUK-MKT-001", allowedPages: ["tasks", "unknown"] },
+  );
+
+  assert.deepEqual(submission, {
+    operation: "REMOVE_ACCESS",
+    account: "und",
+    displayName: "UND",
+    projectId: "PRJ-MUGUK-MKT-001",
+    membershipId: "MEM-MUGUK-USR-UND",
+    allowedPages: ["tasks"],
+  });
 });

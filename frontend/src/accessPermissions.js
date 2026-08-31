@@ -39,3 +39,14 @@ export function accountSubmission(fields = {}) {
   if (fields.membershipId) submission.membershipId = String(fields.membershipId);
   return submission;
 }
+
+export function removeAccessSubmission(fields = {}, access = {}) {
+  return {
+    operation: "REMOVE_ACCESS",
+    account: String(fields.account || "").trim(),
+    displayName: String(fields.displayName || "").trim(),
+    projectId: String(access.projectId || "").trim(),
+    membershipId: String(access.id || access.membershipId || "").trim(),
+    allowedPages: normalizeAllowedPages(access.allowedPages),
+  };
+}

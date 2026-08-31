@@ -145,10 +145,14 @@ try {
         user: loginData.user || null,
       };
       assert(storedSession.token && storedSession.expiresAt > Date.now(), "Smoke API returned an invalid session");
-      await evaluate(client, `sessionStorage.setItem('pocket_marketing_hub_session_v1', ${JSON.stringify(JSON.stringify(storedSession))})`);
-      assert(await evaluate(client, "Boolean(sessionStorage.getItem('pocket_marketing_hub_session_v1'))"), "Smoke session was not written to browser storage");
-      await evaluate(client, "location.reload()");
-      await delay(250);
+      const sessionJson = JSON.stringify(storedSession);
+      await client.send("Page.addScriptToEvaluateOnNewDocument", {
+        source: `sessionStorage.setItem('pocket_marketing_hub_session_v1', ${JSON.stringify(sessionJson)});`,
+      });
+      const authenticatedUrl = new URL(baseUrl);
+      authenticatedUrl.searchParams.set("_smoke", String(Date.now()));
+      await client.send("Page.navigate", { url: authenticatedUrl.toString() });
+      await delay(500);
       assert(await evaluate(client, "Boolean(sessionStorage.getItem('pocket_marketing_hub_session_v1'))"), "Smoke session disappeared during reload");
     } else {
     await evaluate(client, `(() => {
@@ -182,6 +186,12 @@ try {
   const overviewReady = await waitFor(client, "document.querySelectorAll('.metric-card').length === 4", readyTimeout);
   if (!overviewReady) {
     console.error(await evaluate(client, "document.body.innerText.slice(0, 1200)"));
+    console.error(await evaluate(client, `(() => {
+      try {
+        const value = JSON.parse(sessionStorage.getItem('pocket_marketing_hub_session_v1') || 'null');
+        return { sessionPresent: Boolean(value), tokenLength: String(value?.token || '').length, expiresInMs: Number(value?.expiresAt || 0) - Date.now(), loginError: document.querySelector('.login-error')?.textContent || '' };
+      } catch { return { sessionPresent: false, tokenLength: 0, expiresInMs: 0, loginError: 'invalid_session_json' }; }
+    })()`));
     console.error(JSON.stringify(client.events.filter((event) => event.method === "Runtime.exceptionThrown" || event.method === "Log.entryAdded").slice(-8), null, 2));
     console.error(JSON.stringify(client.events.filter((event) => {
       if (!event.method?.startsWith("Network.")) return false;

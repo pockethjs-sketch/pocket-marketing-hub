@@ -102,7 +102,7 @@ function mhPermissionAdminMutate_(request, actor) {
   mhAssertPermissionManager_(actor);
   var input = request.account || request.fields || {};
   var operation = mhAsText_(request.operation || input.operation || 'UPSERT').toUpperCase();
-  if (operation !== 'UPSERT' && operation !== 'DISABLE') {
+  if (operation !== 'UPSERT' && operation !== 'DISABLE' && operation !== 'REMOVE_ACCESS') {
     throw mhApiError_('invalid_request', 'invalid_permission_operation', 400);
   }
   var account = mhAsText_(input.account);
@@ -112,7 +112,10 @@ function mhPermissionAdminMutate_(request, actor) {
   var membershipId = mhAsText_(input.membershipId || input.membership_id);
   var accessCode = String(input.accessCode || input.access_code || '');
   var allowedPages = mhNormalizeAllowedPages_(input.allowedPages || input.allowed_pages);
-  if (!email || !displayName || !projectId || !allowedPages.length) {
+  if (operation === 'REMOVE_ACCESS' && (!email || !projectId)) {
+    throw mhApiError_('validation_error', 'account_project_required', 400);
+  }
+  if (operation !== 'REMOVE_ACCESS' && (!email || !displayName || !projectId || !allowedPages.length)) {
     throw mhApiError_('validation_error', 'account_name_project_pages_required', 400);
   }
   if (accessCode && !mhValidAccessCode_(email, accessCode)) {
@@ -133,6 +136,32 @@ function mhPermissionAdminMutate_(request, actor) {
     });
     if (users.length > 1) throw mhApiError_('schema_mismatch', 'duplicate_user', 500);
     var existingUser = users[0] || null;
+    if (operation === 'REMOVE_ACCESS') {
+      if (!existingUser) throw mhApiError_('not_found', 'account_not_found', 404);
+      mhUseFreshTables_();
+      var removalTable = mhReadTable_(MH_SHEETS.MEMBERSHIPS);
+      var removable = removalTable.rows.filter(function (row) {
+        if (mhNonEmpty_(row.archived_at) || mhAsText_(row.user_id) !== mhAsText_(existingUser.user_id)) return false;
+        if (mhAsText_(row.project_id) !== projectId) return false;
+        return membershipId ? mhAsText_(row.membership_id) === membershipId : true;
+      });
+      if (removable.length !== 1) throw mhApiError_('not_found', 'membership_not_found', 404);
+      var removed = {};
+      Object.keys(removable[0]).forEach(function (key) {
+        if (key.indexOf('__') !== 0) removed[key] = removable[0][key];
+      });
+      removed.status_code = 'DISABLED';
+      removed.updated_at = now;
+      removed.row_version = Number(removed.row_version || 0) + 1;
+      removed.archived_at = now;
+      mhUpdateRecord_(removalTable, removable[0].__rowNumber, removed);
+      mhInvalidateClientReadCache_(projectId);
+      return {
+        saved: true, removed: true, account: account,
+        userId: existingUser.user_id, projectId: projectId,
+        membershipId: removed.membership_id
+      };
+    }
     var userId = existingUser ? mhAsText_(existingUser.user_id) : mhNewId_('USR');
     var enabled = operation !== 'DISABLE' && input.enabled !== false;
     var properties = PropertiesService.getScriptProperties();

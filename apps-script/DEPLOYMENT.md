@@ -1,5 +1,13 @@
 # Apps Script 배포·설정
 
+## 현재 운영 배포
+
+- 백엔드: `2026-09-01-permission-isolation-v33`
+- Web App 배포: @89
+- 운영 검증: health/deep health `READY`, schema audit 정상
+- 권한 격리: UND는 UND 프로젝트 1개만 노출, 무극 직접 조회 거부, NS 권한 관리 거부
+- 최신 백업: 21개 시트 manifest 해시 일치
+
 ## 1. clasp 프로젝트 연결
 
 `apps-script` 폴더에서 `.clasp.json.example`을 `.clasp.json`으로 복사하고 실제 Script ID를 입력합니다. `.clasp.json`은 gitignored입니다.
@@ -100,6 +108,6 @@ GitHub Pages에는 이 Web App URL만 공개 설정으로 넣습니다. `SHEET_I
 - Apps Script 로그인 실패 제한은 CacheService 기반으로 강한 분산 rate limit가 아닙니다.
 - 등록 계정은 CacheService 외에 Script Properties에도 8회 실패/15분 잠금을 기록하지만, 외부 공개 서비스 수준의 인증·MFA를 대체하지 않습니다.
 - 고객 쓰기는 의도적으로 구현하지 않았습니다.
-- 사용자·프로젝트·권한 생성은 운영자가 시트에서 먼저 등록해야 합니다.
+- 고객 계정과 프로젝트별 조회 권한은 포켓 계정의 권한 관리 화면에서 생성·수정·제거합니다. 고객사·프로젝트 자체 생성은 운영자가 원장에 먼저 등록해야 합니다.
 - 운영자가 원장을 직접 수정하면 `row_version` 자동 증가와 API 활동로그가 생기지 않습니다. 운영 데이터 탭은 보호하고 일상 수정은 웹 UI를 사용해야 합니다.
-- 외부 채널 API 동기화와 백업 파일 30일 자동 정리는 아직 구현하지 않았습니다.
+- 외부 채널 API 동기화와 백업 파일 30일 자동 정리는 아직 구현하지 않았습니다. 후자는 Drive 파일 삭제 권한 추가와 재승인이 필요하므로 운영 승인 없이 활성화하지 않습니다.

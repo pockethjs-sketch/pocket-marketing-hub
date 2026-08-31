@@ -52,5 +52,9 @@ assert.throws(
   () => context.mhAssertPermissionManager_({ role: 'EXECUTOR_EDITOR', organization: 'NS' }),
   /permission_admin_requires_manager/,
 );
+const permissionSource = fs.readFileSync(path.join(root, 'PermissionAdmin.gs'), 'utf8');
+assert.match(permissionSource, /operation !== 'REMOVE_ACCESS'/);
+assert.match(permissionSource, /removed\.archived_at = now/);
+assert.match(permissionSource, /mhInvalidateClientReadCache_\(projectId\)/);
 
 console.log('Permission administration contract checks passed.');

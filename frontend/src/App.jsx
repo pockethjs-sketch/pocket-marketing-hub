@@ -62,7 +62,7 @@ import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmis
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
 import { buildTaskTimeline, withDisplayDeadline } from "./taskTimeline.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
-import { ACCESS_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages } from "./accessPermissions.js";
+import { ACCESS_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
 
 const navItems = [
@@ -1057,9 +1057,23 @@ function AccessAccountModal({ account, projects, onClose, onSave }) {
       setSaving(false);
     }
   };
+  const removeAccess = async (access) => {
+    if (!window.confirm(`${access.projectName} 접근 권한을 제거할까요? 계정의 다른 프로젝트 권한은 유지됩니다.`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(removeAccessSubmission(fields, access));
+      onClose();
+    } catch (saveError) {
+      setError(saveError);
+    } finally {
+      setSaving(false);
+    }
+  };
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal access-account-modal" role="dialog" aria-modal="true" aria-labelledby="access-account-title"><header><div><p className="editorial-kicker">Google Sheets 계정·권한 원장</p><h2 id="access-account-title">{account ? "고객사 계정 관리" : "고객사 계정 생성"}</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
     <div className="access-form-grid"><label className="create-field"><span>로그인 아이디</span><input value={fields.account} onChange={(event) => setField("account", event.target.value)} placeholder="예: und-client" disabled={Boolean(account)} required /></label><label className="create-field"><span>표시 이름</span><input value={fields.displayName} onChange={(event) => setField("displayName", event.target.value)} placeholder="예: UND 담당자" required /></label><label className="create-field"><span>{account ? "새 비밀번호 · 변경할 때만" : "임시 비밀번호"}</span><input type="password" autoComplete="new-password" value={fields.accessCode} onChange={(event) => setField("accessCode", event.target.value)} placeholder="8자 이상" required={!account} /></label><FormSelect label="계정 상태" value={fields.enabled ? "ACTIVE" : "DISABLED"} onChange={(value) => setField("enabled", value === "ACTIVE")} options={[["ACTIVE", "사용 중"], ["DISABLED", "사용 중지"]]} /><FormSelect label="접근 프로젝트" value={fields.projectId} onChange={(value) => setField("projectId", value)} options={projects.map((project) => [project.id, project.name])} /></div>
     <fieldset className="access-page-fieldset"><legend>접근 가능한 페이지</legend><p>체크하지 않은 페이지는 메뉴에서 숨기고 서버 조회도 차단합니다.</p><div>{ACCESS_PAGE_OPTIONS.map((page) => <label key={page.id}><input type="checkbox" checked={fields.allowedPages.includes(page.id)} onChange={() => togglePage(page.id)} /><span>{page.label}</span></label>)}</div></fieldset>
+    {account?.accesses?.length > 0 && <section className="access-current-projects"><strong>현재 프로젝트 권한</strong><div>{account.accesses.map((access) => <article key={access.id}><span><b>{access.projectName}</b><small>{access.allowedPages.length}개 페이지</small></span><button type="button" className="danger-button" disabled={saving} onClick={() => removeAccess(access)}>이 프로젝트 권한 제거</button></article>)}</div></section>}
     {error && <div className="form-error"><AlertCircle size={14} />{error.message}</div>}
     <footer>{account && <button type="button" className="danger-button" onClick={disable} disabled={saving || !fields.projectId}>계정 비활성화</button>}<span /><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.account.trim() || !fields.displayName.trim() || !fields.projectId || !fields.allowedPages.length}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "권한 저장"}</button></footer>
   </form></section></div>;
@@ -1783,7 +1797,7 @@ export function App() {
     await source.accessAdminMutate({ operation: account.operation, account });
     resourceCacheEpochRef.current += 1;
     resourceCacheRef.current.delete(`${activeProjectId}:permissions`);
-    setSaveNotice(account.operation === "DISABLE" ? "고객사 계정을 비활성화했습니다." : "고객사 계정과 페이지 권한을 저장했습니다.");
+    setSaveNotice(account.operation === "DISABLE" ? "고객사 계정을 비활성화했습니다." : account.operation === "REMOVE_ACCESS" ? "선택한 프로젝트 권한을 제거했습니다." : "고객사 계정과 페이지 권한을 저장했습니다.");
     setPageRefreshKey((value) => value + 1);
   };
 

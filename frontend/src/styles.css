@@ -64,6 +64,13 @@
 .access-page-fieldset input { accent-color: var(--accent); }
 .access-account-modal footer { display: flex; align-items: center; gap: 8px; margin-top: 22px; }
 .access-account-modal footer > span { flex: 1; }
+.access-current-projects { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--ground); }
+.access-current-projects > strong { font-size: 12px; color: var(--muted); }
+.access-current-projects > div { display: grid; gap: 8px; }
+.access-current-projects article { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 9px; background: #fff; }
+.access-current-projects article > span { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.access-current-projects article b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.access-current-projects article small { color: var(--muted); font-size: 11px; }
 
 @media (max-width: 760px) {
   .access-summary { grid-template-columns: 1fr; }
