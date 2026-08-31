@@ -1145,9 +1145,6 @@ export function App() {
     setActiveProjectId(nextProjectId);
     activeProjectIdRef.current = nextProjectId;
 
-    // Overview and task rows are intentionally excluded from bootstrap. They
-    // are fetched by the view-specific effects below so navigation can render
-    // as soon as the small client/project envelope arrives.
     setOverviewState(blankPage);
     setResourceState(blankPage);
     setTaskActivityState(blankTaskActivity);
@@ -1156,6 +1153,26 @@ export function App() {
     resourceCacheRef.current.clear();
     resourceRequestRef.current.clear();
     workspaceRequestRef.current.clear();
+    if (data.initial?.projectId === nextProjectId) {
+      const initialState = {
+        status: "ready",
+        data: data.initial.data,
+        error: null,
+        resource: data.initial.view,
+        projectId: nextProjectId,
+        refreshKey: pageRefreshKeyRef.current,
+      };
+      if (data.initial.view === "overview") {
+        setOverviewState(initialState);
+      } else {
+        resourceCacheRef.current.set(`${nextProjectId}:${data.initial.view}`, {
+          state: initialState,
+          cachedAt: Date.now(),
+          refreshKey: pageRefreshKeyRef.current,
+        });
+        setResourceState(initialState);
+      }
+    }
     return data;
   }, []);
 
@@ -1163,7 +1180,7 @@ export function App() {
     if (!source || !source.getSession()) return;
     setBootstrapState({ status: "loading", data: null, error: null });
     try {
-      const envelope = await source.bootstrap({ signal });
+      const envelope = await source.bootstrap({ signal, initialView: view });
       if (signal?.aborted) return;
       applyBootstrapEnvelope(envelope);
     } catch (error) {
@@ -1174,7 +1191,7 @@ export function App() {
       }
       setBootstrapState({ status: "error", data: null, error });
     }
-  }, [source, applyBootstrapEnvelope]);
+  }, [source, applyBootstrapEnvelope, view]);
 
   useEffect(() => {
     if (!source) return undefined;
@@ -1189,7 +1206,7 @@ export function App() {
         initializationRequestRef.current = {
           key: requestKey,
           promise: storedSession
-            ? source.bootstrap().catch((error) => {
+            ? source.bootstrap({ initialView: view }).catch((error) => {
               if (source.config.loginEnabled || error.code !== "unauthorized") throw error;
               source.logout();
               return Promise.all([
@@ -1351,7 +1368,7 @@ export function App() {
   const handleLogin = async (credentials) => {
     setLoginError(null);
     try {
-      const result = await source.login(credentials);
+      const result = await source.login({ ...credentials, initialView: view });
       if (result.bootstrap) applyBootstrapEnvelope(result.bootstrap);
       setSession(source.getSession());
       if (!result.bootstrap) await loadBootstrap();

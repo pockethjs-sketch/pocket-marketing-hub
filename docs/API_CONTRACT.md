@@ -29,14 +29,15 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 
 ## 화면별 action
 
-로그인 클라이언트는 `login` 요청에 `includeBootstrap: true`를 보냅니다. 성공 응답의 `data.session`은 서명 세션, `data.bootstrap`은 허용 고객사·프로젝트·채널의 최소 앱 셸 데이터입니다. 이 결합 응답은 Apps Script 왕복과 콜드 스타트를 한 번으로 줄이며, `includeBootstrap`이 없는 기존 호출은 평면 세션 응답을 계속 받습니다.
+로그인 클라이언트는 `login` 요청에 `includeBootstrap: true`와 현재 URL의 `initialView`를 보냅니다. 성공 응답의 `data.session`은 서명 세션, `data.bootstrap`은 허용 고객사·프로젝트·채널의 앱 셸 데이터입니다. `initialView`가 `overview` 또는 `tasks`이면 첫 접근 프로젝트의 해당 화면 데이터도 `bootstrap.initial`에 함께 반환해 첫 화면까지 한 Apps Script 실행으로 준비합니다. 이 결합 응답은 Apps Script 왕복과 콜드 스타트를 한 번으로 줄이며, `includeBootstrap`이 없는 기존 호출은 평면 세션 응답을 계속 받습니다.
 
 ```json
 {
   "action": "login",
   "account": "operator-id",
   "accessCode": "server-verified-secret",
-  "includeBootstrap": true
+  "includeBootstrap": true,
+  "initialView": "tasks"
 }
 ```
 

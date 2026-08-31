@@ -307,19 +307,33 @@ function mhReadBootstrap_(request, actor) {
       'display_name', 'account_url', 'channel_role', 'cadence', 'status_code'
     ]));
   });
+  var data = {
+    currentUser: {
+      userId: actor.userId,
+      displayName: actor.displayName,
+      role: actor.role,
+      organization: actor.organization
+    },
+    clients: clients,
+    projects: projectItems,
+    channels: channels
+  };
+  var initialView = mhAsText_(request.initialView || request.initial_view).toLowerCase();
+  var initialAccess = accesses[0] || null;
+  if (initialAccess && (initialView === 'overview' || initialView === 'tasks')) {
+    var initialAction = initialView === 'overview' ? 'project_overview' : 'tasks';
+    mhRequirePageAccess_(actor, initialAccess.permission, initialAction, request);
+    data.initial = {
+      view: initialView,
+      projectId: mhAsText_(initialAccess.project.project_id),
+      payload: initialView === 'overview'
+        ? mhReadOverview_(request, actor, initialAccess.project)
+        : mhReadTasks_(request, actor, initialAccess.project)
+    };
+  }
   return {
     scope: { clientId: null, projectId: null, visibility: null },
-    data: {
-      currentUser: {
-        userId: actor.userId,
-        displayName: actor.displayName,
-        role: actor.role,
-        organization: actor.organization
-      },
-      clients: clients,
-      projects: projectItems,
-      channels: channels
-    }
+    data: data
   };
 }
 

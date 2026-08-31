@@ -29,6 +29,7 @@ function scopeQuery(params = {}) {
     channel: params.channel,
     entityType: params.entityType,
     planType: params.planType,
+    initialView: params.initialView,
   };
 }
 
@@ -60,6 +61,7 @@ export function createHubApi(config, options = {}) {
         account: String(credentials.account || credentials.email || "").trim(),
         accessCode: String(credentials.accessCode || ""),
         includeBootstrap: true,
+        initialView: credentials.initialView,
       },
       signal: credentials.signal,
     });

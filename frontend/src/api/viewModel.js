@@ -244,6 +244,19 @@ export function bootstrapViewModel(envelope) {
     projectShell(row, clientsById, envelope?.generatedAt),
   ]));
   const currentUser = data.currentUser || envelope?.actor || null;
+  const initialRow = data.initial || null;
+  const initialProjectId = initialRow?.projectId || initialRow?.project_id || null;
+  const initialEnvelope = initialRow ? {
+    ...envelope,
+    scope: { ...(envelope?.scope || {}), projectId: initialProjectId },
+    data: initialRow.payload || {},
+  } : null;
+  let initial = null;
+  if (initialEnvelope && initialRow.view === "overview" && projects[initialProjectId]) {
+    initial = { view: "overview", projectId: initialProjectId, data: overviewViewModel(initialEnvelope, projects[initialProjectId]) };
+  } else if (initialEnvelope && initialRow.view === "tasks" && projects[initialProjectId]) {
+    initial = { view: "tasks", projectId: initialProjectId, data: tasksViewModel(initialEnvelope) };
+  }
 
   return {
     clients: clients.filter((client) => client.projectId),
@@ -256,6 +269,7 @@ export function bootstrapViewModel(envelope) {
       role: actorRole(currentUser.role),
       organization: currentUser.organization || null,
     } : null,
+    initial,
     generatedAt: envelope?.generatedAt || null,
   };
 }
