@@ -134,10 +134,19 @@ try {
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
       setValue.call(inputs[0], ${JSON.stringify(account)});
       inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+      inputs[0].dispatchEvent(new Event('change', { bubbles: true }));
       setValue.call(inputs[1], ${JSON.stringify(accessCode)});
       inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
-      document.querySelector('.login-submit').click();
+      inputs[1].dispatchEvent(new Event('change', { bubbles: true }));
     })()`);
+    await delay(100);
+    assert(await evaluate(client, "document.querySelector('.login-submit')?.disabled === false"), "Login form did not accept smoke credentials");
+    const loginPoint = await evaluate(client, `(() => {
+      const rect = document.querySelector('.login-submit').getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`);
+    await client.send("Input.dispatchMouseEvent", { type: "mousePressed", x: loginPoint.x, y: loginPoint.y, button: "left", clickCount: 1 });
+    await client.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: loginPoint.x, y: loginPoint.y, button: "left", clickCount: 1 });
   }
   const overviewReady = await waitFor(client, "document.querySelectorAll('.metric-card').length === 4", readyTimeout);
   if (!overviewReady) {

@@ -67,13 +67,15 @@ export function createHttpClient(config) {
     const controller = new AbortController();
     const detachAbort = attachAbort(options.signal, controller);
     const actionTimeouts = {
-      login: 12000,
-      mutate: 15000,
-      access_admin_mutate: 15000,
-      project_plan: 10000,
-      daily_meetings: 10000,
+      login: 30000,
+      mutate: 30000,
+      access_admin_mutate: 30000,
+      project_plan: 25000,
+      daily_meetings: 25000,
     };
-    const timeoutMs = Math.min(config.timeoutMs, actionTimeouts[action] || 8000);
+    // Apps Script cold starts occasionally exceed 10 seconds. Aborting that
+    // early turns a slow-but-valid response into a visible false failure.
+    const timeoutMs = Math.min(config.timeoutMs, actionTimeouts[action] || 20000);
     const timer = setTimeout(() => controller.abort("timeout"), timeoutMs);
 
     const fetchOptions = {
