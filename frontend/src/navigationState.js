@@ -1,7 +1,9 @@
+export const DEFAULT_DESKTOP_NAVIGATION_LEVEL = 2;
+
 export function getNavigationPresentation({
   role,
   compactViewport = false,
-  desktopLevel = 0,
+  desktopLevel = DEFAULT_DESKTOP_NAVIGATION_LEVEL,
   drawerOpen = false,
 }) {
   const normalizedRole = String(role || "").toUpperCase();

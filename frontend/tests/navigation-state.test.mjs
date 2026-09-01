@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getNavigationPresentation, nextDesktopNavigationLevel } from "../src/navigationState.js";
+import { DEFAULT_DESKTOP_NAVIGATION_LEVEL, getNavigationPresentation, nextDesktopNavigationLevel } from "../src/navigationState.js";
 import { parseViewLocation, viewLocationHash, viewResourceKey } from "../src/planNavigation.js";
 
 test("데스크톱 탐색은 메인 → 프로젝트 메뉴 → 전체 프로젝트 순서로 한 단계씩 열린다", () => {
@@ -28,6 +28,13 @@ test("데스크톱 탐색은 메인 → 프로젝트 메뉴 → 전체 프로젝
   assert.equal(allVisible.controlledIds, "client-navigation project-navigation");
   assert.equal(allVisible.iconDirection, "left");
   assert.equal(allVisible.shellCollapsed, false);
+});
+
+test("첫 데스크톱 화면은 고객사와 프로젝트 메뉴를 모두 펼친다", () => {
+  assert.equal(DEFAULT_DESKTOP_NAVIGATION_LEVEL, 2);
+  const initial = getNavigationPresentation({ role: "pocket" });
+  assert.equal(initial.clientRailVisible, true);
+  assert.equal(initial.projectSidebarVisible, true);
 });
 
 test("하나의 데스크톱 탐색 버튼은 세 단계를 순환한다", () => {

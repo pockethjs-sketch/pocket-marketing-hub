@@ -47,7 +47,7 @@ import {
   taskResponsibleOrganization,
   tasksViewModel,
 } from "./api/index.js";
-import { getNavigationPresentation, nextDesktopNavigationLevel } from "./navigationState.js";
+import { DEFAULT_DESKTOP_NAVIGATION_LEVEL, getNavigationPresentation, nextDesktopNavigationLevel } from "./navigationState.js";
 import {
   DEFAULT_PLAN_VARIANT,
   PLAN_VARIANTS,
@@ -1271,7 +1271,7 @@ export function App() {
   const [planVariant, setPlanVariant] = useState(initialLocation.planVariant);
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [desktopNavigationLevel, setDesktopNavigationLevel] = useState(0);
+  const [desktopNavigationLevel, setDesktopNavigationLevel] = useState(DEFAULT_DESKTOP_NAVIGATION_LEVEL);
   const [bootstrapRetryKey, setBootstrapRetryKey] = useState(0);
   const [pageRefreshKey, setPageRefreshKey] = useState(0);
   const [createEntity, setCreateEntity] = useState(null);
