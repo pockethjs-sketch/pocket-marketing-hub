@@ -78,6 +78,8 @@ UND 운영 업무는 P0/M1/M2/M3 단계와 `plan_week`를 기준으로 `planned_
 
 일정표 필터는 별도 저장값을 만들지 않고 `06_업무`의 원천 필드로만 계산합니다. 상태는 `status_code`를 `완료 / 진행 / 보류`로 묶고, 업무 카테고리는 `workstream_code`의 `마케팅 / 디자인 / 영상`을 사용합니다. 업무 일정은 월요일~일요일을 한 주로 하여 `지난주 / 이번주 / 다음주`와 업무의 `planned_start_date`~`due_date`가 하루라도 겹치면 표시합니다. 진행률은 필터 판정에 사용하지 않습니다.
 
+일정표의 기본 행 순서는 `planned_start_date` 오름차순, 같은 시작일이면 `due_date` 오름차순입니다. 두 날짜가 같으면 기존 `sort_order`를 보조 기준으로 사용하고, 시작일이 없는 업무는 마지막에 둡니다. 이 화면 정렬은 `06_업무.sort_order`를 수정하지 않으며 업무 목록의 승인 순서에도 영향을 주지 않습니다.
+
 ## 데일리 회의록
 
 `19_데일리회의록`은 프로젝트별 일일 회의 기록을 한 행씩 저장합니다. `meeting_date`, `title`, `attendees_text`, `discussion_text`, `decisions_text`, `action_items_text`, `created_by_user_id`, `visibility_code`를 분리하며 수정은 `row_version`, 생성·수정은 `15_활동로그` PREPARE/COMMIT으로 추적합니다. 기본 공개 범위는 `PROJECT_TEAM`이고 포켓 운영자만 고객 공개 또는 포켓 전용으로 변경할 수 있습니다.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { buildTaskTimeline, filterTaskSchedule, taskScheduleCategory, taskScheduleStatusGroup, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleStatusGroup, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한다", () => {
   const timeline = buildTaskTimeline([
@@ -54,6 +54,16 @@ test("일정 구간은 월요일부터 일요일까지 지난주·이번주·다
   assert.deepEqual(filterTaskSchedule(tasks, { schedule: "THIS_WEEK" }, "2026-09-01").map((task) => task.id), ["THIS"]);
   assert.deepEqual(filterTaskSchedule(tasks, { schedule: "NEXT_WEEK" }, "2026-09-01").map((task) => task.id), ["NEXT"]);
   assert.deepEqual(filterTaskSchedule(tasks, { schedule: "THIS_WEEK" }, new Date(2026, 8, 1, 9, 30)).map((task) => task.id), ["THIS"]);
+});
+
+test("일정표는 시작일과 종료일이 빠른 업무를 먼저 두고 미등록 업무를 마지막에 둔다", () => {
+  const tasks = [
+    { id: "NONE", title: "일정 없음" },
+    { id: "LATE", title: "후순위", plannedStartDate: "2026-09-10", dueDate: "2026-09-12" },
+    { id: "EARLY-B", title: "선순위 B", plannedStartDate: "2026-09-01", dueDate: "2026-09-05" },
+    { id: "EARLY-A", title: "선순위 A", plannedStartDate: "2026-09-01", dueDate: "2026-09-03" },
+  ];
+  assert.deepEqual(sortTaskSchedule(tasks).map((task) => task.id), ["EARLY-A", "EARLY-B", "LATE", "NONE"]);
 });
 
 test("일정표는 날짜 셀 반복 채움 대신 시작점 하나의 간트 블록을 사용한다", () => {

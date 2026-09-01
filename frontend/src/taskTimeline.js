@@ -66,6 +66,19 @@ export function filterTaskSchedule(tasks = [], filters = {}, todayValue = new Da
   });
 }
 
+export function sortTaskSchedule(tasks = []) {
+  const dateValue = (value) => dateOnly(value)?.getTime() ?? Number.POSITIVE_INFINITY;
+  return tasks.slice().sort((left, right) => {
+    const startDifference = dateValue(left.plannedStartDate) - dateValue(right.plannedStartDate);
+    if (startDifference) return startDifference;
+    const endDifference = dateValue(left.dueDate) - dateValue(right.dueDate);
+    if (endDifference) return endDifference;
+    const orderDifference = Number(left.sortOrder ?? Number.MAX_SAFE_INTEGER) - Number(right.sortOrder ?? Number.MAX_SAFE_INTEGER);
+    if (orderDifference) return orderDifference;
+    return String(left.title || left.id || "").localeCompare(String(right.title || right.id || ""), "ko");
+  });
+}
+
 export function buildTaskTimeline(tasks = [], project = {}, todayValue = new Date()) {
   const candidates = tasks.map((task) => {
     const start = dateOnly(task.plannedStartDate || task.dueDate);

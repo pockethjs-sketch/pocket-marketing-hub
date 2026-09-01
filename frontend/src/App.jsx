@@ -57,7 +57,7 @@ import {
 } from "./planNavigation.js";
 import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
-import { buildTaskTimeline, filterTaskSchedule, withDisplayDeadline } from "./taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, withDisplayDeadline } from "./taskTimeline.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
 import { ACCESS_PAGE_OPTIONS, NAVIGATION_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
@@ -610,11 +610,11 @@ function TaskScheduleTimeline({ tasks, project }) {
     setCategoryFilter("ALL");
     setScheduleFilter("ALL");
   }, [project.id]);
-  const filteredTasks = useMemo(() => filterTaskSchedule(tasks, {
+  const filteredTasks = useMemo(() => sortTaskSchedule(filterTaskSchedule(tasks, {
     status: statusFilter,
     category: categoryFilter,
     schedule: scheduleFilter,
-  }), [tasks, statusFilter, categoryFilter, scheduleFilter]);
+  })), [tasks, statusFilter, categoryFilter, scheduleFilter]);
   const filtersActive = statusFilter !== "ALL" || categoryFilter !== "ALL" || scheduleFilter !== "ALL";
   const timeline = buildTaskTimeline(filteredTasks, project);
   const done = filteredTasks.filter((task) => task.status === "완료").length;
