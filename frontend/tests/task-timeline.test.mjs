@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import { buildTaskTimeline, withDisplayDeadline } from "../src/taskTimeline.js";
@@ -27,4 +28,13 @@ test("계산된 마감 표시는 실제 사용자 입력 종료일을 덮어쓰�
   const decorated = withDisplayDeadline(task, "09.09 · D-8");
   assert.equal(decorated.due, "09.09 · D-8");
   assert.equal(decorated.dueDate, null);
+});
+
+test("일정표는 날짜 셀 반복 채움 대신 시작점 하나의 간트 블록을 사용한다", () => {
+  const appSource = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(appSource, /starts \? <i style=\{\{ width:/);
+  assert.match(appSource, /task-schedule-identity/);
+  assert.match(styles, /\.task-schedule-row/);
+  assert.match(styles, /\.is-schedule-start/);
 });
