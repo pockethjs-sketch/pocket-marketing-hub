@@ -872,7 +872,7 @@ function DailyMeetingModal({ meeting, role, onClose, onSave }) {
       setSaving(false);
     }
   };
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal daily-meeting-modal" role="dialog" aria-modal="true" aria-labelledby="daily-meeting-title"><header><div><p className="editorial-kicker">Google Sheets 데일리 기록</p><h2 id="daily-meeting-title">{meeting ? "회의록 수정" : "회의록 작성"}</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal daily-meeting-modal" role="dialog" aria-modal="true" aria-labelledby="daily-meeting-title"><header><div><p className="editorial-kicker">프로젝트 회의 기록</p><h2 id="daily-meeting-title">{meeting ? "회의록 수정" : "회의록 작성"}</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
     <label className="create-field"><span>회의 날짜</span><input type="date" required value={fields.meeting_date} onChange={(event) => setField("meeting_date", event.target.value)} /></label>
     <label className="create-field"><span>회의 제목</span><input required maxLength={200} value={fields.title} onChange={(event) => setField("title", event.target.value)} /></label>
     <label className="create-field is-wide"><span>참석자</span><input maxLength={500} value={fields.attendees_text} onChange={(event) => setField("attendees_text", event.target.value)} placeholder="예: 포켓 김OO, NS 이OO" /></label>
@@ -889,7 +889,7 @@ function DailyMeetingsView({ role, meetings, canWrite, onSave }) {
   const [editing, setEditing] = useState(undefined);
   const visibilityLabel = { CLIENT: "고객 공개", PROJECT_TEAM: "프로젝트 팀", POCKET_ONLY: "포켓 전용" };
   return <div className="view-stack daily-meeting-view"><ViewHeader eyebrow="업무 기록" title="데일리 회의록" description="날짜별 논의 내용, 결정사항과 후속 업무를 한곳에 남깁니다.">{canWrite && <button className="primary-button" type="button" onClick={() => setEditing(null)}><Plus size={15} /> 회의록 작성</button>}</ViewHeader>
-    <section className="daily-meeting-summary"><article><span>전체 회의록</span><strong>{meetings.length}</strong><small>Google Sheets 저장 건수</small></article><article><span>최근 기록</span><strong>{meetings[0]?.date || "-"}</strong><small>{meetings[0]?.authorName || "기록 없음"}</small></article></section>
+    <section className="daily-meeting-summary"><article><span>전체 회의록</span><strong>{meetings.length}</strong><small>웹에서 작성한 기록</small></article><article><span>최근 기록</span><strong>{meetings[0]?.date || "-"}</strong><small>{meetings[0]?.authorName || "기록 없음"}</small></article></section>
     {meetings.length ? <section className="daily-meeting-list">{meetings.map((meeting) => <article className="daily-meeting-card panel" key={meeting.id}><header><div className="daily-meeting-date"><CalendarDays size={17} /><span>{meeting.date}</span></div><div><span className="daily-meeting-visibility">{visibilityLabel[meeting.visibilityCode] || meeting.visibilityCode}</span>{canWrite && <button className="icon-button" type="button" onClick={() => setEditing(meeting)} aria-label={`${meeting.title} 수정`}><Pencil size={15} /></button>}</div></header><div className="daily-meeting-title"><h3>{meeting.title}</h3><span>{meeting.authorName}{meeting.attendees ? ` · 참석 ${meeting.attendees}` : ""}</span></div><div className="daily-meeting-sections"><section><h4>회의 내용</h4><p>{meeting.discussion}</p></section>{meeting.decisions && <section><h4>결정사항</h4><p>{meeting.decisions}</p></section>}{meeting.actionItems && <section className="is-action"><h4>후속 업무</h4><p>{meeting.actionItems}</p></section>}</div></article>)}</section> : <EmptyState title="작성된 회의록이 없습니다" description={canWrite ? "오늘 회의 내용을 첫 기록으로 남겨 주세요." : "운영팀이 회의록을 작성하면 이곳에 표시됩니다."} />}
     {editing !== undefined && <DailyMeetingModal meeting={editing} role={role} onClose={() => setEditing(undefined)} onSave={onSave} />}
   </div>;
@@ -1728,7 +1728,7 @@ export function App() {
     }
     resourceCacheEpochRef.current += 1;
     resourceCacheRef.current.delete(`${activeProjectId}:daily`);
-    setSaveNotice(meeting ? "회의록을 Google Sheets 원장에 수정했습니다." : "회의록을 Google Sheets 원장에 저장했습니다.");
+    setSaveNotice(meeting ? "회의록을 수정했습니다." : "회의록을 저장했습니다.");
     setPageRefreshKey((value) => value + 1);
   };
 
