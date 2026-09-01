@@ -74,6 +74,8 @@ function mhRunOperationsMaintenance_(request, actor) {
   if (operation === 'ensure_operations') return mhSetupEnsureOperationsSheets();
   if (operation === 'backfill_mutations') return mhSetupBackfillMutationRegistry();
   if (operation === 'audit_mutations') return mhAuditMutationRegistry_();
+  if (operation === 'sync_und_task_structure') return mhSyncUndTaskStructureV34();
+  if (operation === 'audit_und_task_structure') return mhAuditUndTaskStructureV34();
   if (operation === 'repair_dependency_schema') return mhSetupRepairTaskDependencySchema();
   if (operation === 'repair_sync_status_schema') return mhSetupRepairSyncStatusSchema();
   if (operation === 'split_internal_roles') return mhSetupSplitInternalRoles();

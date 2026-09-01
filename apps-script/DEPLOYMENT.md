@@ -2,9 +2,9 @@
 
 ## 현재 운영 배포
 
-- 백엔드: `2026-09-01-permission-isolation-v33`
-- Web App 배포: @89
-- 운영 검증: health/deep health `READY`, schema audit 정상
+- 백엔드: `2026-09-01-und-task-structure-v37`
+- Web App 배포: @93
+- 운영 검증: health `READY`; UND 고객 계정 캐시 전·후 144개 세부내용·시작일·종료일과 프로젝트 기간 `2026-08-25~2026-12-15` 일치
 - 권한 격리: UND는 UND 프로젝트 1개만 노출, 무극 직접 조회 거부, NS 권한 관리 거부
 - 최신 백업: 21개 시트 manifest 해시 일치
 

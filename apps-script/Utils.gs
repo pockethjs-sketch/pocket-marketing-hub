@@ -196,7 +196,17 @@ function mhPageRows_(rows, idField, limit, cursor) {
 function mhDateOnly_(value) {
   if (!value) return '';
   if (value instanceof Date) return Utilities.formatDate(value, 'Asia/Seoul', 'yyyy-MM-dd');
-  return String(value).slice(0, 10);
+  var text = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+
+  // CacheService serializes spreadsheet Date values as UTC ISO strings. A
+  // Korean midnight therefore becomes the previous day's 15:00Z; slicing the
+  // first ten characters silently shifts every cached date back one day.
+  var parsed = new Date(text);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, 'Asia/Seoul', 'yyyy-MM-dd');
+  }
+  return text.slice(0, 10);
 }
 
 function mhValidateDateWindow_(start, end, maximumDays) {

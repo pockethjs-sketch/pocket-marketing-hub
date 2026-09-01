@@ -861,18 +861,18 @@ function mhProjectRows_(sheetName, clientId, projectId, actor) {
 function mhProjectTask_(row, actor) {
   var fields = [
     'task_id', 'project_id', 'source_task_id', 'parent_task_id', 'phase_code', 'workstream_code',
-    'category_code', 'title', 'status_code', 'priority_code',
+    'category_code', 'title', 'description', 'status_code', 'priority_code',
     'plan_week', 'planned_start_date', 'due_date', 'completed_at', 'customer_status_text',
     'progress_percent', 'completion_url', 'remarks',
     'sort_order', 'updated_at', 'row_version'
   ];
   if (actor.role !== 'CLIENT_VIEWER') {
     fields = fields.concat([
-      'description', 'plan_note', 'responsible_org_code', 'assignee_user_id',
+      'plan_note', 'responsible_org_code', 'assignee_user_id',
       'reviewer_org_code', 'blocker_reason', 'source_code'
     ]);
   } else if (MH_PUBLIC_TASK_WRITES_ENABLED) {
-    fields = fields.concat(['description', 'assignee_user_id']);
+    fields = fields.concat(['assignee_user_id']);
   }
   var projected = mhNormalizeRow_(mhPick_(row, fields));
   projected.planned_start_date = mhDateOnly_(row.planned_start_date) || null;
