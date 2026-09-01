@@ -6037,6 +6037,36 @@ table tbody tr:hover {
 .task-timeline-summary strong { color: var(--text); }
 .task-schedule-detail-toggle { min-height: 30px; margin-left: 4px; padding: 0 10px; font-size: 10px; }
 
+.task-schedule-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 220px)) minmax(140px, 1fr);
+  align-items: end;
+  gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+.task-schedule-filters label { display: grid; gap: 6px; }
+.task-schedule-filters label > span { color: #64748b; font-size: 10px; font-weight: 800; }
+.task-schedule-filters select {
+  width: 100%;
+  height: 38px;
+  padding: 0 34px 0 12px;
+  border: 1px solid #dbe2eb;
+  border-radius: 9px;
+  outline: 0;
+  background: #fff;
+  color: #17233b;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+.task-schedule-filters select:focus { border-color: #3153a4; box-shadow: 0 0 0 3px rgba(49, 83, 164, .1); }
+.task-schedule-filter-result { display: flex; min-height: 38px; align-items: center; justify-content: flex-end; gap: 4px; color: #94a3b8; font-size: 11px; }
+.task-schedule-filter-result strong { color: #17233b; font-size: 17px; }
+.task-schedule-filter-result button { margin-left: 10px; padding: 7px 10px; border: 0; border-radius: 8px; background: #e8edf5; color: #334155; font-size: 10px; font-weight: 800; cursor: pointer; }
+.task-schedule-filter-result button:hover { background: #dce5f1; }
+
 .task-timeline-scroll { overflow-x: auto; }
 .task-timeline-grid { display: grid; grid-template-columns: 270px minmax(720px, 1fr); min-width: 990px; }
 .task-timeline-corner,
@@ -6065,6 +6095,8 @@ table tbody tr:hover {
 @media (max-width: 720px) {
   .task-timeline-summary { align-items: flex-start; flex-direction: column; padding: 18px; }
   .task-timeline-summary > div:last-child { flex-wrap: wrap; }
+  .task-schedule-filters { grid-template-columns: 1fr; padding: 14px 18px; }
+  .task-schedule-filter-result { justify-content: flex-start; }
   .task-timeline-grid { grid-template-columns: 210px minmax(620px, 1fr); min-width: 830px; }
   .task-timeline-label { grid-template-columns: 56px 1fr; padding: 8px 12px; }
 }

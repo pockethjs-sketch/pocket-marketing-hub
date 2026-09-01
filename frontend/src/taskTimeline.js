@@ -15,6 +15,36 @@ function dayDiff(left, right) {
   return Math.round((right.getTime() - left.getTime()) / DAY_MS);
 }
 
+function taskIsDone(task) {
+  return ["DONE", "COMPLETED"].includes(String(task?.statusCode || "").toUpperCase());
+}
+
+export function taskScheduleCategory(task = {}) {
+  return String(task.parent || task.category || task.stream || "미분류").trim() || "미분류";
+}
+
+export function filterTaskSchedule(tasks = [], filters = {}, todayValue = new Date()) {
+  const status = String(filters.status || "ALL");
+  const category = String(filters.category || "ALL");
+  const schedule = String(filters.schedule || "ALL").toUpperCase();
+  const today = dateOnly(todayValue);
+
+  return tasks.filter((task) => {
+    if (status !== "ALL" && String(task.statusCode || "") !== status) return false;
+    if (category !== "ALL" && taskScheduleCategory(task) !== category) return false;
+    if (schedule === "ALL") return true;
+
+    const start = dateOnly(task.plannedStartDate);
+    const end = dateOnly(task.dueDate);
+    if (schedule === "UNSCHEDULED") return !start || !end;
+    if (!today || !start || !end || taskIsDone(task)) return false;
+    if (schedule === "ACTIVE") return start <= today && today <= end;
+    if (schedule === "UPCOMING") return start > today;
+    if (schedule === "OVERDUE") return end < today;
+    return true;
+  });
+}
+
 export function buildTaskTimeline(tasks = [], project = {}, todayValue = new Date()) {
   const candidates = tasks.map((task) => {
     const start = dateOnly(task.plannedStartDate || task.dueDate);

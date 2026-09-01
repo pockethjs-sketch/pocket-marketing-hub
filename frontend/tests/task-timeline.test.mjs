@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { buildTaskTimeline, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, taskScheduleCategory, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한다", () => {
   const timeline = buildTaskTimeline([
@@ -28,6 +28,29 @@ test("계산된 마감 표시는 실제 사용자 입력 종료일을 덮어쓰�
   const decorated = withDisplayDeadline(task, "09.09 · D-8");
   assert.equal(decorated.due, "09.09 · D-8");
   assert.equal(decorated.dueDate, null);
+});
+
+test("일정표 업무를 상태와 카테고리로 함께 필터링한다", () => {
+  const tasks = [
+    { id: "A", statusCode: "IN_PROGRESS", parent: "콘텐츠 제작", plannedStartDate: "2026-08-20", dueDate: "2026-09-05" },
+    { id: "B", statusCode: "DONE", parent: "채널 세팅", plannedStartDate: "2026-08-10", dueDate: "2026-08-20" },
+  ];
+  assert.equal(taskScheduleCategory(tasks[0]), "콘텐츠 제작");
+  assert.deepEqual(filterTaskSchedule(tasks, { status: "IN_PROGRESS", category: "콘텐츠 제작" }, "2026-09-01").map((task) => task.id), ["A"]);
+});
+
+test("일정 구간은 오늘 진행·예정·지연·미등록을 실제 날짜로 구분한다", () => {
+  const tasks = [
+    { id: "ACTIVE", statusCode: "IN_PROGRESS", plannedStartDate: "2026-08-30", dueDate: "2026-09-03" },
+    { id: "UPCOMING", statusCode: "NOT_STARTED", plannedStartDate: "2026-09-04", dueDate: "2026-09-08" },
+    { id: "OVERDUE", statusCode: "IN_PROGRESS", plannedStartDate: "2026-08-20", dueDate: "2026-08-31" },
+    { id: "DONE", statusCode: "DONE", plannedStartDate: "2026-08-20", dueDate: "2026-08-31" },
+    { id: "UNSCHEDULED", statusCode: "NOT_STARTED" },
+  ];
+  assert.deepEqual(filterTaskSchedule(tasks, { schedule: "ACTIVE" }, "2026-09-01").map((task) => task.id), ["ACTIVE"]);
+  assert.deepEqual(filterTaskSchedule(tasks, { schedule: "UPCOMING" }, "2026-09-01").map((task) => task.id), ["UPCOMING"]);
+  assert.deepEqual(filterTaskSchedule(tasks, { schedule: "OVERDUE" }, "2026-09-01").map((task) => task.id), ["OVERDUE"]);
+  assert.deepEqual(filterTaskSchedule(tasks, { schedule: "UNSCHEDULED" }, "2026-09-01").map((task) => task.id), ["UNSCHEDULED"]);
 });
 
 test("일정표는 날짜 셀 반복 채움 대신 시작점 하나의 간트 블록을 사용한다", () => {

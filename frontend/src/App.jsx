@@ -57,7 +57,7 @@ import {
 } from "./planNavigation.js";
 import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
-import { buildTaskTimeline, withDisplayDeadline } from "./taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, taskScheduleCategory, withDisplayDeadline } from "./taskTimeline.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
 import { ACCESS_PAGE_OPTIONS, NAVIGATION_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
@@ -594,11 +594,34 @@ function taskDurationDays(startValue, endValue) {
 
 function TaskScheduleTimeline({ tasks, project }) {
   const [showDetails, setShowDetails] = useState(false);
-  const timeline = buildTaskTimeline(tasks, project);
-  const done = tasks.filter((task) => task.status === "완료").length;
-  const inProgress = tasks.filter((task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)).length;
-  const onHold = tasks.filter((task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode)).length;
-  const missingSchedule = tasks.filter((task) => !task.plannedStartDate || !task.dueDate).length;
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [scheduleFilter, setScheduleFilter] = useState("ALL");
+  useEffect(() => {
+    setStatusFilter("ALL");
+    setCategoryFilter("ALL");
+    setScheduleFilter("ALL");
+  }, [project.id]);
+  const statusOrder = ["NOT_STARTED", "IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION", "ON_HOLD", "BLOCKED", "DONE", "COMPLETED", "CANCELLED"];
+  const statusOptions = [...new Map(tasks.map((task) => [task.statusCode, task.status])).entries()]
+    .filter(([code]) => code)
+    .sort(([left], [right]) => {
+      const leftIndex = statusOrder.indexOf(left);
+      const rightIndex = statusOrder.indexOf(right);
+      return (leftIndex < 0 ? 999 : leftIndex) - (rightIndex < 0 ? 999 : rightIndex);
+    });
+  const categoryOptions = [...new Set(tasks.map(taskScheduleCategory))].sort((left, right) => left.localeCompare(right, "ko"));
+  const filteredTasks = useMemo(() => filterTaskSchedule(tasks, {
+    status: statusFilter,
+    category: categoryFilter,
+    schedule: scheduleFilter,
+  }), [tasks, statusFilter, categoryFilter, scheduleFilter]);
+  const filtersActive = statusFilter !== "ALL" || categoryFilter !== "ALL" || scheduleFilter !== "ALL";
+  const timeline = buildTaskTimeline(filteredTasks, project);
+  const done = filteredTasks.filter((task) => task.status === "완료").length;
+  const inProgress = filteredTasks.filter((task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)).length;
+  const onHold = filteredTasks.filter((task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode)).length;
+  const missingSchedule = filteredTasks.filter((task) => !task.plannedStartDate || !task.dueDate).length;
   const datedRows = new Map(timeline.rows.map((row) => [row.task.id, row]));
   const days = [];
   if (timeline.start && timeline.end) {
@@ -627,7 +650,8 @@ function TaskScheduleTimeline({ tasks, project }) {
   };
   return <section className="task-timeline panel" aria-label="업무 일정">
     <header className="task-timeline-summary"><div><span>프로젝트 일정표</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무별 실행 구간을 블록으로 확인하고 필요한 정보만 펼쳐봅니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span>{missingSchedule > 0 && <span className="is-warning">일정 미등록 <strong>{missingSchedule}</strong></span>}{days.length > 0 && <button type="button" className="secondary-button task-schedule-detail-toggle" aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>{showDetails ? "상세 닫기" : "상세 보기"}</button>}</div></header>
-    {days.length ? <div className="task-schedule-matrix-scroll"><table className={`task-schedule-matrix${showDetails ? " is-detailed" : " is-compact"}`}><thead><tr><th rowSpan="2">업무</th><th rowSpan="2">세부내용</th><th rowSpan="2">시작일</th><th rowSpan="2">종료일</th><th rowSpan="2">기간(일)</th><th rowSpan="2">진행률</th><th rowSpan="2">상태</th><th rowSpan="2">완료링크</th><th rowSpan="2">비고</th>{months.map((month) => <th className="task-schedule-month" colSpan={month.count} key={month.key}>{month.label}</th>)}</tr><tr>{days.map((day) => <th key={day.iso} className={`task-schedule-day-head ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""}`}><strong>{day.day}</strong><small>{day.weekday}</small></th>)}</tr></thead><tbody>{tasks.map((task) => {
+    <div className="task-schedule-filters" role="group" aria-label="일정표 업무 필터"><label><span>업무 상태</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">전체 상태</option>{statusOptions.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label><label><span>업무 카테고리</span><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="ALL">전체 카테고리</option>{categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}</select></label><label><span>업무 일정</span><select value={scheduleFilter} onChange={(event) => setScheduleFilter(event.target.value)}><option value="ALL">전체 일정</option><option value="ACTIVE">오늘 진행</option><option value="UPCOMING">예정</option><option value="OVERDUE">지연</option><option value="UNSCHEDULED">일정 미등록</option></select></label><div className="task-schedule-filter-result"><strong>{filteredTasks.length}</strong><span>/ {tasks.length}건</span>{filtersActive && <button type="button" onClick={() => { setStatusFilter("ALL"); setCategoryFilter("ALL"); setScheduleFilter("ALL"); }}>초기화</button>}</div></div>
+    {filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : days.length ? <div className="task-schedule-matrix-scroll"><table className={`task-schedule-matrix${showDetails ? " is-detailed" : " is-compact"}`}><thead><tr><th rowSpan="2">업무</th><th rowSpan="2">세부내용</th><th rowSpan="2">시작일</th><th rowSpan="2">종료일</th><th rowSpan="2">기간(일)</th><th rowSpan="2">진행률</th><th rowSpan="2">상태</th><th rowSpan="2">완료링크</th><th rowSpan="2">비고</th>{months.map((month) => <th className="task-schedule-month" colSpan={month.count} key={month.key}>{month.label}</th>)}</tr><tr>{days.map((day) => <th key={day.iso} className={`task-schedule-day-head ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""}`}><strong>{day.day}</strong><small>{day.weekday}</small></th>)}</tr></thead><tbody>{filteredTasks.map((task) => {
       const row = datedRows.get(task.id);
       const duration = taskDurationDays(task.plannedStartDate, task.dueDate);
       const progress = task.progressPercent ?? 0;
