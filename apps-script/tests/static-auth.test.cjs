@@ -278,7 +278,6 @@ assert.equal(context.MH_READ_ACTIONS.project_snapshot, true);
 const snapshotCallOrder = [];
 const snapshotReaders = [
   ['mhReadTasks_', 'tasks'],
-  ['mhReadContents_', 'contents'],
   ['mhReadPerformance_', 'performance'],
   ['mhReadFiles_', 'files'],
   ['mhReadActivity_', 'activity'],
@@ -287,7 +286,7 @@ const originalSnapshotReaders = Object.fromEntries(snapshotReaders.map(([name]) 
 const originalPlanReader = context.mhReadProjectPlan_;
 const snapshotActor = { userId: 'USR-SNAPSHOT', role: 'CLIENT_VIEWER', memberships: [{
   membership_id: 'MEM-SNAPSHOT', client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001',
-  permission_code: 'READ_ONLY', allowed_pages_json: '["overview","plan","tasks","content","performance","files"]',
+  permission_code: 'READ_ONLY', allowed_pages_json: '["overview","plan","tasks","daily","performance","files"]',
 }] };
 const snapshotProject = { client_id: 'CLT-UND', project_id: 'PRJ-UND-90D-001' };
 context.mhReadProjectPlan_ = (request, actor, project) => {

@@ -12,9 +12,7 @@ import {
   ChevronsRight,
   CircleDot,
   ClipboardCheck,
-  FileText,
   FolderOpen,
-  GalleryHorizontalEnd,
   LayoutDashboard,
   ListFilter,
   LoaderCircle,
@@ -42,7 +40,6 @@ import {
   contentsViewModel,
   dailyMeetingsViewModel,
   createHubDataSource,
-  filesViewModel,
   overviewViewModel,
   planViewModel,
   performanceTrackingViewModel,
@@ -62,19 +59,24 @@ import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmis
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
 import { buildTaskTimeline, withDisplayDeadline } from "./taskTimeline.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
-import { ACCESS_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
+import { ACCESS_PAGE_OPTIONS, NAVIGATION_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
 
+const navIcons = {
+  overview: LayoutDashboard,
+  plan: BookOpenText,
+  tasks: ClipboardCheck,
+  schedule: CalendarDays,
+  daily: NotebookPen,
+  performance: BarChart3,
+  files: Activity,
+};
 const navItems = [
-  { id: "overview", label: "총괄 현황", icon: LayoutDashboard },
-  { id: "plan", label: "실행계획", icon: BookOpenText, children: Object.values(PLAN_VARIANTS) },
-  { id: "tasks", label: "업무", icon: ClipboardCheck },
-  { id: "schedule", label: "일정표", icon: CalendarDays, permissionId: "tasks", nested: true },
-  { id: "daily", label: "데일리 회의록", icon: NotebookPen, permissionId: "tasks", nested: true },
-  { id: "content", label: "콘텐츠", icon: GalleryHorizontalEnd },
-  { id: "tracking", label: "성과 추적", icon: TrendingUp },
-  { id: "performance", label: "성과", icon: BarChart3 },
-  { id: "files", label: "자료·활동", icon: FolderOpen },
+  ...NAVIGATION_PAGE_OPTIONS.map((page) => ({
+    ...page,
+    icon: navIcons[page.id],
+    ...(page.id === "plan" ? { children: Object.values(PLAN_VARIANTS) } : {}),
+  })),
   { id: "permissions", label: "권한 관리", icon: ShieldCheck, pocketOnly: true },
 ];
 
@@ -224,7 +226,7 @@ function ActorBadge({ actor, onLogout, live }) {
 
 function Topbar({ project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation }) {
   const NavigationIcon = navigation.iconDirection === "left" ? ChevronsLeft : ChevronsRight;
-  return <header className="topbar"><div className="topbar-leading">{navigation.controlVisible && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.usesDrawer ? navigation.isDrawerOpen : undefined} aria-controls={navigation.controlledIds} data-navigation-level={navigation.usesDrawer ? (navigation.isDrawerOpen ? "drawer-open" : "drawer-closed") : navigation.desktopLevel}><NavigationIcon size={18} strokeWidth={2} /></button>}<div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무·콘텐츠 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+  return <header className="topbar"><div className="topbar-leading">{navigation.controlVisible && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.usesDrawer ? navigation.isDrawerOpen : undefined} aria-controls={navigation.controlledIds} data-navigation-level={navigation.usesDrawer ? (navigation.isDrawerOpen ? "drawer-open" : "drawer-closed") : navigation.desktopLevel}><NavigationIcon size={18} strokeWidth={2} /></button>}<div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
 }
 
 function MetricCard({ metric, onOpen }) {
@@ -1018,7 +1020,7 @@ function AccessAccountModal({ account, projects, onClose, onSave }) {
     accessCode: "",
     projectId: firstAccess?.projectId || projects[0]?.id || "",
     membershipId: firstAccess?.id || "",
-    allowedPages: normalizeAllowedPages(firstAccess?.allowedPages?.length ? firstAccess.allowedPages : ["overview", "plan", "tasks", "content", "tracking", "performance", "files"]),
+    allowedPages: normalizeAllowedPages(firstAccess?.allowedPages?.length ? firstAccess.allowedPages : ACCESS_PAGE_OPTIONS.map((page) => page.id)),
     enabled: account?.enabled !== false,
   }));
   const [saving, setSaving] = useState(false);
@@ -1072,7 +1074,7 @@ function AccessAccountModal({ account, projects, onClose, onSave }) {
   };
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal access-account-modal" role="dialog" aria-modal="true" aria-labelledby="access-account-title"><header><div><p className="editorial-kicker">Google Sheets 계정·권한 원장</p><h2 id="access-account-title">{account ? "고객사 계정 관리" : "고객사 계정 생성"}</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
     <div className="access-form-grid"><label className="create-field"><span>로그인 아이디</span><input value={fields.account} onChange={(event) => setField("account", event.target.value)} placeholder="예: und-client" disabled={Boolean(account)} required /></label><label className="create-field"><span>표시 이름</span><input value={fields.displayName} onChange={(event) => setField("displayName", event.target.value)} placeholder="예: UND 담당자" required /></label><label className="create-field"><span>{account ? "새 비밀번호 · 변경할 때만" : "임시 비밀번호"}</span><input type="password" autoComplete="new-password" value={fields.accessCode} onChange={(event) => setField("accessCode", event.target.value)} placeholder="8자 이상" required={!account} /></label><FormSelect label="계정 상태" value={fields.enabled ? "ACTIVE" : "DISABLED"} onChange={(value) => setField("enabled", value === "ACTIVE")} options={[["ACTIVE", "사용 중"], ["DISABLED", "사용 중지"]]} /><FormSelect label="접근 프로젝트" value={fields.projectId} onChange={(value) => setField("projectId", value)} options={projects.map((project) => [project.id, project.name])} /></div>
-    <fieldset className="access-page-fieldset"><legend>접근 가능한 페이지</legend><p>체크하지 않은 페이지는 메뉴에서 숨기고 서버 조회도 차단합니다.</p><div>{ACCESS_PAGE_OPTIONS.map((page) => <label key={page.id}><input type="checkbox" checked={fields.allowedPages.includes(page.id)} onChange={() => togglePage(page.id)} /><span>{page.label}</span></label>)}</div></fieldset>
+    <fieldset className="access-page-fieldset"><legend>접근 가능한 페이지</legend><p>현재 운영 중인 화면만 표시합니다. 체크하지 않은 페이지는 메뉴와 서버 조회에서 모두 차단합니다.</p><div>{ACCESS_PAGE_OPTIONS.map((page) => <label key={page.id}><input type="checkbox" checked={fields.allowedPages.includes(page.id)} onChange={() => togglePage(page.id)} /><span><strong>{page.label}</strong><small>{page.description}</small></span></label>)}</div></fieldset>
     {account?.accesses?.length > 0 && <section className="access-current-projects"><strong>현재 프로젝트 권한</strong><div>{account.accesses.map((access) => <article key={access.id}><span><b>{access.projectName}</b><small>{access.allowedPages.length}개 페이지</small></span><button type="button" className="danger-button" disabled={saving} onClick={() => removeAccess(access)}>이 프로젝트 권한 제거</button></article>)}</div></section>}
     {error && <div className="form-error"><AlertCircle size={14} />{error.message}</div>}
     <footer>{account && <button type="button" className="danger-button" onClick={disable} disabled={saving || !fields.projectId}>계정 비활성화</button>}<span /><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.account.trim() || !fields.displayName.trim() || !fields.projectId || !fields.allowedPages.length}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "권한 저장"}</button></footer>
@@ -1090,8 +1092,8 @@ function PermissionsView({ access, onSave }) {
   })}</div> : <EmptyState title="등록된 고객사 계정이 없습니다" description="고객사 계정 생성 버튼에서 첫 계정을 추가하세요." />}</section>{editing !== undefined && <AccessAccountModal account={editing} projects={access.projects || []} onClose={() => setEditing(undefined)} onSave={onSave} />}</div>;
 }
 
-function FilesView({ role, files, activities, onCreate, canWrite }) {
-  return <div className="view-stack"><ViewHeader eyebrow="자료 관리" title="자료·활동" description="공유 자료와 Google Sheets 변경 이력을 확인합니다.">{role !== "client" && <CreateButton entityType="file" onOpen={onCreate} enabled={canWrite}>자료 등록</CreateButton>}</ViewHeader><section className="overview-grid file-grid"><div className="panel"><div className="panel-heading"><div><h3>최근 자료</h3></div><FileText size={17} /></div>{files.length ? <div className="file-list">{files.map((file) => <a key={file.id} href={file.url || undefined} target={file.url ? "_blank" : undefined} rel="noreferrer" className={!file.url ? "is-disabled" : ""}><span className="file-icon"><FileText size={17} /></span><span><strong>{file.title}</strong><small>{file.type} · {file.date}</small></span><i>{file.visibility}</i><ArrowRight size={14} /></a>)}</div> : <EmptyState title="등록된 자료가 없습니다" description="파일 링크가 원장에 등록되면 표시됩니다." />}</div><div className="panel"><div className="panel-heading"><div><h3>활동 기록</h3></div><Activity size={17} /></div>{activities.length ? <div className="activity-timeline">{activities.map((item) => <article key={item.id}><span /><div><strong>{item.title}</strong><p>{item.meta}</p>{role !== "client" && item.internalMeta && <small>{item.internalMeta}</small>}</div></article>)}</div> : <EmptyState title="활동 기록이 없습니다" description="웹과 원장의 변경 이력이 표시됩니다." />}</div></section></div>;
+function DetailLogView({ role, activities }) {
+  return <div className="view-stack"><ViewHeader eyebrow="Project history" title="세부 로그" description="업무·회의록·프로젝트에서 확정된 변경 이력을 시간순으로 확인합니다." /><section className="panel detail-log-panel"><div className="panel-heading"><div><h3>전체 변경 이력</h3><p>자료 목록은 제외하고 확정된 활동만 표시합니다.</p></div><Activity size={17} /></div>{activities.length ? <div className="activity-timeline">{activities.map((item) => <article key={item.id}><span /><div><strong>{item.title}</strong><p>{item.meta}</p>{role !== "client" && item.internalMeta && <small>{item.internalMeta}</small>}</div></article>)}</div> : <EmptyState title="기록된 활동이 없습니다" description="웹에서 업무나 회의록이 추가·수정되면 여기에 표시됩니다." />}</section></div>;
 }
 
 const PLAN_ALLOWED_TAGS = new Set([
@@ -1190,7 +1192,7 @@ function AppContent({ view, planVariant, project, role, search, setView, pageSta
   if (view === "tracking") return <TrackingView tracking={data} />;
   if (view === "performance") return <PerformanceView performance={data} canWrite={canWrite && role !== "client"} onKpiSave={onKpiSave} onKpiArchive={onKpiArchive} />;
   if (view === "permissions") return role === "pocket" ? <PermissionsView access={data} onSave={onAccessSave} /> : <ErrorState error={new Error("포켓 운영 계정만 접근할 수 있습니다.")} />;
-  if (view === "files") return <FilesView role={role} files={data.files?.items || []} activities={data.activities?.items || []} onCreate={onCreate} canWrite={canWrite} />;
+  if (view === "files") return <DetailLogView role={role} activities={data.activities?.items || []} />;
   return <OverviewView project={data.project || project} role={role} activities={data.activities || []} onNavigate={setView} />;
 }
 
@@ -1459,7 +1461,7 @@ export function App() {
         if (view === "content") return source.contents(params).then(contentsViewModel);
         if (view === "tracking") return source.tracking(params).then(performanceTrackingViewModel);
         if (view === "performance") return source.performance(params).then(performanceViewModel);
-        if (view === "files") return Promise.all([source.files(params), source.activity(params)]).then(([files, activity]) => ({ files: filesViewModel(files), activities: activityListViewModel(activity) }));
+        if (view === "files") return source.activity(params).then((activity) => ({ activities: activityListViewModel(activity) }));
         if (view === "permissions") return source.permissions().then(accessAdminViewModel);
         return Promise.reject(new Error(`Unsupported resource: ${view}`));
       };

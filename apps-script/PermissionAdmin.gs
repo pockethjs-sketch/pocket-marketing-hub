@@ -1,4 +1,7 @@
-var MH_ACCESS_PAGES = ['overview', 'plan', 'tasks', 'content', 'tracking', 'performance', 'files'];
+// 고객에게 실제 노출하는 화면의 단일 서버 허용 목록입니다.
+// 화면을 추가하거나 숨길 때 frontend/src/accessPermissions.js의 customerSelectable과 함께 갱신하고
+// permission-admin.test.cjs의 계약 검사를 통과시켜야 합니다.
+var MH_ACCESS_PAGES = ['overview', 'plan', 'tasks', 'daily', 'performance', 'files'];
 
 function mhAssertPermissionManager_(actor) {
   var master = actor && actor.role === 'MASTER';
@@ -26,7 +29,7 @@ function mhPageForReadAction_(action, request) {
   if (action === 'project_overview') return 'overview';
   if (action === 'project_plan') return 'plan';
   if (action === 'tasks') return 'tasks';
-  if (action === 'daily_meetings') return 'tasks';
+  if (action === 'daily_meetings') return 'daily';
   if (action === 'contents' || action === 'approvals') return 'content';
   if (action === 'performance_tracking') return 'tracking';
   if (action === 'performance') return 'performance';
