@@ -2,6 +2,10 @@ const DAY_MS = 86_400_000;
 
 function dateOnly(value) {
   if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12, 0, 0, 0);
+  }
   const parsed = new Date(`${String(value).slice(0, 10)}T12:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

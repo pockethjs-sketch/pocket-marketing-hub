@@ -53,6 +53,7 @@ test("일정 구간은 월요일부터 일요일까지 지난주·이번주·다
   assert.deepEqual(filterTaskSchedule(tasks, { schedule: "LAST_WEEK" }, "2026-09-01").map((task) => task.id), ["LAST"]);
   assert.deepEqual(filterTaskSchedule(tasks, { schedule: "THIS_WEEK" }, "2026-09-01").map((task) => task.id), ["THIS"]);
   assert.deepEqual(filterTaskSchedule(tasks, { schedule: "NEXT_WEEK" }, "2026-09-01").map((task) => task.id), ["NEXT"]);
+  assert.deepEqual(filterTaskSchedule(tasks, { schedule: "THIS_WEEK" }, new Date(2026, 8, 1, 9, 30)).map((task) => task.id), ["THIS"]);
 });
 
 test("일정표는 날짜 셀 반복 채움 대신 시작점 하나의 간트 블록을 사용한다", () => {
