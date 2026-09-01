@@ -402,7 +402,7 @@ function mhReadOverview_(request, actor, project) {
       period_end: actual ? actual.period_end : null
     });
   });
-  var activity = mhReadActivity_({ limit: 5 }, actor, project).items;
+  var activity = mhReadActivity_({ limit: 5, userFacingOnly: true }, actor, project).items;
   return {
     project: mhNormalizeRow_(mhPick_(project, [
       'project_id', 'client_id', 'project_name', 'objective', 'phase_code',
@@ -768,12 +768,14 @@ function mhReadActivity_(request, actor, project) {
   var projectId = mhAsText_(project.project_id);
   var clientId = mhAsText_(project.client_id);
   var entityType = mhAsText_(request.entityType || request.entity_type).toUpperCase();
+  var userFacingOnly = mhAsBoolean_(request.userFacingOnly);
   var clientVisibleEntities = actor.role === 'CLIENT_VIEWER'
     ? mhClientVisibleEntityIds_(clientId, projectId, actor)
     : null;
   var rows = mhActiveRows_(MH_SHEETS.ACTIVITY).filter(function (row) {
     if (mhAsText_(row.client_id) !== clientId || mhAsText_(row.project_id) !== projectId) return false;
     if (mhAsText_(row.event_status_code) !== 'COMMIT') return false;
+    if (userFacingOnly && mhAsText_(row.entity_type).toUpperCase() === 'TASK_PLAN') return false;
     if (entityType && mhAsText_(row.entity_type).toUpperCase() !== entityType) return false;
     if (actor.role === 'CLIENT_VIEWER') {
       var actionVisible = ['CREATED', 'UPDATED', 'ARCHIVED', 'APPROVED', 'REJECTED'].indexOf(mhAsText_(row.action_code)) >= 0;
@@ -949,13 +951,15 @@ function mhGroupCounts_(rows, field) {
 function mhActivitySummary_(actionCode, entityType) {
   var action = {
     CREATED: '추가됨', UPDATED: '수정됨', ARCHIVED: '보관됨',
-    APPROVED: '승인됨', REJECTED: '반려됨'
+    APPROVED: '승인됨', REJECTED: '반려됨', MIGRATE: '동기화됨'
   }[mhAsText_(actionCode)] || '변경됨';
   var entity = {
-    task: '업무', content: '콘텐츠', approval: '승인', file: '자료',
-    TASK: '업무', CONTENT: '콘텐츠', APPROVAL: '승인', FILE: '자료'
-  }[mhAsText_(entityType)] || '항목';
-  return entity + '가 ' + action;
+    task: '업무가', content: '콘텐츠가', approval: '승인이', file: '자료가',
+    kpi: 'KPI가', daily_meeting: '회의록이', task_plan: '업무 계획이',
+    TASK: '업무가', CONTENT: '콘텐츠가', APPROVAL: '승인이', FILE: '자료가',
+    KPI: 'KPI가', DAILY_MEETING: '회의록이', TASK_PLAN: '업무 계획이'
+  }[mhAsText_(entityType)] || '항목이';
+  return entity + ' ' + action;
 }
 
 function mhDefaultDateRange_(days) {

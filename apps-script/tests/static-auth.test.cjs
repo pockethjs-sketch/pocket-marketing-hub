@@ -491,5 +491,6 @@ assert.deepEqual(taskActivity.items, [{
     { field: 'responsible_org_code', label: '담당 조직', before: 'NS', after: 'POCKET' },
   ],
 }]);
+assert.equal(context.mhActivitySummary_('MIGRATE', 'TASK_PLAN'), '업무 계획이 동기화됨');
 
 console.log(`Apps Script static/auth checks passed (${sourceFiles.length} source files).`);

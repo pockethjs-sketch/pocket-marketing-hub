@@ -1184,14 +1184,26 @@ select:focus-visible {
 }
 
 .activity-list {
-  padding: 7px 15px 13px;
+  display: grid;
+  min-width: 0;
+  padding: 7px 16px 13px;
 }
 
 .activity-list article {
   display: flex;
+  min-width: 0;
   align-items: flex-start;
   gap: 10px;
   padding: 8px 0;
+}
+
+.activity-list article + article {
+  border-top: 1px solid var(--rule);
+}
+
+.activity-list article > div {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .activity-icon {
@@ -1216,6 +1228,7 @@ select:focus-visible {
 }
 
 .activity-list strong {
+  overflow-wrap: anywhere;
   font-size: 10px;
   line-height: 1.4;
 }
@@ -1224,6 +1237,13 @@ select:focus-visible {
   margin-top: 3px;
   color: var(--muted);
   font-size: 8px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.activity-panel {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .empty-state {
