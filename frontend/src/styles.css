@@ -6039,30 +6039,30 @@ table tbody tr:hover {
 
 .task-schedule-filters {
   display: grid;
-  grid-template-columns: repeat(3, minmax(160px, 220px)) minmax(140px, 1fr);
-  align-items: end;
-  gap: 12px;
-  padding: 14px 24px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 20px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--line);
   background: #f8fafc;
 }
-.task-schedule-filters label { display: grid; gap: 6px; }
-.task-schedule-filters label > span { color: #64748b; font-size: 10px; font-weight: 800; }
-.task-schedule-filters select {
-  width: 100%;
-  height: 38px;
-  padding: 0 34px 0 12px;
+.task-schedule-filter-group { display: grid; grid-column: 1; grid-template-columns: 94px minmax(0, 1fr); align-items: center; gap: 10px; }
+.task-schedule-filter-group > span { color: #64748b; font-size: 10px; font-weight: 800; }
+.task-schedule-filter-group > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.task-schedule-filter-group button {
+  min-width: 72px;
+  height: 34px;
+  padding: 0 14px;
   border: 1px solid #dbe2eb;
-  border-radius: 9px;
-  outline: 0;
+  border-radius: 8px;
   background: #fff;
-  color: #17233b;
-  font: inherit;
+  color: #64748b;
   font-size: 11px;
   font-weight: 700;
+  cursor: pointer;
 }
-.task-schedule-filters select:focus { border-color: #3153a4; box-shadow: 0 0 0 3px rgba(49, 83, 164, .1); }
-.task-schedule-filter-result { display: flex; min-height: 38px; align-items: center; justify-content: flex-end; gap: 4px; color: #94a3b8; font-size: 11px; }
+.task-schedule-filter-group button:hover { border-color: #aab9d1; color: #263a65; }
+.task-schedule-filter-group button.is-active { border-color: #24385f; background: #24385f; color: #fff; box-shadow: 0 2px 5px rgba(36, 56, 95, .15); }
+.task-schedule-filter-result { display: flex; grid-column: 2; grid-row: 1 / span 3; min-height: 38px; align-items: center; justify-content: flex-end; gap: 4px; color: #94a3b8; font-size: 11px; }
 .task-schedule-filter-result strong { color: #17233b; font-size: 17px; }
 .task-schedule-filter-result button { margin-left: 10px; padding: 7px 10px; border: 0; border-radius: 8px; background: #e8edf5; color: #334155; font-size: 10px; font-weight: 800; cursor: pointer; }
 .task-schedule-filter-result button:hover { background: #dce5f1; }
@@ -6096,7 +6096,8 @@ table tbody tr:hover {
   .task-timeline-summary { align-items: flex-start; flex-direction: column; padding: 18px; }
   .task-timeline-summary > div:last-child { flex-wrap: wrap; }
   .task-schedule-filters { grid-template-columns: 1fr; padding: 14px 18px; }
-  .task-schedule-filter-result { justify-content: flex-start; }
+  .task-schedule-filter-group { grid-template-columns: 1fr; }
+  .task-schedule-filter-result { grid-column: 1; grid-row: auto; justify-content: flex-start; }
   .task-timeline-grid { grid-template-columns: 210px minmax(620px, 1fr); min-width: 830px; }
   .task-timeline-label { grid-template-columns: 56px 1fr; padding: 8px 12px; }
 }

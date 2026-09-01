@@ -15,12 +15,26 @@ function dayDiff(left, right) {
   return Math.round((right.getTime() - left.getTime()) / DAY_MS);
 }
 
-function taskIsDone(task) {
-  return ["DONE", "COMPLETED"].includes(String(task?.statusCode || "").toUpperCase());
+export function taskScheduleCategory(task = {}) {
+  return String(task.stream || task.category || task.parent || "미분류").trim() || "미분류";
 }
 
-export function taskScheduleCategory(task = {}) {
-  return String(task.parent || task.category || task.stream || "미분류").trim() || "미분류";
+export function taskScheduleStatusGroup(task = {}) {
+  const status = String(task.statusCode || "").toUpperCase();
+  if (["DONE", "COMPLETED"].includes(status)) return "DONE";
+  if (["ON_HOLD", "BLOCKED"].includes(status)) return "HOLD";
+  if (["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(status)) return "ACTIVE";
+  return "OTHER";
+}
+
+function taskWeekRange(today, weekOffset) {
+  const start = new Date(today);
+  const day = start.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + mondayOffset + weekOffset * 7);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return { start, end };
 }
 
 export function filterTaskSchedule(tasks = [], filters = {}, todayValue = new Date()) {
@@ -30,17 +44,20 @@ export function filterTaskSchedule(tasks = [], filters = {}, todayValue = new Da
   const today = dateOnly(todayValue);
 
   return tasks.filter((task) => {
-    if (status !== "ALL" && String(task.statusCode || "") !== status) return false;
+    if (status !== "ALL" && taskScheduleStatusGroup(task) !== status) return false;
     if (category !== "ALL" && taskScheduleCategory(task) !== category) return false;
     if (schedule === "ALL") return true;
 
     const start = dateOnly(task.plannedStartDate);
     const end = dateOnly(task.dueDate);
-    if (schedule === "UNSCHEDULED") return !start || !end;
-    if (!today || !start || !end || taskIsDone(task)) return false;
-    if (schedule === "ACTIVE") return start <= today && today <= end;
-    if (schedule === "UPCOMING") return start > today;
-    if (schedule === "OVERDUE") return end < today;
+    if (!today || !start || !end) return false;
+    const offset = schedule === "LAST_WEEK" ? -1 : schedule === "THIS_WEEK" ? 0 : schedule === "NEXT_WEEK" ? 1 : null;
+    if (offset !== null) {
+      const week = taskWeekRange(today, offset);
+      const taskStart = start <= end ? start : end;
+      const taskEnd = end >= start ? end : start;
+      return taskStart <= week.end && taskEnd >= week.start;
+    }
     return true;
   });
 }
