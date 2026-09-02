@@ -62,6 +62,7 @@ import { readableTaskActivities, taskActivitySentence } from "./taskActivity.js"
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
 import { ACCESS_PAGE_OPTIONS, NAVIGATION_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
+import { clearResourceSessionCache, readResourceSessionCache, writeResourceSessionCache } from "./resourceSessionCache.js";
 
 const navIcons = {
   overview: LayoutDashboard,
@@ -1416,11 +1417,14 @@ export function App() {
       if (data.initial.view === "overview") {
         setOverviewState(initialState);
       } else {
-        resourceCacheRef.current.set(`${nextProjectId}:${data.initial.view}`, {
+        const initialCacheKey = `${nextProjectId}:${data.initial.view}`;
+        const initialCache = {
           state: initialState,
           cachedAt: Date.now(),
           refreshKey: pageRefreshKeyRef.current,
-        });
+        };
+        resourceCacheRef.current.set(initialCacheKey, initialCache);
+        if (data.initial.view === "tasks") writeResourceSessionCache(source?.getSession(), initialCacheKey, initialCache);
         setResourceState(initialState);
       }
     }
@@ -1521,7 +1525,11 @@ export function App() {
   useEffect(() => {
     if (!source || !activeProjectId || view === "overview" || bootstrapState.status !== "ready") return undefined;
     const cacheKey = `${activeProjectId}:${activeResource}`;
-    const cached = resourceCacheRef.current.get(cacheKey) || null;
+    let cached = resourceCacheRef.current.get(cacheKey) || null;
+    if (!cached && activeResource === "tasks") {
+      cached = readResourceSessionCache(source.getSession(), cacheKey);
+      if (cached) resourceCacheRef.current.set(cacheKey, cached);
+    }
     const cachedState = cached?.state || null;
     const cacheIsFresh = Boolean(
       cached &&
@@ -1561,7 +1569,9 @@ export function App() {
       const nextState = { status: "ready", data, error: null, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey };
       const currentCache = resourceCacheRef.current.get(cacheKey);
       if (!currentCache || currentCache.refreshKey <= pageRefreshKey) {
-        resourceCacheRef.current.set(cacheKey, { state: nextState, cachedAt: Date.now(), refreshKey: pageRefreshKey });
+        const nextCache = { state: nextState, cachedAt: Date.now(), refreshKey: pageRefreshKey };
+        resourceCacheRef.current.set(cacheKey, nextCache);
+        if (activeResource === "tasks") writeResourceSessionCache(source.getSession(), cacheKey, nextCache);
       }
       if (active) setResourceState(nextState);
     }).catch((error) => {
@@ -1590,6 +1600,7 @@ export function App() {
   const logout = () => {
     source.logout();
     clearBootstrapSessionCache();
+    clearResourceSessionCache();
     activeProjectIdRef.current = null;
     setSession(null);
     setBootstrapState(blankPage);
@@ -1711,7 +1722,9 @@ export function App() {
     if (!cached?.state) return;
     const nextState = patchState(cached.state);
     if (nextState !== cached.state) {
-      resourceCacheRef.current.set(cacheKey, { ...cached, state: nextState, cachedAt: Date.now() });
+      const nextCache = { ...cached, state: nextState, cachedAt: Date.now() };
+      resourceCacheRef.current.set(cacheKey, nextCache);
+      writeResourceSessionCache(source?.getSession(), cacheKey, nextCache);
     }
   };
 
