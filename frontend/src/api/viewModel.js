@@ -288,6 +288,7 @@ function activityViewModel(row) {
   const completesTask = actionCode === "UPDATED" && rawChanges.some((change) => (
     String(change?.field || "") === "status_code" && ["DONE", "COMPLETED"].includes(String(change?.after || "").toUpperCase())
   ));
+  const actorDisplayName = String(row.actor_display_name || row.actor_name || "").trim();
   return {
     id: row.event_id || row.id,
     type,
@@ -296,7 +297,8 @@ function activityViewModel(row) {
     title: row.summary || "프로젝트 항목이 변경됨",
     actionCode,
     action: completesTask ? "완료" : ACTIVITY_ACTION_LABELS[actionCode] || "변경",
-    actor: row.actor_display_name || row.actor_name || row.actor_user_id || "확인되지 않은 사용자",
+    actor: actorDisplayName || row.actor_user_id || "확인되지 않은 사용자",
+    userInitiated: row.user_initiated === true || String(row.user_initiated).toLowerCase() === "true" || Boolean(actorDisplayName),
     changes,
     createdAt: row.created_at || null,
     meta: relativeTimestamp(row.created_at),

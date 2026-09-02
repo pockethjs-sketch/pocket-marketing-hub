@@ -533,6 +533,7 @@ test("업무 활동 뷰모델은 제목, 행위자, 동작, 변경값을 보존�
     actionCode: "UPDATED",
     action: "수정",
     actor: "홍길동",
+    userInitiated: true,
     changes: [
       { field: "status_code", label: "상태", before: "진행", after: "완료" },
       { field: "responsible_org_code", label: "담당", before: "NS", after: "포켓" },
@@ -559,6 +560,7 @@ test("업무 활동 뷰모델은 actor_name 별칭과 비어 있는 변경 목�
   });
 
   assert.equal(activity.items[0].actor, "운영자");
+  assert.equal(activity.items[0].userInitiated, true);
   assert.equal(activity.items[0].action, "추가");
   assert.deepEqual(activity.items[0].changes, []);
 });
@@ -586,6 +588,7 @@ test("세부 로그 뷰모델은 불완전한 시스템 업무 이력도 원본 
   });
 
   assert.deepEqual(activity.items.map((item) => item.id), ["EVT-INCOMPLETE", "EVT-COMPLETE"]);
+  assert.equal(activity.items[0].userInitiated, false);
 });
 
 test("완료 상태로 바뀐 업무 로그는 수정 대신 완료 동작으로 분류한다", () => {

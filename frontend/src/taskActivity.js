@@ -15,6 +15,7 @@ const USER_FACING_TASK_FIELDS = new Set([
 ]);
 
 const MEANINGFUL_ACTIONS_WITHOUT_CHANGES = new Set(["CREATED", "ARCHIVED", "APPROVED", "REJECTED"]);
+const USER_TASK_ACTIONS = new Set(["CREATED", "UPDATED", "ARCHIVED"]);
 
 function readableActor(value) {
   const actor = String(value || "").trim();
@@ -31,6 +32,7 @@ export function readableTaskActivities(items = [], tasks = []) {
     const taskTitle = String(item.taskTitle || taskTitles.get(String(item.entityId || "")) || "").trim();
     const changes = (item.changes || []).filter((change) => USER_FACING_TASK_FIELDS.has(String(change?.field || "")));
     const actionCode = String(item.actionCode || "").toUpperCase();
+    if (!item.userInitiated || !USER_TASK_ACTIONS.has(actionCode)) return null;
     if (!taskTitle || !readableActor(item.actor)) return null;
     if (!changes.length && !MEANINGFUL_ACTIONS_WITHOUT_CHANGES.has(actionCode)) return null;
     return { ...item, taskTitle, changes };
