@@ -84,7 +84,11 @@ test("일정표는 날짜 셀 반복 채움 대신 시작점 하나의 간트 �
   assert.match(appSource, /starts \? <div className=\{`task-schedule-bar-shell/);
   assert.match(appSource, /task-schedule-color/);
   assert.match(appSource, /task-schedule-bar-edit/);
+  assert.match(appSource, /<th rowSpan="2">상태<\/th><th rowSpan="2">담당<\/th>/);
+  assert.match(appSource, /taskResponsibleOrgLabel\(task\.responsibleOrgCode, project\.clientName\)/);
+  assert.match(appSource, /className="task-schedule-date"/);
   assert.match(styles, /\.task-schedule-row/);
+  assert.match(styles, /\.task-schedule-date/);
   assert.match(styles, /\.is-schedule-start/);
   assert.doesNotMatch(appSource, /<select value=\{statusFilter\}/);
   assert.match(appSource, /scheduleWeekFilters/);

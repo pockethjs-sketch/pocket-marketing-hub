@@ -5941,10 +5941,10 @@ table tbody tr:hover {
 .task-schedule-matrix.is-compact tbody td:nth-child(2),
 .task-schedule-matrix.is-compact thead tr:first-child > th:nth-child(6),
 .task-schedule-matrix.is-compact tbody td:nth-child(6),
-.task-schedule-matrix.is-compact thead tr:first-child > th:nth-child(8),
-.task-schedule-matrix.is-compact tbody td:nth-child(8),
 .task-schedule-matrix.is-compact thead tr:first-child > th:nth-child(9),
-.task-schedule-matrix.is-compact tbody td:nth-child(9) { display: none; }
+.task-schedule-matrix.is-compact tbody td:nth-child(9),
+.task-schedule-matrix.is-compact thead tr:first-child > th:nth-child(10),
+.task-schedule-matrix.is-compact tbody td:nth-child(10) { display: none; }
 .task-schedule-matrix thead tr:first-child > th:nth-child(1), .task-schedule-matrix tbody td:nth-child(1) { width: 180px; min-width: 180px; max-width: 180px; }
 .task-schedule-matrix thead tr:first-child > th:nth-child(2), .task-schedule-matrix tbody td:nth-child(2) { width: 240px; min-width: 240px; max-width: 240px; }
 .task-schedule-matrix thead tr:first-child > th:nth-child(3), .task-schedule-matrix tbody td:nth-child(3), .task-schedule-matrix thead tr:first-child > th:nth-child(4), .task-schedule-matrix tbody td:nth-child(4) { width: 92px; min-width: 92px; }
@@ -5952,8 +5952,9 @@ table tbody tr:hover {
 .task-schedule-matrix thead tr:first-child > th:nth-child(6), .task-schedule-matrix tbody td:nth-child(6) { width: 118px; min-width: 118px; }
 .task-schedule-matrix thead tr:first-child > th:nth-child(7), .task-schedule-matrix tbody td:nth-child(7) { width: 78px; min-width: 78px; }
 .task-schedule-matrix thead tr:first-child > th:nth-child(8), .task-schedule-matrix tbody td:nth-child(8) { width: 76px; min-width: 76px; }
-.task-schedule-matrix thead tr:first-child > th:nth-child(9), .task-schedule-matrix tbody td:nth-child(9) { width: 180px; min-width: 180px; max-width: 180px; }
-.task-schedule-matrix tbody td:nth-child(1), .task-schedule-matrix tbody td:nth-child(2), .task-schedule-matrix tbody td:nth-child(9) { overflow: hidden; text-align: left; text-overflow: ellipsis; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(9), .task-schedule-matrix tbody td:nth-child(9) { width: 76px; min-width: 76px; }
+.task-schedule-matrix thead tr:first-child > th:nth-child(10), .task-schedule-matrix tbody td:nth-child(10) { width: 180px; min-width: 180px; max-width: 180px; }
+.task-schedule-matrix tbody td:nth-child(1), .task-schedule-matrix tbody td:nth-child(2), .task-schedule-matrix tbody td:nth-child(10) { overflow: hidden; text-align: left; text-overflow: ellipsis; }
 .task-schedule-matrix thead tr:first-child > th:first-child, .task-schedule-matrix tbody td:first-child { position: sticky; left: 0; z-index: 3; box-shadow: 1px 0 0 var(--line); }
 .task-schedule-matrix thead tr:first-child > th:first-child { z-index: 8; }
 .task-schedule-matrix tbody td {
@@ -6045,6 +6046,8 @@ table tbody tr:hover {
 .task-schedule-identity { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .task-schedule-identity > .task-schedule-color { width: 8px; height: 28px; flex: 0 0 auto; border-radius: 999px; background: var(--schedule-bar); }
 .task-schedule-identity > div { min-width: 0; }
+.task-schedule-date { color: #17233b; font-weight: 850; font-variant-numeric: tabular-nums; }
+.task-schedule-owner { display: inline-flex; min-height: 24px; align-items: center; justify-content: center; padding: 0 8px; border-radius: 7px; background: #eef2f7; color: #334155; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .task-edit-modal { width: min(720px, 100%); }
 .task-edit-status > span { color: var(--ink-soft); font-size: 11px; font-weight: 700; }
 .task-schedule-link { display: inline-flex; min-height: 25px; align-items: center; padding: 0 9px; border-radius: 7px; background: #edf2ff; }
