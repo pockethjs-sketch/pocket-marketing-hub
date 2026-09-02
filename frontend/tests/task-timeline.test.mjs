@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleStatusGroup, toggleScheduleTaskSelection, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleStatusGroup, toggleScheduleStatusFilter, toggleScheduleTaskSelection, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한다", () => {
   const timeline = buildTaskTimeline([
@@ -70,6 +70,12 @@ test("일정 블록은 첫 클릭에 수정 버튼을 열고 같은 블록 재�
   assert.equal(toggleScheduleTaskSelection(null, "TASK-1"), "TASK-1");
   assert.equal(toggleScheduleTaskSelection("TASK-1", "TASK-1"), null);
   assert.equal(toggleScheduleTaskSelection("TASK-1", "TASK-2"), "TASK-2");
+});
+
+test("일정표 상단 상태 요약은 같은 상태를 다시 누르면 전체로 돌아간다", () => {
+  assert.equal(toggleScheduleStatusFilter("ALL", "DONE"), "DONE");
+  assert.equal(toggleScheduleStatusFilter("DONE", "DONE"), "ALL");
+  assert.equal(toggleScheduleStatusFilter("DONE", "ACTIVE"), "ACTIVE");
 });
 
 test("일정표는 날짜 셀 반복 채움 대신 시작점 하나의 간트 블록을 사용한다", () => {

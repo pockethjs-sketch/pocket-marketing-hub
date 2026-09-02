@@ -83,6 +83,12 @@ export function toggleScheduleTaskSelection(selectedTaskId, taskId) {
   return selectedTaskId === taskId ? null : taskId;
 }
 
+export function toggleScheduleStatusFilter(currentStatus, selectedStatus) {
+  const current = String(currentStatus || "ALL").toUpperCase();
+  const selected = String(selectedStatus || "ALL").toUpperCase();
+  return current === selected ? "ALL" : selected;
+}
+
 export function buildTaskTimeline(tasks = [], project = {}, todayValue = new Date()) {
   const candidates = tasks.map((task) => {
     const start = dateOnly(task.plannedStartDate || task.dueDate);
