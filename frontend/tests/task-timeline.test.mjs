@@ -17,6 +17,22 @@ test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한�
   assert.ok(timeline.todayLeft > 0 && timeline.todayLeft < 100);
 });
 
+test("일정표 끝은 프로젝트 종료일이 아니라 가장 늦은 업무 종료일까지만 잡는다", () => {
+  const timeline = buildTaskTimeline([
+    { id: "A", plannedStartDate: "2026-09-01", dueDate: "2026-09-05" },
+    { id: "B", plannedStartDate: "2026-09-03", dueDate: "2026-09-12" },
+  ], { startDate: "2026-09-01", endDate: "2026-12-31" });
+  assert.equal(timeline.start, "2026-09-01");
+  assert.equal(timeline.end, "2026-09-12");
+  assert.equal(timeline.dayCount, 12);
+});
+
+test("등록된 업무 일정이 없을 때만 프로젝트 기간을 예비 축으로 사용한다", () => {
+  const timeline = buildTaskTimeline([], { startDate: "2026-09-01", endDate: "2026-09-30" });
+  assert.equal(timeline.start, "2026-09-01");
+  assert.equal(timeline.end, "2026-09-30");
+});
+
 test("날짜가 없는 업무는 일정 축에서 제외한다", () => {
   const timeline = buildTaskTimeline([{ id: "A" }], {});
   assert.equal(timeline.rows.length, 0);

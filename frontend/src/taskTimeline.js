@@ -98,7 +98,11 @@ export function buildTaskTimeline(tasks = [], project = {}, todayValue = new Dat
   const projectStart = dateOnly(project.startDate);
   const projectEnd = dateOnly(project.endDate);
   const starts = candidates.map((item) => item.start).concat(projectStart ? [projectStart] : []);
-  const ends = candidates.map((item) => item.end).concat(projectEnd ? [projectEnd] : []);
+  // 실제 업무가 있으면 프로젝트 계약 종료일까지 빈 축을 늘리지 않는다.
+  // 프로젝트 종료일은 일정 업무가 하나도 없을 때만 예비 범위로 사용한다.
+  const ends = candidates.length
+    ? candidates.map((item) => item.end)
+    : projectEnd ? [projectEnd] : [];
   if (!starts.length || !ends.length) return { start: null, end: null, dayCount: 0, rows: [], ticks: [], todayLeft: null };
 
   const start = new Date(Math.min(...starts.map((item) => item.getTime())));
