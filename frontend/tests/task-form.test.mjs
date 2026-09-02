@@ -27,12 +27,20 @@ test("업무 생성 요청은 사용자가 고른 포켓 NS UND 담당을 덮어
   }
 });
 
-test("업무 생성 담당 선택지는 포켓 NS UND 세 개만 제공한다", () => {
-  assert.deepEqual(taskForm.TASK_RESPONSIBLE_ORG_OPTIONS, [
+test("업무 생성 담당 선택지는 프로젝트 고객사명을 사용한다", () => {
+  assert.deepEqual(taskForm.taskResponsibleOrgOptions("무극"), [
     ["POCKET", "포켓"],
     ["NS", "NS"],
-    ["CLIENT", "UND"],
+    ["CLIENT", "무극"],
   ]);
+  assert.equal(taskForm.taskResponsibleOrgLabel("CLIENT", "UND"), "UND");
+});
+
+test("내부 업무 프레임은 프로젝트별 권한 캐시와 무관하게 동일하다", () => {
+  assert.equal(taskForm.canOperateProjectTasks({ live: true, role: "pocket" }), true);
+  assert.equal(taskForm.canOperateProjectTasks({ live: true, role: "ns" }), true);
+  assert.equal(taskForm.canOperateProjectTasks({ live: true, role: "client" }), false);
+  assert.equal(taskForm.canOperateProjectTasks({ live: false, role: "pocket" }), false);
 });
 
 test("완료 업무 추가는 완료 상태만 고정하고 담당 기본값은 로그인 조직을 따른다", () => {

@@ -1,8 +1,22 @@
-export const TASK_RESPONSIBLE_ORG_OPTIONS = [
-  ["POCKET", "포켓"],
-  ["NS", "NS"],
-  ["CLIENT", "UND"],
-];
+export function taskResponsibleOrgOptions(clientName = "고객사") {
+  return [
+    ["POCKET", "포켓"],
+    ["NS", "NS"],
+    ["CLIENT", String(clientName || "고객사").trim() || "고객사"],
+  ];
+}
+
+export function taskResponsibleOrgLabel(code, clientName = "고객사") {
+  return Object.fromEntries(taskResponsibleOrgOptions(clientName))[String(code || "").toUpperCase()] || "포켓";
+}
+
+// 업무 화면의 프레임은 프로젝트별 권한 캐시로 갈라지지 않는다.
+// 내부 계정에는 동일한 조작 UI를 제공하고 실제 변경 권한은 서버가 다시 검증한다.
+export function canOperateProjectTasks({ live, role, loginEnabled = true } = {}) {
+  if (!live) return false;
+  if (loginEnabled === false) return true;
+  return role === "pocket" || role === "ns";
+}
 
 export function taskCreateInitialFields(role, mode = "default") {
   const responsibleOrgCode = role === "ns" ? "NS" : role === "client" ? "CLIENT" : "POCKET";

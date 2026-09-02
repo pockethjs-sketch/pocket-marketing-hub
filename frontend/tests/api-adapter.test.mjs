@@ -499,7 +499,7 @@ test("업무 뷰모델은 개인 assignee와 별개로 담당 조직 코드를 �
 
   assert.deepEqual(
     taskPage.items.map((task) => [task.responsibleOrgCode, task.responsibleOrg]),
-    [["POCKET", "포켓"], ["NS", "NS"], ["CLIENT", "UND"]],
+    [["POCKET", "포켓"], ["NS", "NS"], ["CLIENT", "고객사"]],
   );
 });
 
@@ -628,7 +628,7 @@ test("업무 로그 변경값의 상태·담당 조직 코드를 화면 라벨�
 
   assert.deepEqual(activity.items[0].changes, [
     { field: "status_code", label: "상태", before: "진행", after: "완료" },
-    { field: "responsible_org_code", label: "담당 조직", before: "포켓", after: "UND" },
+    { field: "responsible_org_code", label: "담당 조직", before: "포켓", after: "고객사" },
   ]);
 });
 

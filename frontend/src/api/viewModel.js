@@ -59,7 +59,7 @@ const FORMAT_LABELS = {
 };
 
 const PRIORITY_LABELS = { LOW: "낮음", NORMAL: "보통", HIGH: "높음", CRITICAL: "긴급", URGENT: "긴급" };
-const TASK_RESPONSIBLE_ORG_LABELS = { POCKET: "포켓", NS: "NS", CLIENT: "UND" };
+const TASK_RESPONSIBLE_ORG_LABELS = { POCKET: "포켓", NS: "NS", CLIENT: "고객사" };
 const ACTIVITY_ACTION_LABELS = { CREATED: "추가", UPDATED: "수정", ARCHIVED: "보관", APPROVED: "승인", REJECTED: "반려" };
 // 화면의 대외 담당 주체는 포켓컴퍼니로 통일한다.
 // 원장에 남아 있는 기존 NS 코드도 표시 단계에서는 포켓컴퍼니로 정규화한다.
