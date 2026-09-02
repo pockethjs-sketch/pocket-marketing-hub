@@ -649,7 +649,7 @@ function ScheduleFilterButtons({ label, value, options, onChange }) {
   return <div className="task-schedule-filter-group"><span>{label}</span><div role="group" aria-label={label}>{options.map(([id, text]) => <button type="button" key={id} className={value === id ? "is-active" : ""} aria-pressed={value === id} onClick={() => onChange(id)}>{text}</button>)}</div></div>;
 }
 
-function TaskScheduleTimeline({ tasks, project, canWrite, onUpdate }) {
+function TaskScheduleTimeline({ tasks, project, canWrite, onUpdate, onCreate }) {
   const [showDetails, setShowDetails] = useState(false);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
@@ -699,7 +699,7 @@ function TaskScheduleTimeline({ tasks, project, canWrite, onUpdate }) {
     return "is-active";
   };
   return <section className="task-timeline panel" aria-label="업무 일정">
-    <header className="task-timeline-summary"><div><span>프로젝트 일정표</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무별 실행 구간을 블록으로 확인하고 필요한 정보만 펼쳐봅니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span>{missingSchedule > 0 && <span className="is-warning">일정 미등록 <strong>{missingSchedule}</strong></span>}{days.length > 0 && <button type="button" className="secondary-button task-schedule-detail-toggle" aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>{showDetails ? "상세 닫기" : "상세 보기"}</button>}</div></header>
+    <header className="task-timeline-summary"><div><span>프로젝트 일정표</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무별 실행 구간을 블록으로 확인하고 필요한 정보만 펼쳐봅니다.</p></div><div><span><i className="is-done" />완료 <strong>{done}</strong></span><span><i className="is-progress" />진행 <strong>{inProgress}</strong></span><span><i className="is-hold" />보류 <strong>{onHold}</strong></span>{missingSchedule > 0 && <span className="is-warning">일정 미등록 <strong>{missingSchedule}</strong></span>}{days.length > 0 && <button type="button" className="secondary-button task-schedule-detail-toggle" aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>{showDetails ? "상세 닫기" : "상세 보기"}</button>}{canWrite && <button type="button" className="primary-button task-schedule-create" onClick={() => onCreate?.("task")}><Plus size={13} />업무 추가</button>}</div></header>
     <div className="task-schedule-filters" aria-label="일정표 업무 필터"><ScheduleFilterButtons label="업무 상태" value={statusFilter} options={scheduleStatusFilters} onChange={setStatusFilter} /><ScheduleFilterButtons label="업무 카테고리" value={categoryFilter} options={scheduleCategoryFilters} onChange={setCategoryFilter} /><ScheduleFilterButtons label="업무 일정" value={scheduleFilter} options={scheduleWeekFilters} onChange={setScheduleFilter} /><div className="task-schedule-filter-result"><strong>{filteredTasks.length}</strong><span>/ {tasks.length}건</span>{filtersActive && <button type="button" onClick={() => { setStatusFilter("ALL"); setCategoryFilter("ALL"); setScheduleFilter("ALL"); }}>초기화</button>}</div></div>
     {filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : days.length ? <div className="task-schedule-matrix-scroll"><table className={`task-schedule-matrix${showDetails ? " is-detailed" : " is-compact"}`}><thead><tr><th rowSpan="2">업무</th><th rowSpan="2">세부내용</th><th rowSpan="2">시작일</th><th rowSpan="2">종료일</th><th rowSpan="2">기간(일)</th><th rowSpan="2">진행률</th><th rowSpan="2">상태</th><th rowSpan="2">완료링크</th><th rowSpan="2">비고</th>{months.map((month) => <th className="task-schedule-month" colSpan={month.count} key={month.key}>{month.label}</th>)}</tr><tr>{days.map((day) => <th key={day.iso} className={`task-schedule-day-head ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""}`}><strong>{day.day}</strong><small>{day.weekday}</small></th>)}</tr></thead><tbody>{filteredTasks.map((task) => {
       const row = datedRows.get(task.id);
@@ -857,13 +857,12 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
 
   return <div className="view-stack tracker-view">
     <ViewHeader eyebrow="업무 관리" title="업무" description="90일 진행 흐름과 실행 항목을 한 화면에서 관리합니다.">
-      <CreateButton entityType="task-completed" onOpen={onCreate} enabled={editable}>완료 업무 추가</CreateButton>
-      <CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton>
+      {taskSection === "list" && <><CreateButton entityType="task-completed" onOpen={onCreate} enabled={editable}>완료 업무 추가</CreateButton><CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton></>}
     </ViewHeader>
 
     <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>일정표</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
 
-    {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} canWrite={editable} onUpdate={onUpdate} /> : <>
+    {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} canWrite={editable} onUpdate={onUpdate} onCreate={onCreate} /> : <>
 
     <section className="tracker-control-panel panel" aria-label="업무 요약 및 90일 진행 흐름">
       <div className="tracker-control-top">

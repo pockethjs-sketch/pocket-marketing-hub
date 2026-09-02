@@ -6058,6 +6058,7 @@ table tbody tr:hover {
 .task-timeline-summary > div:last-child .is-warning { color: #b7791f; }
 .task-timeline-summary strong { color: var(--text); }
 .task-schedule-detail-toggle { min-height: 30px; margin-left: 4px; padding: 0 10px; font-size: 10px; }
+.task-schedule-create { min-height: 30px; padding: 0 11px; font-size: 10px; }
 
 .task-schedule-filters {
   display: grid;
