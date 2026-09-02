@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleStatusGroup, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleStatusGroup, toggleScheduleTaskSelection, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한다", () => {
   const timeline = buildTaskTimeline([
@@ -66,11 +66,18 @@ test("일정표는 시작일과 종료일이 빠른 업무를 먼저 두고 미�
   assert.deepEqual(sortTaskSchedule(tasks).map((task) => task.id), ["EARLY-A", "EARLY-B", "LATE", "NONE"]);
 });
 
+test("일정 블록은 첫 클릭에 수정 버튼을 열고 같은 블록 재클릭에 닫는다", () => {
+  assert.equal(toggleScheduleTaskSelection(null, "TASK-1"), "TASK-1");
+  assert.equal(toggleScheduleTaskSelection("TASK-1", "TASK-1"), null);
+  assert.equal(toggleScheduleTaskSelection("TASK-1", "TASK-2"), "TASK-2");
+});
+
 test("일정표는 날짜 셀 반복 채움 대신 시작점 하나의 간트 블록을 사용한다", () => {
   const appSource = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
   const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-  assert.match(appSource, /starts \? <i style=\{\{ width:/);
-  assert.match(appSource, /task-schedule-identity/);
+  assert.match(appSource, /starts \? <div className=\{`task-schedule-bar-shell/);
+  assert.match(appSource, /task-schedule-color/);
+  assert.match(appSource, /task-schedule-bar-edit/);
   assert.match(styles, /\.task-schedule-row/);
   assert.match(styles, /\.is-schedule-start/);
   assert.doesNotMatch(appSource, /<select value=\{statusFilter\}/);

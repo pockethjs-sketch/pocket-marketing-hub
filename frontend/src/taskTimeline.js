@@ -79,6 +79,10 @@ export function sortTaskSchedule(tasks = []) {
   });
 }
 
+export function toggleScheduleTaskSelection(selectedTaskId, taskId) {
+  return selectedTaskId === taskId ? null : taskId;
+}
+
 export function buildTaskTimeline(tasks = [], project = {}, todayValue = new Date()) {
   const candidates = tasks.map((task) => {
     const start = dateOnly(task.plannedStartDate || task.dueDate);
