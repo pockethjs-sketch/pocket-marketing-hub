@@ -563,7 +563,7 @@ test("업무 활동 뷰모델은 actor_name 별칭과 비어 있는 변경 목�
   assert.deepEqual(activity.items[0].changes, []);
 });
 
-test("제목·변경값·변경자가 모두 없는 불완전 업무 로그는 화면 목록에서 제외한다", () => {
+test("세부 로그 뷰모델은 불완전한 시스템 업무 이력도 원본 감사 정보로 보존한다", () => {
   const activity = activityListViewModel({
     data: {
       items: [{
@@ -585,7 +585,7 @@ test("제목·변경값·변경자가 모두 없는 불완전 업무 로그는 �
     },
   });
 
-  assert.deepEqual(activity.items.map((item) => item.id), ["EVT-COMPLETE"]);
+  assert.deepEqual(activity.items.map((item) => item.id), ["EVT-INCOMPLETE", "EVT-COMPLETE"]);
 });
 
 test("완료 상태로 바뀐 업무 로그는 수정 대신 완료 동작으로 분류한다", () => {

@@ -58,6 +58,7 @@ import {
 import { canOperateProjectTasks, taskCreateInitialFields, taskCreateSubmissionFields, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
 import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, toggleScheduleStatusFilter, toggleScheduleTaskSelection, withDisplayDeadline } from "./taskTimeline.js";
+import { readableTaskActivities, taskActivitySentence } from "./taskActivity.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
 import { ACCESS_PAGE_OPTIONS, NAVIGATION_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
@@ -613,22 +614,22 @@ function taskActivityValue(value) {
   return String(value);
 }
 
-function TaskActivityLog({ state, onRefresh }) {
+function TaskActivityLog({ state, tasks, onRefresh }) {
   const data = state?.data || null;
-  const items = data?.items || [];
+  const items = useMemo(() => readableTaskActivities(data?.items || [], tasks || []), [data?.items, tasks]);
   const loading = state?.status === "loading";
 
   if (loading && !data) return <LoadingState label="업무 로그를 불러오는 중입니다." />;
   if (state?.status === "error" && !data) return <ErrorState error={state.error} onRetry={onRefresh} title="업무 로그를 불러오지 못했습니다." />;
 
   return <section className="task-change-log panel" aria-label="업무 로그" aria-busy={loading}>
-    <header className="task-change-log-header"><div><span>Google Sheets 활동로그</span><h3>업무 로그</h3><p>확정된 업무 생성·수정 이력을 최신순으로 표시합니다.</p></div><button className="secondary-button" type="button" onClick={onRefresh} disabled={loading}>{loading ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} 새로고침</button></header>
+    <header className="task-change-log-header"><div><span>업무 변경 이력</span><h3>업무 로그</h3><p>업무명과 변경 내용을 확인할 수 있는 사용자 작업만 표시합니다.</p></div><button className="secondary-button" type="button" onClick={onRefresh} disabled={loading}>{loading ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} 새로고침</button></header>
     {state?.status === "error" && data && <div className="task-change-log-warning" role="alert"><AlertCircle size={14} />{state.error?.message || "새로고침하지 못해 이전 로그를 표시합니다."}</div>}
     {items.length ? <div className="task-change-log-list">{items.map((item) => <article key={item.id} className="task-change-log-row">
       <time dateTime={item.createdAt || undefined}>{formatSyncTime(item.createdAt)}</time>
-      <div className="task-change-log-task"><strong>{item.taskTitle || item.entityId || "제목 없는 업무"}</strong><small>{item.entityId || "업무 ID 없음"}</small></div>
+      <div className="task-change-log-task"><strong>{item.taskTitle}</strong></div>
       <span className={`task-change-log-action is-${String(item.actionCode || "changed").toLowerCase()}`}>{item.action}</span>
-      <div className="task-change-log-changes">{item.changes.length ? item.changes.map((change) => <div key={`${item.id}-${change.field}`}><strong>{change.label}</strong><span>{taskActivityValue(change.before)}</span><ArrowRight size={12} /><em>{taskActivityValue(change.after)}</em></div>) : <span className="task-change-log-no-detail">변경값 상세 없음</span>}</div>
+      <div className="task-change-log-changes">{item.changes.length ? item.changes.map((change) => <div key={`${item.id}-${change.field}`}><strong>{change.label}</strong><span>{taskActivityValue(change.before)}</span><ArrowRight size={12} /><em>{taskActivityValue(change.after)}</em></div>) : <span className="task-change-log-no-detail">{taskActivitySentence(item)}</span>}</div>
       <div className="task-change-log-actor"><small>변경자</small><strong>{item.actor}</strong></div>
     </article>)}</div> : <EmptyState title="업무 로그가 없습니다" description="웹에서 업무를 생성하거나 수정하면 확정된 이력이 표시됩니다." />}
   </section>;
@@ -869,7 +870,7 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
 
     <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>일정표</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
 
-    {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} canWrite={editable} onUpdate={onUpdate} onCreate={onCreate} /> : <>
+    {taskSection === "activity" ? <TaskActivityLog state={activityState} tasks={tasks} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} canWrite={editable} onUpdate={onUpdate} onCreate={onCreate} /> : <>
 
     <section className="tracker-control-panel panel" aria-label="업무 요약 및 90일 진행 흐름">
       <div className="tracker-control-top">
@@ -1174,7 +1175,7 @@ function PermissionsView({ access, onSave }) {
 }
 
 function DetailLogView({ role, activities }) {
-  return <div className="view-stack"><ViewHeader eyebrow="Project history" title="세부 로그" description="업무·회의록·프로젝트에서 확정된 변경 이력을 시간순으로 확인합니다." /><section className="panel detail-log-panel"><div className="panel-heading"><div><h3>전체 변경 이력</h3><p>자료 목록은 제외하고 확정된 활동만 표시합니다.</p></div><Activity size={17} /></div>{activities.length ? <div className="activity-timeline">{activities.map((item) => <article key={item.id}><span /><div><strong>{item.title}</strong><p>{item.meta}</p>{role !== "client" && item.internalMeta && <small>{item.internalMeta}</small>}</div></article>)}</div> : <EmptyState title="기록된 활동이 없습니다" description="웹에서 업무나 회의록이 추가·수정되면 여기에 표시됩니다." />}</section></div>;
+  return <div className="view-stack"><ViewHeader eyebrow="Project history" title="세부 로그" description="업무 로그에서 생략한 시스템·기술 이력까지 시간순으로 확인합니다." /><section className="panel detail-log-panel"><div className="panel-heading"><div><h3>전체 변경 이력</h3><p>내부 ID와 원본 감사 정보를 포함한 확정 활동입니다.</p></div><Activity size={17} /></div>{activities.length ? <div className="activity-timeline">{activities.map((item) => <article key={item.id}><span /><div><strong>{item.taskTitle || item.title}</strong><p>{item.action} · {item.meta}</p>{role !== "client" && <small>{[item.entityId && `ID ${item.entityId}`, item.actor && `처리 ${item.actor}`, item.internalMeta].filter(Boolean).join(" · ")}</small>}</div></article>)}</div> : <EmptyState title="기록된 활동이 없습니다" description="웹에서 업무나 회의록이 추가·수정되면 여기에 표시됩니다." />}</section></div>;
 }
 
 const PLAN_ALLOWED_TAGS = new Set([

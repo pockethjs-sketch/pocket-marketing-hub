@@ -608,9 +608,9 @@ export function filesViewModel(envelope) {
 export function activityListViewModel(envelope) {
   const data = envelope?.data || {};
   return {
-    items: (data.items || []).map(activityViewModel).filter((item) => (
-      item.type !== "task" || item.taskTitle || item.changes.length || item.actor !== "확인되지 않은 사용자"
-    )),
+    // 세부 로그는 원본 감사 이력을 보존한다. 사람이 읽는 업무 로그 정리는
+    // 현재 업무명과 대조할 수 있는 화면 계층에서 별도로 수행한다.
+    items: (data.items || []).map(activityViewModel),
     nextCursor: data.nextCursor || null,
     generatedAt: envelope?.generatedAt || null,
   };
