@@ -1,5 +1,6 @@
 const CACHE_PREFIX = "pocket-marketing-hub.resource.v1";
 export const RESOURCE_SESSION_CACHE_MAX_AGE_MS = 30 * 60_000;
+const pendingWrites = new Map();
 
 function browserStorage(candidate) {
   if (candidate) return candidate;
@@ -49,10 +50,59 @@ export function writeResourceSessionCache(session, cacheKey, cached, options = {
   }
 }
 
+function deferredWrite(callback, options = {}) {
+  if (typeof options.schedule === "function") return options.schedule(callback);
+  if (typeof globalThis.requestIdleCallback === "function") {
+    const id = globalThis.requestIdleCallback(callback, { timeout: 600 });
+    return () => globalThis.cancelIdleCallback?.(id);
+  }
+  const id = globalThis.setTimeout(callback, 0);
+  return () => globalThis.clearTimeout(id);
+}
+
+// Large task payloads used to be serialized synchronously for every optimistic
+// click and again for the canonical response. Coalesce those writes and move
+// JSON serialization outside the interaction frame.
+export function scheduleResourceSessionCacheWrite(session, cacheKey, cached, options = {}) {
+  const storage = browserStorage(options.storage);
+  const key = cacheStorageKey(session, cacheKey);
+  if (!storage || !key || !cached?.state?.data || cached.state.status !== "ready") return false;
+
+  pendingWrites.get(key)?.cancel?.();
+  const job = { cancel: null };
+  const commit = () => {
+    if (pendingWrites.get(key) !== job) return;
+    pendingWrites.delete(key);
+    writeResourceSessionCache(session, cacheKey, cached, { storage });
+  };
+  job.cancel = deferredWrite(commit, options);
+  pendingWrites.set(key, job);
+  return true;
+}
+
+export function removeResourceSessionCache(session, cacheKey, options = {}) {
+  const storage = browserStorage(options.storage);
+  const key = cacheStorageKey(session, cacheKey);
+  if (!storage || !key) return false;
+  pendingWrites.get(key)?.cancel?.();
+  pendingWrites.delete(key);
+  try {
+    storage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function clearResourceSessionCache(options = {}) {
   const storage = browserStorage(options.storage);
   if (!storage) return;
   try {
+    pendingWrites.forEach((job, key) => {
+      if (!key.startsWith(`${CACHE_PREFIX}:`)) return;
+      job.cancel?.();
+      pendingWrites.delete(key);
+    });
     const keys = [];
     for (let index = 0; index < storage.length; index += 1) {
       const key = storage.key(index);

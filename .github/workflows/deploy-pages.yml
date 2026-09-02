@@ -30,6 +30,16 @@ jobs:
         working-directory: frontend
         run: npm ci --no-audit --no-fund
 
+      - name: Validate runtime variables
+        env:
+          VITE_POCKET_API_URL: ${{ vars.POCKET_API_URL }}
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          test -n "$VITE_POCKET_API_URL"
+          test -n "$VITE_SUPABASE_URL"
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
+
       - name: Build
         working-directory: frontend
         env:
@@ -37,6 +47,9 @@ jobs:
           VITE_POCKET_API_MODE: live
           VITE_POCKET_API_CREDENTIALS: omit
           VITE_POCKET_LOGIN_ENABLED: true
+          VITE_POCKET_DATA_BACKEND: supabase
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
 
       - name: Test frontend and Apps Script contracts

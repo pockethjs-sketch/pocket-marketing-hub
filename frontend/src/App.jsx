@@ -4,12 +4,11 @@ import {
   AlertCircle,
   ArrowRight,
   BarChart3,
+  Bell,
   BookOpenText,
   CalendarDays,
   Check,
   ChevronDown,
-  ChevronsLeft,
-  ChevronsRight,
   CircleDot,
   ClipboardCheck,
   FolderOpen,
@@ -18,6 +17,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   LogOut,
+  Menu,
   MoreHorizontal,
   MousePointerClick,
   NotebookPen,
@@ -47,7 +47,7 @@ import {
   taskResponsibleOrganization,
   tasksViewModel,
 } from "./api/index.js";
-import { DEFAULT_DESKTOP_NAVIGATION_LEVEL, getNavigationPresentation, nextDesktopNavigationLevel } from "./navigationState.js";
+import { getNavigationPresentation } from "./navigationState.js";
 import {
   DEFAULT_PLAN_VARIANT,
   PLAN_VARIANTS,
@@ -57,12 +57,22 @@ import {
 } from "./planNavigation.js";
 import { canOperateProjectTasks, taskCreateInitialFields, taskCreateSubmissionFields, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
-import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, toggleScheduleStatusFilter, toggleScheduleTaskSelection, withDisplayDeadline } from "./taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
+import { groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
 import { readableTaskActivities, taskActivitySentence } from "./taskActivity.js";
+import { isNewTask, unacknowledgedNewTasks } from "./taskFreshness.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
 import { ACCESS_PAGE_OPTIONS, NAVIGATION_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
-import { clearResourceSessionCache, readResourceSessionCache, writeResourceSessionCache } from "./resourceSessionCache.js";
+import {
+  clearResourceSessionCache,
+  readResourceSessionCache,
+  removeResourceSessionCache,
+  scheduleResourceSessionCacheWrite,
+} from "./resourceSessionCache.js";
+
+const SAVE_OVERLAY_MIN_MS = 500;
+const SAVE_OVERLAY_COALESCE_MS = 250;
 
 const navIcons = {
   overview: LayoutDashboard,
@@ -74,7 +84,7 @@ const navIcons = {
   files: Activity,
 };
 const navItems = [
-  ...NAVIGATION_PAGE_OPTIONS.map((page) => ({
+  ...NAVIGATION_PAGE_OPTIONS.filter((page) => page.id !== "overview").map((page) => ({
     ...page,
     icon: navIcons[page.id],
     ...(page.id === "plan" ? { children: Object.values(PLAN_VARIANTS) } : {}),
@@ -139,8 +149,24 @@ function EmptyState({ title, description }) {
   return <div className="empty-state"><FolderOpen size={22} strokeWidth={1.7} /><strong>{title}</strong><span>{description}</span></div>;
 }
 
-function LoadingState({ label = "Google Sheets 데이터를 불러오는 중입니다." }) {
+function LoadingState({ label = "프로젝트 데이터를 불러오는 중입니다." }) {
   return <div className="state-panel is-loading" role="status"><LoaderCircle size={22} className="spin" /><strong>{label}</strong><span>창을 닫지 않아도 됩니다.</span></div>;
+}
+
+function GlobalSaveOverlay({ label }) {
+  const overlayRef = useRef(null);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    overlayRef.current?.focus();
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+  return <div ref={overlayRef} className="global-save-overlay" role="dialog" aria-modal="true" aria-labelledby="global-save-title" aria-describedby="global-save-description" tabIndex={-1} onKeyDown={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+    <div className="global-save-dialog">
+      <span className="global-save-icon" aria-hidden="true"><LoaderCircle size={24} className="spin" /></span>
+      <div><strong id="global-save-title">데이터 저장 중</strong><span id="global-save-description">{label || "변경사항을 안전하게 기록하고 있습니다."}</span></div>
+    </div>
+  </div>;
 }
 
 function ErrorState({ error, onRetry, title = "데이터를 불러오지 못했습니다." }) {
@@ -217,7 +243,7 @@ function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, 
         </div>;
       })}</nav>
       <div className="sidebar-section"><p className="nav-label">현재 단계</p><div className="phase-brief"><div className="phase-number">{project.phase?.slice(0, 2) || "-"}</div><div><strong>{project.phase}</strong><span>{project.period}</span></div></div></div>
-      <div className="sidebar-footer"><div><strong>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</strong><span>{formatSyncTime(sourceState.lastSuccessfulAt)}</span></div></div>
+      <div className="sidebar-footer"><div><strong>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</strong><span>{formatSyncTime(sourceState.lastSuccessfulAt)}</span></div></div>
     </aside>
   );
 }
@@ -226,9 +252,169 @@ function ActorBadge({ actor, onLogout, live }) {
   return <div className="actor-badge"><span><strong>{actor?.name || "사용자"}</strong><small>{actor?.role === "client" ? "고객 조회" : actor?.role === "ns" ? "실행사 편집" : "포켓 운영"}</small></span>{live && <button className="icon-button" onClick={onLogout} aria-label="로그아웃" title="로그아웃"><LogOut size={16} /></button>}</div>;
 }
 
-function Topbar({ project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation }) {
-  const NavigationIcon = navigation.iconDirection === "left" ? ChevronsLeft : ChevronsRight;
-  return <header className="topbar"><div className="topbar-leading">{navigation.controlVisible && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.usesDrawer ? navigation.isDrawerOpen : undefined} aria-controls={navigation.controlledIds} data-navigation-level={navigation.usesDrawer ? (navigation.isDrawerOpen ? "drawer-open" : "drawer-closed") : navigation.desktopLevel}><NavigationIcon size={18} strokeWidth={2} /></button>}<div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무 검색" /></label><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+function readAcknowledgedTaskIds(storageKey) {
+  try {
+    const stored = JSON.parse(globalThis.sessionStorage?.getItem(storageKey) || "[]");
+    return Array.isArray(stored) ? stored.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function notificationTime(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "등록 시각 미확인";
+  return new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(parsed);
+}
+
+function TaskNotificationCenter({ projectId, tasks, loaded, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
+  const storageKey = `mh:new-task-alert:${projectId || "unknown"}`;
+  const [acknowledgedTaskIds, setAcknowledgedTaskIds] = useState(() => readAcknowledgedTaskIds(storageKey));
+  const rootRef = useRef(null);
+  const newTasks = useMemo(() => (tasks || [])
+    .filter((task) => isNewTask(task, freshnessNow))
+    .sort((left, right) => Date.parse(right.createdAt || "") - Date.parse(left.createdAt || "")), [tasks, freshnessNow]);
+  const unreadTasks = useMemo(
+    () => unacknowledgedNewTasks(newTasks, acknowledgedTaskIds, freshnessNow),
+    [newTasks, acknowledgedTaskIds, freshnessNow],
+  );
+  const timestampsAvailable = !loaded || tasks.length === 0 || tasks.some((task) => Boolean(task.createdAt));
+
+  useEffect(() => {
+    setOpen(false);
+    setAcknowledgedTaskIds(readAcknowledgedTaskIds(storageKey));
+    setFreshnessNow(Date.now());
+  }, [storageKey]);
+
+  useEffect(() => {
+    const timer = globalThis.setInterval?.(() => setFreshnessNow(Date.now()), 60 * 1000);
+    return () => globalThis.clearInterval?.(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  const acknowledge = (taskIds) => {
+    const next = [...new Set([...acknowledgedTaskIds, ...taskIds.map(String)])];
+    setAcknowledgedTaskIds(next);
+    try {
+      globalThis.sessionStorage?.setItem(storageKey, JSON.stringify(next));
+    } catch {
+      // 저장소가 막혀도 현재 탭의 확인 상태는 유지한다.
+    }
+  };
+
+  const openTask = (task) => {
+    acknowledge([task.id]);
+    setOpen(false);
+    onSelect?.(task);
+  };
+
+  return <div className="notification-center" ref={rootRef}>
+    <button type="button" className={`notification-trigger${open ? " is-open" : ""}`} onClick={() => setOpen((current) => !current)} aria-label={`알림${unreadTasks.length ? `, 미확인 ${unreadTasks.length}건` : ""}`} title="알림" aria-expanded={open} aria-haspopup="dialog" aria-controls="task-notification-popover">
+      <Bell size={17} strokeWidth={2} />
+      {unreadTasks.length > 0 && <span className="notification-count">{unreadTasks.length > 99 ? "99+" : unreadTasks.length}</span>}
+    </button>
+    {open && <section id="task-notification-popover" className="notification-popover" role="dialog" aria-label="업무 알림">
+      <header><div><strong>알림</strong><span>최근 24시간 신규 업무</span></div>{unreadTasks.length > 0 && <button type="button" onClick={() => acknowledge(newTasks.map((task) => task.id))}>모두 확인</button>}</header>
+      <div className="notification-list">
+        {!loaded ? <div className="notification-empty"><Bell size={19} /><strong>업무 알림을 준비 중입니다</strong><span>업무 데이터를 불러오면 여기에 표시됩니다.</span></div> : !timestampsAvailable ? <div className="notification-empty is-warning"><AlertCircle size={19} /><strong>알림 서버 업데이트가 필요합니다</strong><span>등록 시각이 없어 신규 업무를 구분할 수 없습니다.</span></div> : newTasks.length === 0 ? <div className="notification-empty"><Check size={19} /><strong>새 알림이 없습니다</strong><span>24시간 이내 등록된 업무가 없습니다.</span></div> : newTasks.map((task) => {
+          const unread = unreadTasks.some((item) => item.id === task.id);
+          return <button type="button" key={task.id} className={`notification-item${unread ? " is-unread" : ""}`} onClick={() => openTask(task)}>
+            <span className="notification-item-mark" aria-hidden="true" />
+            <span><strong>{task.title}</strong><small>{notificationTime(task.createdAt)} · {task.status || "상태 미지정"}</small></span>
+            {unread && <em>신규</em>}
+          </button>;
+        })}
+      </div>
+      <footer>알림 확인 상태는 현재 브라우저 탭에만 저장됩니다.</footer>
+    </section>}
+  </div>;
+}
+
+function Topbar({ project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation, notificationTasks, notificationsLoaded, onNotificationSelect }) {
+  return <header className="topbar"><div className="topbar-leading">{navigation.usesDrawer && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.isDrawerOpen} aria-controls={navigation.controlledIds}><Menu size={18} strokeWidth={2} /></button>}<div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무 검색" /></label><TaskNotificationCenter projectId={project.id} tasks={notificationTasks} loaded={notificationsLoaded} onSelect={onNotificationSelect} /><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+}
+
+function CampaignWorkspaceHeader({ clients, activeClient, onSelectClient, project, role, activeView, activePlanVariant, onView, actor, onLogout, live, search, setSearch, connectionReady, sourceState }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  const visiblePlanChildren = role === "client" ? [PLAN_VARIANTS.client] : Object.values(PLAN_VARIANTS);
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.pocketOnly) return role === "pocket";
+    if (role !== "client") return true;
+    return isViewAllowed(item.permissionId || item.id, project.allowedPages);
+  });
+  const activePage = visibleNavItems.find((item) => item.id === activeView);
+  const activeLabel = activeView === "plan"
+    ? `${activePage?.label || "실행계획"} · ${PLAN_VARIANTS[activePlanVariant]?.label || ""}`
+    : activePage?.label || "총괄 현황";
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const closeMenu = (event) => {
+      if (!menuRef.current?.contains(event.target)) setMenuOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
+
+  const selectView = (nextView, nextPlanVariant = activePlanVariant) => {
+    onView(nextView, nextPlanVariant);
+    setMenuOpen(false);
+  };
+
+  return <header className="campaign-workspace-header">
+    <div className="campaign-brandbar">
+      <div className="campaign-brand"><span className="campaign-brand-mark" aria-hidden="true" /><strong>POCKET COMPANY</strong><i /><span>마케팅 프로젝트 허브</span></div>
+      <nav className="campaign-client-tabs" aria-label="고객사 선택">{clients.map((client) => <button key={client.id} type="button" className={client.id === activeClient ? "is-active" : ""} aria-selected={client.id === activeClient} onClick={() => onSelectClient(client.id)}><span>{client.name}</span><i className={`presence ${client.status}`} /></button>)}</nav>
+      <div className="campaign-brand-actions"><span className={`campaign-connection ${connectionReady ? "is-online" : ""}`}><i />{connectionReady ? "Sheets 연결" : "연결 확인"}</span><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div>
+    </div>
+    <div className="campaign-project-header">
+      <div className="campaign-project-menu" ref={menuRef}>
+        <p className="campaign-project-kicker">CAMPAIGN OPERATIONS</p>
+        <button type="button" className="campaign-project-trigger" onClick={() => setMenuOpen((current) => !current)} aria-expanded={menuOpen} aria-haspopup="menu">
+          <span><strong>{project.name}</strong><small>{activeLabel}</small></span><ChevronDown size={19} />
+        </button>
+        {menuOpen && <div className="campaign-project-popover" role="menu">
+          <div className="campaign-project-popover-head"><div><span>{project.clientName}</span><strong>{project.name}</strong></div><span className="project-status"><CircleDot size={12} />{project.status}</span></div>
+          <div className="campaign-project-pages">{visibleNavItems.map((item) => {
+            const Icon = item.icon;
+            const itemActive = activeView === item.id || (item.id === "tasks" && activeView === "schedule");
+            return <article key={item.id} className={`${itemActive ? "is-active" : ""} ${item.id === "plan" ? "is-plan" : ""}`}>
+              <button type="button" role="menuitem" onClick={() => selectView(item.id, item.id === "plan" ? DEFAULT_PLAN_VARIANT : activePlanVariant)}><span className="campaign-page-icon"><Icon size={17} /></span><span><strong>{item.label}</strong><small>{item.description || (item.id === "schedule" ? "업무 일정과 간트 보기" : "프로젝트 운영 화면")}</small></span>{itemActive && <Check size={14} />}</button>
+              {item.id === "plan" && <div className="campaign-plan-shortcuts">{visiblePlanChildren.map((child) => <button key={child.id} type="button" className={activeView === "plan" && activePlanVariant === child.id ? "is-active" : ""} onClick={() => selectView("plan", child.id)}>{child.label}</button>)}</div>}
+            </article>;
+          })}</div>
+          <footer><span>{connectionReady ? "최신 데이터 사용 중" : "데이터 연결 확인 중"}</span><time>{formatSyncTime(sourceState.lastSuccessfulAt)}</time></footer>
+        </div>}
+      </div>
+      <div className="campaign-project-meta"><span><small>Client</small><strong>{project.clientName}</strong></span><span><small>Campaign period</small><strong>{project.period || `${project.startDate || "-"} — ${project.endDate || "-"}`}</strong></span><span><small>현재 단계</small><strong>{project.phase || "-"}</strong></span></div>
+      <div className="campaign-header-tools"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무 검색" /></label></div>
+    </div>
+  </header>;
 }
 
 function MetricCard({ metric, onOpen }) {
@@ -367,6 +553,9 @@ function taskWithMutationFields(task, fields = {}) {
   if (Object.prototype.hasOwnProperty.call(fields, "progress_percent")) next.progressPercent = Number(fields.progress_percent || 0);
   if (Object.prototype.hasOwnProperty.call(fields, "completion_url")) next.completionUrl = fields.completion_url || "";
   if (Object.prototype.hasOwnProperty.call(fields, "remarks")) next.remarks = fields.remarks || "";
+  if (Object.prototype.hasOwnProperty.call(fields, "schedule_dates_json")) {
+    next.scheduleDates = normalizeScheduleDates(fields.schedule_dates_json) || [];
+  }
   if (Object.prototype.hasOwnProperty.call(fields, "responsible_org_code")) {
     const organization = taskResponsibleOrganization(fields.responsible_org_code);
     next.responsibleOrgCode = organization.code;
@@ -553,7 +742,7 @@ function TrackerTaskRow({ task, role, clientName, canWrite, onUpdate, isDone }) 
         <label><span>세부내용</span><textarea rows="3" value={note} disabled={!canWrite || saving} onChange={(event) => setNote(event.target.value)} placeholder="업무 범위와 산출물을 적어 주세요" /></label>
         <label><span>완료링크</span><input type="url" pattern="https://.*" value={completionUrl} disabled={!canWrite || saving} onChange={(event) => setCompletionUrl(event.target.value)} placeholder="https://" /></label>
         <label><span>비고</span><textarea rows="2" value={remarks} disabled={!canWrite || saving} onChange={(event) => setRemarks(event.target.value)} placeholder="일정 이슈나 참고사항을 적어 주세요" /></label>
-        <div className="tracker-edit-footer">{error ? <span className="tracker-save-error"><AlertCircle size={14} />{error.message || "저장하지 못했습니다."}</span> : <span>저장 시 Google Sheets 업무 원장에 반영됩니다.</span>}<button className="primary-button" type="button" disabled={saving || !title.trim() || (title === (task.title || "") && note === (task.description || "") && startDate === (task.plannedStartDate || "") && responsibleOrg === (task.responsibleOrgCode || "POCKET") && dueDate === (task.dueDate || "") && Number(progressPercent) === Number(task.progressPercent ?? 0) && completionUrl === (task.completionUrl || "") && remarks === (task.remarks || "") && priority === (task.priorityCode || "NORMAL"))} onClick={() => { const fields = { title, description: note, planned_start_date: startDate, due_date: dueDate, progress_percent: Number(progressPercent), completion_url: completionUrl, remarks, priority_code: priority }; if (responsibleOrg !== (task.responsibleOrgCode || "POCKET")) fields.responsible_org_code = responsibleOrg; saveFields(fields); }}>{saving ? <><LoaderCircle size={14} className="spin" /> 저장 중</> : "변경 저장"}</button></div>
+        <div className="tracker-edit-footer">{error ? <span className="tracker-save-error"><AlertCircle size={14} />{error.message || "저장하지 못했습니다."}</span> : <span>저장 시 Supabase 업무 원장에 즉시 반영됩니다.</span>}<button className="primary-button" type="button" disabled={saving || !title.trim() || (title === (task.title || "") && note === (task.description || "") && startDate === (task.plannedStartDate || "") && responsibleOrg === (task.responsibleOrgCode || "POCKET") && dueDate === (task.dueDate || "") && Number(progressPercent) === Number(task.progressPercent ?? 0) && completionUrl === (task.completionUrl || "") && remarks === (task.remarks || "") && priority === (task.priorityCode || "NORMAL"))} onClick={() => { const fields = { title, description: note, planned_start_date: startDate, due_date: dueDate, progress_percent: Number(progressPercent), completion_url: completionUrl, remarks, priority_code: priority }; if (responsibleOrg !== (task.responsibleOrgCode || "POCKET")) fields.responsible_org_code = responsibleOrg; saveFields(fields); }}>{saving ? <><LoaderCircle size={14} className="spin" /> 저장 중</> : "변경 저장"}</button></div>
       </div>}
     </div>}
   </article>;
@@ -602,7 +791,7 @@ function TaskEditModal({ task, clientName, onClose, onUpdate }) {
         <label className="create-field is-wide"><span>완료링크</span><input type="url" pattern="https://.*" value={fields.completion_url} disabled={saving} onChange={(event) => setField("completion_url", event.target.value)} placeholder="https://" /></label>
         <label className="create-field is-wide"><span>비고</span><textarea rows="2" maxLength={10000} value={fields.remarks} disabled={saving} onChange={(event) => setField("remarks", event.target.value)} /></label>
         {error && <div className="form-error"><AlertCircle size={15} /><span>{error.message || "업무를 저장하지 못했습니다."}</span></div>}
-        <footer><p>저장하면 Google Sheets 업무 원장과 업무 로그에 반영됩니다.</p><div><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.title.trim()}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "변경 저장"}</button></div></footer>
+        <footer><p>저장하면 Supabase 업무 원장과 업무 로그에 반영됩니다.</p><div><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.title.trim()}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "변경 저장"}</button></div></footer>
       </form>
     </section>
   </div>;
@@ -620,19 +809,17 @@ function TaskActivityLog({ state, tasks, onRefresh }) {
   const items = useMemo(() => readableTaskActivities(data?.items || [], tasks || []), [data?.items, tasks]);
   const loading = state?.status === "loading";
 
-  if (loading && !data) return <LoadingState label="업무 로그를 불러오는 중입니다." />;
-  if (state?.status === "error" && !data) return <ErrorState error={state.error} onRetry={onRefresh} title="업무 로그를 불러오지 못했습니다." />;
-
-  return <section className="task-change-log panel" aria-label="업무 로그" aria-busy={loading}>
-    <header className="task-change-log-header"><div><span>업무 변경 이력</span><h3>업무 로그</h3><p>업무명과 변경 내용을 확인할 수 있는 사용자 작업만 표시합니다.</p></div><button className="secondary-button" type="button" onClick={onRefresh} disabled={loading}>{loading ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} 새로고침</button></header>
-    {state?.status === "error" && data && <div className="task-change-log-warning" role="alert"><AlertCircle size={14} />{state.error?.message || "새로고침하지 못해 이전 로그를 표시합니다."}</div>}
-    {items.length ? <div className="task-change-log-list">{items.map((item) => <article key={item.id} className="task-change-log-row">
+  return <section className="task-change-log is-embedded" aria-label="업무 로그" aria-busy={loading}>
+    {loading && !data ? <LoadingState label="업무 로그를 불러오는 중입니다." /> : state?.status === "error" && !data ? <ErrorState error={state.error} onRetry={onRefresh} title="업무 로그를 불러오지 못했습니다." /> : <>
+      {state?.status === "error" && data && <div className="task-change-log-warning" role="alert"><AlertCircle size={14} />{state.error?.message || "새로고침하지 못해 이전 로그를 표시합니다."}</div>}
+      {items.length ? <div className="task-change-log-list">{items.map((item) => <article key={item.id} className="task-change-log-row">
       <time dateTime={item.createdAt || undefined}>{formatSyncTime(item.createdAt)}</time>
       <div className="task-change-log-task"><strong>{item.taskTitle}</strong></div>
       <span className={`task-change-log-action is-${String(item.actionCode || "changed").toLowerCase()}`}>{item.action}</span>
       <div className="task-change-log-changes">{item.changes.length ? item.changes.map((change) => <div key={`${item.id}-${change.field}`}><strong>{change.label}</strong><span>{taskActivityValue(change.before)}</span><ArrowRight size={12} /><em>{taskActivityValue(change.after)}</em></div>) : <span className="task-change-log-no-detail">{taskActivitySentence(item)}</span>}</div>
       <div className="task-change-log-actor"><small>변경자</small><strong>{item.actor}</strong></div>
-    </article>)}</div> : <EmptyState title="업무 로그가 없습니다" description="웹에서 업무를 생성하거나 수정하면 확정된 이력이 표시됩니다." />}
+      </article>)}</div> : <EmptyState title="업무 로그가 없습니다" description="웹에서 업무를 생성하거나 수정하면 확정된 이력이 표시됩니다." />}
+    </>}
   </section>;
 }
 
@@ -651,54 +838,130 @@ function ScheduleFilterButtons({ label, value, options, onChange }) {
   return <div className="task-schedule-filter-group"><span>{label}</span><div role="group" aria-label={label}>{options.map(([id, text]) => <button type="button" key={id} className={value === id ? "is-active" : ""} aria-pressed={value === id} onClick={() => onChange(id)}>{text}</button>)}</div></div>;
 }
 
-function TaskScheduleTimeline({ tasks, project, canWrite, onUpdate, onCreate }) {
-  const [showDetails, setShowDetails] = useState(false);
+function TaskWorkspaceTabs({ activeView, onChange, canViewActivity }) {
+  return <div className="campaign-schedule-view-tabs seg task-workspace-tabs" role="tablist" aria-label="업무 화면 전환">
+    <button type="button" role="tab" aria-selected={activeView === "table"} className={activeView === "table" ? "is-active" : ""} onClick={() => onChange("table")}><span>일정표</span>{activeView === "table" && <Check className="task-workspace-tab-check" size={14} strokeWidth={3} aria-hidden="true" />}</button>
+    <button type="button" role="tab" aria-selected={activeView === "gantt"} className={activeView === "gantt" ? "is-active" : ""} onClick={() => onChange("gantt")}><span>간트</span>{activeView === "gantt" && <Check className="task-workspace-tab-check" size={14} strokeWidth={3} aria-hidden="true" />}</button>
+    {canViewActivity && <button type="button" role="tab" aria-selected={activeView === "activity"} className={activeView === "activity" ? "is-active" : ""} onClick={() => onChange("activity")}><span>업무 로그</span>{activeView === "activity" && <Check className="task-workspace-tab-check" size={14} strokeWidth={3} aria-hidden="true" />}</button>}
+  </div>;
+}
+
+function TaskScheduleTimeline({ tasks, project, query, canWrite, canEditProject, onUpdate, onBatchUpdate, onProjectUpdate, onCreate, displayMode, onViewChange, canViewActivity, activityState, onLoadActivity }) {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [scheduleFilter, setScheduleFilter] = useState("ALL");
-  const [selectedScheduleTaskId, setSelectedScheduleTaskId] = useState(null);
   const [editingTaskId, setEditingTaskId] = useState(null);
+  const [startDateDraft, setStartDateDraft] = useState(project.startDate || "");
+  const [startDateSaving, setStartDateSaving] = useState(false);
+  const [startDateError, setStartDateError] = useState("");
+  const [ganttSave, setGanttSave] = useState({ status: "idle", saved: 0, total: 0, error: "" });
+  const [ganttDrafts, setGanttDrafts] = useState(null);
+  const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
+  const activityMode = displayMode === "activity";
+  const matrixRef = useRef(null);
+  const paintRef = useRef(null);
+  const ganttTasksRef = useRef([]);
+  const daysRef = useRef([]);
   useEffect(() => {
     setStatusFilter("ALL");
     setCategoryFilter("ALL");
     setScheduleFilter("ALL");
-    setSelectedScheduleTaskId(null);
     setEditingTaskId(null);
+    setGanttSave({ status: "idle", saved: 0, total: 0, error: "" });
+    setGanttDrafts(null);
+    paintRef.current = null;
   }, [project.id]);
-  const filteredTasks = useMemo(() => sortTaskSchedule(filterTaskSchedule(tasks, {
+  useEffect(() => {
+    setFreshnessNow(Date.now());
+    const timer = globalThis.setInterval?.(() => setFreshnessNow(Date.now()), 60 * 1000);
+    return () => globalThis.clearInterval?.(timer);
+  }, [project.id]);
+  useEffect(() => {
+    setStartDateDraft(project.startDate || "");
+    setStartDateError("");
+  }, [project.id, project.startDate]);
+  const searchNeedle = String(query || "").trim().toLowerCase();
+  const ganttVisibleTasks = useMemo(() => filterTaskSchedule(tasks, {
     status: statusFilter,
     category: categoryFilter,
     schedule: scheduleFilter,
-  })), [tasks, statusFilter, categoryFilter, scheduleFilter]);
+  }).filter((task) => !searchNeedle || `${task.title} ${task.description || ""} ${task.parent || ""} ${task.stream || ""}`.toLowerCase().includes(searchNeedle)), [tasks, statusFilter, categoryFilter, scheduleFilter, searchNeedle]);
+  const filteredTasks = useMemo(() => sortTaskSchedule(ganttVisibleTasks), [ganttVisibleTasks]);
   const statusSummaryTasks = useMemo(() => filterTaskSchedule(tasks, {
     status: "ALL",
     category: categoryFilter,
     schedule: scheduleFilter,
   }), [tasks, categoryFilter, scheduleFilter]);
   const filtersActive = statusFilter !== "ALL" || categoryFilter !== "ALL" || scheduleFilter !== "ALL";
-  const timeline = buildTaskTimeline(filteredTasks, project);
-  const done = statusSummaryTasks.filter((task) => ["DONE", "COMPLETED"].includes(task.statusCode)).length;
-  const inProgress = statusSummaryTasks.filter((task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)).length;
-  const onHold = statusSummaryTasks.filter((task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode)).length;
-  const missingSchedule = filteredTasks.filter((task) => !task.plannedStartDate || !task.dueDate).length;
-  const datedRows = new Map(timeline.rows.map((row) => [row.task.id, row]));
-  const days = [];
-  if (timeline.start && timeline.end) {
+  const timeline = useMemo(
+    () => buildTaskTimeline(filteredTasks, project),
+    [filteredTasks, project.startDate, project.endDate],
+  );
+  const summary = useMemo(() => {
+    const countable = statusSummaryTasks.filter((task) => task.statusCode !== "CANCELLED");
+    const completed = countable.filter((task) => ["DONE", "COMPLETED"].includes(task.statusCode)).length;
+    return {
+      done: statusSummaryTasks.filter((task) => ["DONE", "COMPLETED"].includes(task.statusCode)).length,
+      inProgress: statusSummaryTasks.filter((task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)).length,
+      onHold: statusSummaryTasks.filter((task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode)).length,
+      countable,
+      completed,
+      completionRate: countable.length ? Math.round(completed / countable.length * 100) : 0,
+    };
+  }, [statusSummaryTasks]);
+  const { done, inProgress, onHold, countable, completed, completionRate } = summary;
+  const missingSchedule = useMemo(() => filteredTasks.filter((task) => !task.plannedStartDate || !task.dueDate).length, [filteredTasks]);
+  const days = useMemo(() => {
+    const items = [];
+    if (!timeline.start || !timeline.end) return items;
     const cursor = trackerDate(timeline.start);
     const end = trackerDate(timeline.end);
     while (cursor && end && cursor <= end) {
       const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
-      days.push({ iso, day: cursor.getDate(), weekday: ["일", "월", "화", "수", "목", "금", "토"][cursor.getDay()], monthKey: iso.slice(0, 7), weekend: cursor.getDay() === 0 || cursor.getDay() === 6 });
+      items.push({ iso, day: cursor.getDate(), weekday: ["일", "월", "화", "수", "목", "금", "토"][cursor.getDay()], monthKey: iso.slice(0, 7), weekend: cursor.getDay() === 0 || cursor.getDay() === 6 });
       cursor.setDate(cursor.getDate() + 1);
     }
-  }
-  const months = days.reduce((items, day) => {
+    return items;
+  }, [timeline.start, timeline.end]);
+  const months = useMemo(() => days.reduce((items, day) => {
     const last = items[items.length - 1];
     if (last?.key === day.monthKey) last.count += 1;
     else items.push({ key: day.monthKey, label: `${Number(day.monthKey.slice(0, 4))}년 ${Number(day.monthKey.slice(5, 7))}월`, count: 1 });
     return items;
-  }, []);
+  }, []), [days]);
   const today = localDateValue();
+  const ganttTrackWidth = days.length * 28;
+  const todayIndex = days.findIndex((day) => day.iso === today);
+  const ganttGroups = useMemo(() => groupGanttTasks(ganttVisibleTasks, taskScheduleMedia), [ganttVisibleTasks]);
+  // The Gantt DOM is rendered category-by-category, so painting and saving
+  // must use that exact visual row order. Using filteredTasks here made a
+  // dragged row point at a second task whenever category grouping reordered it.
+  const ganttTasks = useMemo(() => ganttGroups.flatMap((group) => group.tasks), [ganttGroups]);
+  const ganttRowIndexById = useMemo(() => new Map(ganttTasks.map((task, index) => [task.id, index])), [ganttTasks]);
+  const ganttCategoryColor = (category) => ({
+    "마케팅": "#0058ff",
+    "디자인": "#c2318a",
+    "영상": "#d42b20",
+    "YouTube": "#d42b20",
+    "유튜브": "#d42b20",
+    "Instagram": "#c2318a",
+    "인스타그램": "#c2318a",
+    "네이버": "#0b9d4e",
+    "네이버블로그": "#0b9d4e",
+    "네이버 블로그": "#0b9d4e",
+    "SEO": "#b06800",
+    "TikTok": "#1b2430",
+    "틱톡": "#1b2430",
+    "Ads": "#b06800",
+    "광고": "#b06800",
+  }[category] || "#6e7177");
+  const ganttFillColor = (task) => {
+    const color = ganttCategoryColor(taskScheduleMedia(task));
+    if (task.statusCode === "DONE") return color;
+    if (["ON_HOLD", "BLOCKED"].includes(task.statusCode)) return `color-mix(in srgb, ${color} 16%, #fff)`;
+    if (["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode)) return `color-mix(in srgb, ${color} 68%, #fff)`;
+    return `color-mix(in srgb, ${color} 30%, #fff)`;
+  };
   const scheduleClass = (task) => {
     if (task.statusCode === "DONE") return "is-done";
     if (["ON_HOLD", "BLOCKED"].includes(task.statusCode)) return "is-hold";
@@ -707,223 +970,218 @@ function TaskScheduleTimeline({ tasks, project, canWrite, onUpdate, onCreate }) 
     if (task.streamCode === "SEO") return "is-seo";
     return "is-active";
   };
-  return <section className="task-timeline panel" aria-label="업무 일정">
-    <header className="task-timeline-summary"><div><span>프로젝트 일정표</span><h3>{timeline.start ? `${trackerDateLabel(timeline.start)} — ${trackerDateLabel(timeline.end)}` : "일정 미정"}</h3><p>업무별 실행 구간을 블록으로 확인하고 필요한 정보만 펼쳐봅니다.</p></div><div><button type="button" className={`task-summary-filter${statusFilter === "DONE" ? " is-active" : ""}`} aria-pressed={statusFilter === "DONE"} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "DONE"))}><i className="is-done" />완료 <strong>{done}</strong></button><button type="button" className={`task-summary-filter${statusFilter === "ACTIVE" ? " is-active" : ""}`} aria-pressed={statusFilter === "ACTIVE"} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "ACTIVE"))}><i className="is-progress" />진행 <strong>{inProgress}</strong></button><button type="button" className={`task-summary-filter${statusFilter === "HOLD" ? " is-active" : ""}`} aria-pressed={statusFilter === "HOLD"} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "HOLD"))}><i className="is-hold" />보류 <strong>{onHold}</strong></button>{missingSchedule > 0 && <span className="is-warning">일정 미등록 <strong>{missingSchedule}</strong></span>}{days.length > 0 && <button type="button" className="secondary-button task-schedule-detail-toggle" aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>{showDetails ? "상세 닫기" : "상세 보기"}</button>}{canWrite && <button type="button" className="primary-button task-schedule-create" onClick={() => onCreate?.("task")}><Plus size={13} />업무 추가</button>}</div></header>
-    <div className="task-schedule-filters" aria-label="일정표 업무 필터"><ScheduleFilterButtons label="업무 상태" value={statusFilter} options={scheduleStatusFilters} onChange={setStatusFilter} /><ScheduleFilterButtons label="업무 카테고리" value={categoryFilter} options={scheduleCategoryFilters} onChange={setCategoryFilter} /><ScheduleFilterButtons label="업무 일정" value={scheduleFilter} options={scheduleWeekFilters} onChange={setScheduleFilter} /><div className="task-schedule-filter-result"><strong>{filteredTasks.length}</strong><span>/ {tasks.length}건</span>{filtersActive && <button type="button" onClick={() => { setStatusFilter("ALL"); setCategoryFilter("ALL"); setScheduleFilter("ALL"); }}>초기화</button>}</div></div>
-    {filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : days.length ? <div className="task-schedule-matrix-scroll"><table className={`task-schedule-matrix${showDetails ? " is-detailed" : " is-compact"}`}><thead><tr><th rowSpan="2">업무</th><th rowSpan="2">세부내용</th><th rowSpan="2">시작일</th><th rowSpan="2">종료일</th><th rowSpan="2">기간(일)</th><th rowSpan="2">진행률</th><th rowSpan="2">상태</th><th rowSpan="2">담당</th><th rowSpan="2">완료링크</th><th rowSpan="2">비고</th>{months.map((month) => <th className="task-schedule-month" colSpan={month.count} key={month.key}>{month.label}</th>)}</tr><tr>{days.map((day) => <th key={day.iso} className={`task-schedule-day-head ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""}`}><strong>{day.day}</strong><small>{day.weekday}</small></th>)}</tr></thead><tbody>{filteredTasks.map((task) => {
-      const row = datedRows.get(task.id);
-      const duration = taskDurationDays(task.plannedStartDate, task.dueDate);
-      const progress = task.progressPercent ?? 0;
-      return <tr className={`task-schedule-row ${scheduleClass(task)}`} key={task.id}><td><div className="task-schedule-identity"><span className="task-schedule-color" aria-hidden="true" /><div><strong>{task.title}</strong><small>{task.phase} · {task.parent || task.stream}</small></div></div></td><td>{task.description || "-"}</td><td><time className="task-schedule-date" title={task.plannedStartDate || ""}>{task.plannedStartDate ? trackerDateLabel(task.plannedStartDate) : "-"}</time></td><td><time className="task-schedule-date" title={task.dueDate || ""}>{task.dueDate ? trackerDateLabel(task.dueDate) : "-"}</time></td><td>{duration ?? "-"}</td><td>{progress === null ? "-" : <span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span>}</td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td><span className="task-schedule-owner">{taskResponsibleOrgLabel(task.responsibleOrgCode, project.clientName)}</span></td><td>{task.completionUrl ? <a className="task-schedule-link" href={task.completionUrl} target="_blank" rel="noreferrer">결과물</a> : "-"}</td><td>{task.remarks || "-"}</td>{days.map((day) => { const active = row && day.iso >= row.startDate && day.iso <= row.endDate; const starts = active && day.iso === row.startDate; const barWidth = Math.max(22, (duration || 1) * 30 - 8); const selected = selectedScheduleTaskId === task.id; return <td key={`${task.id}-${day.iso}`} className={`task-schedule-cell ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""} ${active ? `has-schedule ${scheduleClass(task)}` : ""} ${starts ? "is-schedule-start" : ""}`} title={active ? `${task.title} · ${row.startDate}~${row.endDate}` : day.iso}>{starts ? <div className={`task-schedule-bar-shell${selected ? " is-selected" : ""}`} style={{ width: `${barWidth}px` }}><button type="button" className="task-schedule-bar" disabled={!canWrite} aria-expanded={selected} aria-label={`${task.title} 일정 블록`} onClick={() => setSelectedScheduleTaskId((current) => toggleScheduleTaskSelection(current, task.id))}><b>{duration >= 4 ? task.title : ""}</b></button>{selected && canWrite && <button type="button" className="task-schedule-bar-edit" onClick={() => { setEditingTaskId(task.id); setSelectedScheduleTaskId(null); }}><Pencil size={11} />수정</button>}</div> : null}</td>; })}</tr>;
-    })}</tbody></table></div> : <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="시작일과 종료일이 없어 일정표를 만들 수 없습니다. 업무 수정에서 두 날짜를 입력해 주세요." />}
-    {editingTaskId && canWrite && <TaskEditModal key={editingTaskId} task={tasks.find((task) => task.id === editingTaskId)} clientName={project.clientName} onUpdate={onUpdate} onClose={() => setEditingTaskId(null)} />}
-  </section>;
-}
+  ganttTasksRef.current = ganttTasks;
+  daysRef.current = days;
 
-function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCreate, canWrite, onUpdate, onProjectUpdate, initialSection = "list" }) {
-  const editable = Boolean(canWrite);
-  const canEditProject = Boolean(canWrite && role === "pocket");
-  const schedule = trackerSchedule(taskPage.project?.startDate);
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const currentSchedule = trackerCurrentSchedule(schedule, taskPage.project?.startDate, taskPage.project?.phaseCode, now);
-  const currentPhaseLabel = currentSchedule?.label || "전체";
-  const tasks = (taskPage.items || []).map((task) => {
-    const calculatedDue = trackerTaskDue(task, schedule);
-    const normalizedTask = { ...task, status: task.statusCode === "CANCELLED" ? "취소" : task.status };
-    // A phase-derived deadline is display-only. Keeping dueDate untouched
-    // prevents an unrelated edit from persisting a calculated date as user input.
-    return withDisplayDeadline(normalizedTask, calculatedDue ? `${trackerTaskDueLabel(calculatedDue)} · ${trackerDdayLabel(calculatedDue)}` : "");
-  });
-  const [phase, setPhase] = useState(currentPhaseLabel);
-  const [stream, setStream] = useState("전체");
-  const [category, setCategory] = useState("전체");
-  const [hideDone, setHideDone] = useState(false);
-  const [completedOnly, setCompletedOnly] = useState(false);
-  const [localQuery, setLocalQuery] = useState("");
-  const [alertFilter, setAlertFilter] = useState("전체");
-  const [collapsedTaskGroups, setCollapsedTaskGroups] = useState([]);
-  const [taskSection, setTaskSection] = useState(initialSection);
-  const [startDateDraft, setStartDateDraft] = useState(taskPage.project?.startDate || "");
-  const [startDateSaving, setStartDateSaving] = useState(false);
-  const [startDateError, setStartDateError] = useState("");
-  useEffect(() => setStartDateDraft(taskPage.project?.startDate || ""), [taskPage.project?.startDate]);
-  useEffect(() => setPhase(currentPhaseLabel), [taskPage.project?.id, taskPage.project?.startDate, currentPhaseLabel]);
-  useEffect(() => setTaskSection(initialSection), [taskPage.project?.id, initialSection]);
-  useEffect(() => setCollapsedTaskGroups([]), [taskPage.project?.id]);
-  useEffect(() => {
-    if (taskSection === "activity" && activityState?.status === "idle") onLoadActivity?.();
-  }, [taskSection, activityState?.status, onLoadActivity]);
-  const phaseOrder = ["구축", "운영 1개월차", "운영 2개월차", "운영 3개월차"];
-  const streamOrder = ["마케팅", "디자인", "영상", "공통", "유튜브", "인스타그램", "SEO"];
-  const orderedValues = (values, order) => [...new Set(values)].sort((a, b) => {
-    const aIndex = order.indexOf(a);
-    const bIndex = order.indexOf(b);
-    if (aIndex === -1 && bIndex === -1) return a.localeCompare(b, "ko");
-    if (aIndex === -1) return 1;
-    if (bIndex === -1) return -1;
-    return aIndex - bIndex;
-  });
-  const phases = ["전체", ...orderedValues([...phaseOrder, ...tasks.map((task) => task.phase)], phaseOrder)];
-  const streams = ["전체", ...orderedValues(tasks.map((task) => task.stream), streamOrder)];
-  const categories = ["전체", ...orderedValues(tasks.map((task) => task.parent), [])];
-  const isDone = (task) => task.status === "완료";
-  const isCancelled = (task) => task.statusCode === "CANCELLED";
-  const isInProgress = (task) => ["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(task.statusCode);
-  const isOnHold = (task) => ["ON_HOLD", "BLOCKED"].includes(task.statusCode);
-  const countableTasks = (items) => items.filter((task) => !isCancelled(task));
-  const completion = (items) => {
-    const countable = countableTasks(items);
-    return countable.length ? Math.round(countable.filter(isDone).length / countable.length * 100) : 0;
-  };
-  const streamGroup = (task) => ["MKT", "YOUTUBE", "INSTAGRAM", "SEO"].includes(task.streamCode) ? "마케팅" : task.streamCode === "DSN" ? "디자인" : task.streamCode === "VID" ? "영상" : task.stream;
-  const publishingByPhase = Object.fromEntries((taskPage.publishing?.phases || []).map((item) => [item.phaseCode, item]));
-  const phaseStats = phases.slice(1).map((name) => {
-    const items = tasks.filter((task) => task.phase === name);
-    const countable = countableTasks(items);
-    const definition = trackerPhaseDefinitions.find((item) => item.label === name);
-    const phaseSchedule = schedule.find((item) => item.label === name);
-    const output = publishingByPhase[definition?.code];
-    const outputProgress = output?.target?.total ? Math.min(100, Math.round(output.actual.total / output.target.total * 100)) : null;
-    return { code: definition?.code || name, name, total: countable.length, done: countable.filter(isDone).length, progress: completion(items), period: phaseSchedule?.period || "일정 미정", output, outputProgress };
-  });
-  const streamStats = streams.slice(1).map((name) => {
-    const items = tasks.filter((task) => task.stream === name);
-    const countable = countableTasks(items);
-    return { name, total: countable.length, done: countable.filter(isDone).length, progress: completion(items) };
-  });
-  const primaryStreamStats = ["마케팅", "디자인", "영상"].map((name) => {
-    const items = tasks.filter((task) => streamGroup(task) === name);
-    const countable = countableTasks(items);
-    return { name, total: countable.length, done: countable.filter(isDone).length, progress: completion(items) };
-  });
-  const alertMatches = (task, key) => {
-    if (key === "전체") return true;
-    if (isCancelled(task)) return false;
-    if (key === "보류") return isOnHold(task);
-    const due = trackerDate(task.dueDate);
-    if (!due || isDone(task)) return false;
-    const days = Math.ceil((due.getTime() - now.getTime()) / 86400000);
-    if (key === "지연") return days < 0;
-    if (key === "임박") return days >= 0 && days <= 3;
-    return true;
-  };
-  const alerts = [
-    { key: "지연", label: "기한 지연", count: tasks.filter((task) => alertMatches(task, "지연")).length, detail: "마감일 경과" },
-    { key: "임박", label: "3일 내 마감", count: tasks.filter((task) => alertMatches(task, "임박")).length, detail: "우선 확인" },
-    { key: "보류", label: "보류·차단", count: tasks.filter((task) => alertMatches(task, "보류")).length, detail: "진행 조건 확인" },
-  ];
-  const visibleAlerts = alerts.filter((item) => item.count > 0);
-  const globalNeedle = String(query || "").trim().toLowerCase();
-  const localNeedle = localQuery.trim().toLowerCase();
-  const visibleTasks = useMemo(() => tasks.filter((task) => (phase === "전체" || task.phase === phase)
-    && (stream === "전체" || streamGroup(task) === stream)
-    && (category === "전체" || task.parent === category)
-    && (completedOnly ? isDone(task) : (!hideDone || !isDone(task)))
-    && alertMatches(task, alertFilter)
-    && (!globalNeedle || `${task.title} ${task.parent} ${task.owner} ${task.responsibleOrg || ""} ${task.sourceTaskId || ""}`.toLowerCase().includes(globalNeedle))
-    && (!localNeedle || `${task.title} ${task.parent} ${task.owner} ${task.responsibleOrg || ""} ${task.sourceTaskId || ""}`.toLowerCase().includes(localNeedle))), [phase, stream, category, hideDone, completedOnly, alertFilter, globalNeedle, localNeedle, tasks]);
-  const groupedTasks = streamStats.map((item) => ({
-    ...item,
-    tasks: visibleTasks.filter((task) => task.stream === item.name),
-  })).filter((item) => item.tasks.length);
-  const overallDone = tasks.filter(isDone).length;
-  const overallCancelled = tasks.filter(isCancelled).length;
-  const overallCountable = tasks.length - overallCancelled;
-  const overallInProgress = tasks.filter((task) => !isCancelled(task) && isInProgress(task)).length;
-  const overallOnHold = tasks.filter((task) => !isCancelled(task) && isOnHold(task)).length;
-  const overallWaiting = Math.max(0, overallCountable - overallDone - overallInProgress - overallOnHold);
-  const overallProgress = completion(tasks);
-  const hasPartialTaskData = Number(taskPage.total || 0) > tasks.length;
-  const streamColor = { 마케팅: "#22bc7e", 디자인: "#3b82f6", 영상: "#7c9a32", 공통: "#77837d", 유튜브: "#ff4d4f", 인스타그램: "#d946ef", SEO: "#f59e0b" };
-  const phaseDay = currentSchedule?.end ? Math.ceil((currentSchedule.end.getTime() - now.getTime()) / 86400000) : null;
-  const selectStream = (value) => {
-    setStream(value);
-    setCompletedOnly(false);
-    setCollapsedTaskGroups((current) => expandSelectedTaskGroup(current, value));
-  };
-  const toggleCompletedOnly = () => {
-    const next = !completedOnly;
-    setCompletedOnly(next);
-    if (next) {
-      setStream("전체");
-      setHideDone(false);
-      setAlertFilter("전체");
+  const repaintGantt = useCallback((paint) => {
+    const root = matrixRef.current;
+    if (!root || !paint?.drafts) return;
+    const rowStart = Math.min(paint.anchor.rowIndex, paint.target.rowIndex);
+    const rowEnd = Math.max(paint.anchor.rowIndex, paint.target.rowIndex);
+    const dayStart = Math.min(paint.anchor.dayIndex, paint.target.dayIndex);
+    const dayEnd = Math.max(paint.anchor.dayIndex, paint.target.dayIndex);
+    const axisDays = paint.anchor.axisDays;
+    const previous = paint.previewRange || { rowStart, rowEnd };
+    const dirtyRowStart = Math.min(previous.rowStart, rowStart);
+    const dirtyRowEnd = Math.max(previous.rowEnd, rowEnd);
+    for (let dirtyRow = dirtyRowStart; dirtyRow <= dirtyRowEnd; dirtyRow += 1) {
+      const taskId = paint.rows[dirtyRow]?.id;
+      const dates = new Set(paint.drafts.get(taskId) || []);
+      root.querySelectorAll(`.g-c[data-gantt-row-index="${dirtyRow}"]`).forEach((cell) => {
+        const rowIndex = Number(cell.dataset.ganttRowIndex);
+        const dayIndex = Number(cell.dataset.ganttDayIndex);
+        const date = axisDays[dayIndex];
+        const active = dates.has(date);
+        const runStart = active && !dates.has(axisDays[dayIndex - 1]);
+        const runEnd = active && !dates.has(axisDays[dayIndex + 1]);
+        const preview = rowIndex >= rowStart && rowIndex <= rowEnd && dayIndex >= dayStart && dayIndex <= dayEnd;
+        cell.classList.toggle("on", active);
+        cell.classList.toggle("rs", runStart);
+        cell.classList.toggle("re", runEnd);
+        cell.classList.toggle("is-paint-preview", preview);
+        cell.classList.toggle("is-paint-add", preview && paint.mode === "paint");
+        cell.classList.toggle("is-paint-erase", preview && paint.mode === "erase");
+      });
     }
+    paint.previewRange = { rowStart, rowEnd, dayStart, dayEnd };
+  }, []);
+
+  const paintTo = useCallback((rowIndex, dayIndex) => {
+    const paint = paintRef.current;
+    if (!paint || (paint.target.rowIndex === rowIndex && paint.target.dayIndex === dayIndex)) return;
+    paint.target = { rowIndex, dayIndex };
+    paint.drafts = paintGanttRectangle(paint.rows, paint.anchor, paint.target, paint.mode);
+    repaintGantt(paint);
+  }, [repaintGantt]);
+
+  const finishGanttPaint = useCallback(async () => {
+    const paint = paintRef.current;
+    if (!paint) return;
+    paintRef.current = null;
+    matrixRef.current?.classList.remove("is-painting");
+    const changes = paint.rows.filter((row) => !scheduleDatesEqual(row.scheduleDates, paint.drafts.get(row.id)));
+    if (!changes.length) {
+      matrixRef.current?.querySelectorAll(".is-paint-preview, .is-paint-add, .is-paint-erase").forEach((cell) => cell.classList.remove("is-paint-preview", "is-paint-add", "is-paint-erase"));
+      return;
+    }
+
+    setGanttDrafts(paint.drafts);
+    setGanttSave({ status: "saving", saved: 0, total: changes.length, error: "" });
+    let saved = 0;
+    try {
+      const updates = changes.map((row) => {
+        const dates = paint.drafts.get(row.id) || [];
+        const bounds = scheduleDateBounds(dates);
+        return {
+          task: row.task,
+          fields: {
+            planned_start_date: bounds.start,
+            due_date: bounds.end,
+            schedule_dates_json: serializeScheduleDates(dates),
+          },
+        };
+      });
+      if (onBatchUpdate) {
+        for (let offset = 0; offset < updates.length; offset += 40) {
+          const batch = updates.slice(offset, offset + 40);
+          await onBatchUpdate(batch);
+          saved += batch.length;
+          setGanttSave({ status: "saving", saved, total: changes.length, error: "" });
+        }
+      } else {
+        for (const update of updates) {
+          await onUpdate(update.task, update.fields);
+          saved += 1;
+          setGanttSave({ status: "saving", saved, total: changes.length, error: "" });
+        }
+      }
+      setGanttSave({ status: "saved", saved, total: changes.length, error: "" });
+    } catch (error) {
+      setGanttSave({
+        status: "error",
+        saved,
+        total: changes.length,
+        error: error?.code === "field_not_allowed" || /field_not_allowed/i.test(error?.message || "")
+          ? "Apps Script의 간트 일정 필드를 먼저 반영해야 합니다."
+          : error?.message || "간트 일정을 저장하지 못했습니다.",
+      });
+    } finally {
+      setGanttDrafts(null);
+    }
+  }, [onBatchUpdate, onUpdate]);
+
+  useEffect(() => {
+    const move = (event) => {
+      if (!paintRef.current) return;
+      event.preventDefault();
+      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.(".g-c[data-gantt-task-id]");
+      if (!target || !matrixRef.current?.contains(target)) return;
+      paintTo(Number(target.dataset.ganttRowIndex), Number(target.dataset.ganttDayIndex));
+    };
+    const end = () => { void finishGanttPaint(); };
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+  }, [finishGanttPaint, paintTo]);
+
+  const beginGanttPaint = (event) => {
+    if (displayMode !== "gantt" || !canWrite || ganttSave.status === "saving" || event.button !== 0) return;
+    const cell = event.target.closest?.(".g-c[data-gantt-task-id]");
+    if (!cell || !matrixRef.current?.contains(cell)) return;
+    event.preventDefault();
+    const rowIndex = Number(cell.dataset.ganttRowIndex);
+    const dayIndex = Number(cell.dataset.ganttDayIndex);
+    const axisDays = daysRef.current.map((day) => day.iso);
+    const rows = ganttTasksRef.current.map((task) => ({ id: task.id, task, scheduleDates: taskScheduleDates(task) }));
+    const active = new Set(rows[rowIndex]?.scheduleDates || []).has(axisDays[dayIndex]);
+    const paint = {
+      mode: active ? "erase" : "paint",
+      anchor: { rowIndex, dayIndex, axisDays },
+      target: { rowIndex: -1, dayIndex: -1 },
+      rows,
+      drafts: new Map(),
+      previewRange: null,
+    };
+    paintRef.current = paint;
+    matrixRef.current.classList.add("is-painting");
+    paintTo(rowIndex, dayIndex);
   };
   const saveProjectStartDate = async () => {
-    if (!canEditProject || !onProjectUpdate || !startDateDraft) return;
+    if (!canEditProject || !onProjectUpdate || !startDateDraft || startDateSaving) return;
     setStartDateSaving(true);
     setStartDateError("");
     try {
-      await onProjectUpdate(taskPage.project, startDateDraft);
+      await onProjectUpdate(project, startDateDraft);
     } catch (error) {
-      setStartDateError(error.code === "conflict" ? "다른 사용자가 먼저 변경했습니다. 최신 값으로 다시 불러왔습니다." : error.message || "착수일을 저장하지 못했습니다.");
+      setStartDateError(error?.code === "conflict" ? "다른 사용자가 먼저 변경했습니다." : error?.message || "착수일을 저장하지 못했습니다.");
     } finally {
       setStartDateSaving(false);
     }
   };
-
-  return <div className="view-stack tracker-view">
-    <ViewHeader eyebrow="업무 관리" title="업무" description="90일 진행 흐름과 실행 항목을 한 화면에서 관리합니다.">
-      {taskSection === "list" && <><CreateButton entityType="task-completed" onOpen={onCreate} enabled={editable}>완료 업무 추가</CreateButton><CreateButton entityType="task" onOpen={onCreate} enabled={editable}>업무 추가</CreateButton></>}
-    </ViewHeader>
-
-    <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>일정표</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
-
-    {taskSection === "activity" ? <TaskActivityLog state={activityState} tasks={tasks} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} canWrite={editable} onUpdate={onUpdate} onCreate={onCreate} /> : <>
-
-    <section className="tracker-control-panel panel" aria-label="업무 요약 및 90일 진행 흐름">
-      <div className="tracker-control-top">
-        <div className="tracker-overall-summary">
-          <span>전체 진척</span>
-          <strong>{overallProgress}<small>%</small></strong>
-          <p>{overallDone} / {overallCountable} 완료</p>
-        </div>
-        <div className="tracker-overall-body">
-          <div className="tracker-stacked-progress" aria-label={`완료 ${overallDone}, 진행 ${overallInProgress}, 보류 ${overallOnHold}, 미착수 ${overallWaiting}`}><i className="is-done" style={{ width: `${overallCountable ? overallDone / overallCountable * 100 : 0}%` }} /><i className="is-progress" style={{ width: `${overallCountable ? overallInProgress / overallCountable * 100 : 0}%` }} /><i className="is-hold" style={{ width: `${overallCountable ? overallOnHold / overallCountable * 100 : 0}%` }} /></div>
-          <div className="tracker-status-counts"><span><i className="is-done" />완료 <strong>{overallDone}</strong></span><span><i className="is-progress" />진행 <strong>{overallInProgress}</strong></span><span><i className="is-hold" />보류 <strong>{overallOnHold}</strong></span><span><i className="is-wait" />미착수 <strong>{overallWaiting}</strong></span>{overallCancelled > 0 && <span><i className="is-cancelled" />취소 <strong>{overallCancelled}</strong></span>}<em>업데이트 {formatSyncTime(taskPage.generatedAt)}</em></div>
-          {visibleAlerts.length > 0 && <div className="tracker-alert-chips" aria-label="확인 필요 업무">{visibleAlerts.map((item) => <button type="button" key={item.key} className={alertFilter === item.key ? "is-active" : ""} onClick={() => setAlertFilter(alertFilter === item.key ? "전체" : item.key)}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div>}
-          {hasPartialTaskData && <div className="tracker-data-warning"><AlertCircle size={13} />전체 {taskPage.total}건 중 {tasks.length}건만 불러왔습니다.</div>}
-        </div>
-        <div className="tracker-schedule-intro">
-          <span>90일 운영</span>
-          {canEditProject ? <div className="tracker-start-date-editor"><label><span>착수일</span><input type="date" value={startDateDraft} disabled={startDateSaving} onChange={(event) => { setStartDateDraft(event.target.value); setStartDateError(""); }} /></label><button type="button" disabled={startDateSaving || !startDateDraft || startDateDraft === (taskPage.project?.startDate || "")} onClick={saveProjectStartDate}>{startDateSaving ? "저장 중" : "저장"}</button></div> : <strong>{taskPage.project?.startDate ? `${trackerDateLabel(taskPage.project.startDate)} 시작` : "착수일 미설정"}</strong>}
-          {phaseDay !== null && <em>{phaseDay > 0 ? `D-${phaseDay}` : phaseDay === 0 ? "D-DAY" : `D+${Math.abs(phaseDay)}`}</em>}
-          {startDateError && <small className="tracker-start-date-error" role="alert">{startDateError}</small>}
-        </div>
-      </div>
-      <div className="tracker-flow-heading"><span>진행 흐름</span><small>단계를 누르면 실행 목록이 필터됩니다.</small></div>
-      <div className="tracker-schedule-phases">{phaseStats.map((item) => <button type="button" key={item.code} className={phase === item.name ? "is-active" : phase === "전체" && currentSchedule?.code === item.code ? "is-current" : ""} onClick={() => setPhase(phase === item.name ? "전체" : item.name)}>
-        <span>{item.code}<em>{item.progress}%</em></span><strong>{item.name}</strong><small>{item.period}</small>
-        <ProgressBar value={item.progress} color="var(--accent)" />
-        <small>{item.done} / {item.total} 완료{item.outputProgress !== null ? ` · 산출물 ${item.output?.actual?.total || 0}/${item.output?.target?.total || 0}` : ""}</small>
-      </button>)}</div>
+  return <div className="campaign-schedule-board" aria-label="캠페인 운영 일정">
+    <section className="campaign-board-progress" aria-label="전체 진행률"><div><span>전체 진행률</span><strong>{completionRate}<em>%</em></strong><small>완료 {completed}건 · 전체 {countable.length}건</small><div><i style={{ width: `${completionRate}%` }} /></div></div><div className="campaign-board-statuses"><button type="button" className={statusFilter === "ALL" ? "is-active" : ""} onClick={() => setStatusFilter("ALL")}><span>전체</span><strong>{countable.length}</strong></button><button type="button" className={statusFilter === "ACTIVE" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "ACTIVE"))}><span>진행중</span><strong>{inProgress}</strong></button><button type="button" className={statusFilter === "DONE" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "DONE"))}><span>완료</span><strong>{done}</strong></button><button type="button" className={statusFilter === "HOLD" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "HOLD"))}><span>보류</span><strong>{onHold}</strong></button></div></section>
+    <div className="campaign-schedule-toolbar reference-toolbar toolbar"><TaskWorkspaceTabs activeView={displayMode} onChange={onViewChange} canViewActivity={canViewActivity} />{activityMode ? <div className="task-activity-toolbar-copy">사용자가 생성·완료·변경한 업무만 표시합니다.</div> : <><div className="task-schedule-filters" aria-label="일정표 업무 필터"><ScheduleFilterButtons label="업무 상태" value={statusFilter} options={scheduleStatusFilters} onChange={setStatusFilter} /><ScheduleFilterButtons label="업무 카테고리" value={categoryFilter} options={scheduleCategoryFilters} onChange={setCategoryFilter} /><ScheduleFilterButtons label="업무 일정" value={scheduleFilter} options={scheduleWeekFilters} onChange={setScheduleFilter} /><div className="task-schedule-filter-result"><strong>{filteredTasks.length}</strong><span>/ {tasks.length}건</span>{filtersActive && <button type="button" onClick={() => { setStatusFilter("ALL"); setCategoryFilter("ALL"); setScheduleFilter("ALL"); }}>초기화</button>}</div></div>{canEditProject && <div className="schedule-start-date refbox"><label><span>착수일</span><input type="date" value={startDateDraft} disabled={startDateSaving} onChange={(event) => { setStartDateDraft(event.target.value); setStartDateError(""); }} /></label><button type="button" className="btn" disabled={startDateSaving || !startDateDraft || startDateDraft === (project.startDate || "")} onClick={saveProjectStartDate}>{startDateSaving ? "저장 중" : "저장"}</button>{startDateError && <small role="alert">{startDateError}</small>}</div>}</>}</div>
+    <section className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
+      <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : " · 업무명을 누르면 수정"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={onLoadActivity} disabled={activityState?.status === "loading"}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
+      {displayMode === "gantt" && canWrite && <div className="g-hint"><span>✎</span><span>칸을 클릭하면 칠해지고, 다시 누르면 지워집니다. 옆으로 끌면 여러 칸을 한 번에 — 시작일·종료일·기간은 칠한 범위에 맞춰 자동으로 바뀝니다.</span></div>}
+      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} onRefresh={onLoadActivity} /> : filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <div className="task-schedule-matrix-scroll"><table className="task-schedule-matrix is-table-view is-detailed"><thead><tr><th>업무</th><th>세부내용</th><th>시작일</th><th>종료일</th><th>기간(일)</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th></tr></thead><tbody>{filteredTasks.map((task) => {
+        const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
+        const bounds = scheduleDateBounds(scheduleDates);
+        const displayedStart = bounds.start || task.plannedStartDate;
+        const displayedEnd = bounds.end || task.dueDate;
+        const duration = taskDurationDays(displayedStart, displayedEnd);
+        const progress = task.progressPercent ?? 0;
+        const newTask = isNewTask(task, freshnessNow);
+        return <tr className={`task-schedule-row ${scheduleClass(task)}${newTask ? " is-new-task" : ""}`} key={task.id}><td><button type="button" className="task-schedule-title-button" disabled={!canWrite} onClick={() => canWrite && setEditingTaskId(task.id)} aria-label={`${task.title} 수정`}><span className="task-schedule-identity"><span className="task-schedule-color" aria-hidden="true" /><span><strong><span>{task.title}</span>{newTask && <em className="task-new-badge">신규</em>}</strong><small>{task.phase} · {task.parent || task.stream}</small></span></span></button></td><td>{task.description || "-"}</td><td><time className="task-schedule-date" title={displayedStart || ""}>{displayedStart ? trackerDateLabel(displayedStart) : "-"}</time></td><td><time className="task-schedule-date" title={displayedEnd || ""}>{displayedEnd ? trackerDateLabel(displayedEnd) : "-"}</time></td><td>{duration ?? "-"}</td><td><span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span></td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td><span className="task-schedule-owner">{taskResponsibleOrgLabel(task.responsibleOrgCode, project.clientName)}</span></td><td>{task.completionUrl ? <a className="task-schedule-link" href={task.completionUrl} target="_blank" rel="noreferrer">결과물</a> : "-"}</td><td>{task.remarks || "-"}</td></tr>;
+      })}</tbody></table></div> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ minWidth: `${280 + ganttTrackWidth}px` }}>
+        <div className="g-hrow"><div className="g-lbl g-corner"><span className="nm">매체 · 업무</span></div><div className="g-hstack" style={{ width: `${ganttTrackWidth}px` }}><div className="g-months">{months.map((month) => <div className="g-m" key={month.key} style={{ width: `${month.count * 28}px` }}>{month.label}</div>)}</div><div className="g-days">{days.map((day) => <div key={day.iso} className={`g-d${day.weekend ? " we" : ""}${day.weekday === "일" ? " sun" : ""}${day.iso === today ? " ref" : ""}`}><span>{day.day}</span><span className="dw">{day.weekday}</span></div>)}</div></div></div>
+        {ganttGroups.map((group) => {
+          const color = ganttCategoryColor(group.label);
+          const groupDone = group.tasks.filter((task) => task.statusCode === "DONE").length;
+          return <section className="g-section" key={group.label}><div className="g-grow"><div className="g-lbl" style={{ "--rail": color }}><span className="nm">{group.label}</span><span className="g-gcount">{groupDone}/{group.tasks.length}</span></div><div className="g-track g-gtrack" style={{ width: `${ganttTrackWidth}px` }}>{days.map((day) => <div key={`${group.label}-${day.iso}`} className={`g-c ${day.weekend ? "we" : ""} ${day.iso === today ? "ref" : ""}`} />)}{todayIndex >= 0 && <div className="g-refline" style={{ left: `${todayIndex * 28}px` }} />}</div></div>{group.tasks.map((task) => {
+            const rowIndex = ganttRowIndexById.get(task.id);
+            const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
+            const scheduleSet = new Set(scheduleDates);
+            const owner = taskResponsibleOrgLabel(task.responsibleOrgCode, project.clientName);
+            const newTask = isNewTask(task, freshnessNow);
+            return <div className={`g-row${newTask ? " is-new-task" : ""}`} key={task.id} style={{ "--fill": ganttFillColor(task), "--rail": color }}><div className="g-lbl" title={`${group.label} · ${task.title}`}><i className="g-rail-dot" /><button type="button" className="g-task-open nm" disabled={!canWrite} onClick={() => canWrite && setEditingTaskId(task.id)}>{task.title}</button>{newTask && <span className="g-new-badge">신규</span>}<span className={`otag ${owner === "포켓컴퍼니" ? "op" : owner === "NS" ? "on" : "oc"}`}>{owner}</span></div><div className={`g-track ${canWrite ? "paint" : ""}`} style={{ width: `${ganttTrackWidth}px` }}>{days.map((day, dayIndex) => {
+              const active = scheduleSet.has(day.iso);
+              const starts = active && !scheduleSet.has(days[dayIndex - 1]?.iso);
+              const ends = active && !scheduleSet.has(days[dayIndex + 1]?.iso);
+              return <div key={`${task.id}-${day.iso}`} data-r={task.id} data-ri={rowIndex} data-o={dayIndex} data-gantt-task-id={task.id} data-gantt-task-title={task.title} data-gantt-row-index={rowIndex} data-gantt-day-index={dayIndex} className={`g-c${day.weekend ? " we" : ""}${day.iso === today ? " ref" : ""}${active ? " on" : ""}${starts ? " rs" : ""}${ends ? " re" : ""}`} title={active ? `${task.title} · ${day.iso}` : day.iso} />;
+            })}{todayIndex >= 0 && <div className="g-refline" style={{ left: `${todayIndex * 28}px` }} />}</div></div>;
+          })}</section>;
+        })}
+      </div></div>}
+      {displayMode === "gantt" && <div className="g-legend">{ganttGroups.map((group) => <span key={group.label}><i style={{ background: ganttCategoryColor(group.label) }} />{group.label}</span>)}<span><i style={{ background: "#8a93a3", opacity: .3 }} />예정 = 옅게</span><span><i className="g-weekend-legend" />주말</span><span><i className="g-today-legend" />기준일 {today}</span></div>}
+      {editingTaskId && canWrite && <TaskEditModal key={editingTaskId} task={tasks.find((task) => task.id === editingTaskId)} clientName={project.clientName} onUpdate={onUpdate} onClose={() => setEditingTaskId(null)} />}
     </section>
-
-    <section className="tracker-execution" aria-label="실행 업무 목록">
-      <div className="tracker-list-toolbar panel">
-        <div className="tracker-stream-tabs" aria-label="업무 분야 필터">
-          <button type="button" className={!completedOnly && stream === "전체" ? "is-active" : ""} onClick={() => selectStream("전체")}><span>전체</span><strong>{overallCountable}</strong></button>
-          {primaryStreamStats.map((item) => <button type="button" key={item.name} className={!completedOnly && stream === item.name ? "is-active" : ""} onClick={() => selectStream(item.name)} style={{ "--team-color": streamColor[item.name] || "var(--accent)" }}><span>{item.name}</span><strong>{item.done}/{item.total}</strong></button>)}
-          <button type="button" className={completedOnly ? "is-active" : ""} aria-pressed={completedOnly} onClick={toggleCompletedOnly} style={{ "--team-color": "#0d9f6e" }}><Check size={12} /><span>완료된 작업</span><strong>{overallDone}</strong></button>
-        </div>
-        <div className="tracker-filter"><ListFilter size={15} /><select aria-label="업무 구분" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="tracker-inline-search"><Search size={14} /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="업무 검색" /></label><label className="tracker-hide-done"><input type="checkbox" checked={hideDone} onChange={(event) => { setHideDone(event.target.checked); if (event.target.checked) setCompletedOnly(false); }} />완료 숨김</label><span className="result-count">{visibleTasks.length}건</span></div>
-      </div>
-
-      {groupedTasks.length ? <div className="tracker-task-groups">{groupedTasks.map((group, index) => {
-        const collapsed = collapsedTaskGroups.includes(group.name);
-        const panelId = `task-group-${taskPage.project?.id || "project"}-${index}`;
-        return <section className={`tracker-task-group panel${collapsed ? " is-collapsed" : ""}`} key={group.name} style={{ "--team-color": streamColor[group.name] || "var(--accent)" }}>
-          <header><button className="tracker-task-group-toggle" type="button" aria-expanded={!collapsed} aria-controls={panelId} onClick={() => setCollapsedTaskGroups((current) => toggleCollapsedTaskGroup(current, group.name))}><div><span className="tracker-team-dot" /><h3>{group.name}</h3></div><span className="tracker-task-group-summary"><strong>{group.tasks.filter(isDone).length} / {group.tasks.length}</strong><DisclosureChevron expanded={!collapsed} className="tracker-group-chevron" size={17} /></span></button></header>
-          {!collapsed && <div className="tracker-task-grid" id={panelId}>{group.tasks.map((task) => <TrackerTaskRow key={task.id} task={task} role={role} clientName={taskPage.project?.clientName} canWrite={editable} onUpdate={onUpdate} isDone={isDone(task)} />)}</div>}
-        </section>;
-      })}</div> : <EmptyState title="조건에 맞는 업무가 없습니다" description="필터를 바꾸거나 원장에 업무를 등록해 주세요." />}
-    </section>
-
-    <section className="tracker-publishing panel" aria-label="단계별 콘텐츠 발행 현황"><div className="panel-heading"><div><h3>콘텐츠 발행 현황</h3></div><span className="panel-note">자동 집계</span></div>{taskPage.publishing?.phases?.length ? <div className="tracker-publishing-grid">{taskPage.publishing.phases.map((item) => <article key={item.phaseCode}><header><strong>{item.phase}</strong><span>{item.actual.total} / {item.target.total}</span></header><ProgressBar value={item.target.total ? Math.min(100, Math.round(item.actual.total / item.target.total * 100)) : 0} color="var(--accent)" /><div><span>롱폼 {item.actual.longForm}/{item.target.longForm}</span><span>숏폼 {item.actual.shortForm}/{item.target.shortForm}</span><span>인스타 {item.actual.instagram}/{item.target.instagram}</span><span>블로그 {item.actual.blog}/{item.target.blog}</span></div></article>)}</div> : <div className="tracker-publishing-empty">콘텐츠 원장 집계가 연결되면 표시됩니다.</div>}</section>
-    </>}
   </div>;
+}
+
+function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCreate, canWrite, onUpdate, onBatchUpdate, onProjectUpdate, initialSection = "schedule" }) {
+  const editable = Boolean(canWrite);
+  const schedule = useMemo(() => trackerSchedule(taskPage.project?.startDate), [taskPage.project?.startDate]);
+  const tasks = useMemo(() => (taskPage.items || []).map((task) => {
+    const calculatedDue = trackerTaskDue(task, schedule);
+    const normalizedTask = { ...task, status: task.statusCode === "CANCELLED" ? "취소" : task.status };
+    return withDisplayDeadline(normalizedTask, calculatedDue ? `${trackerTaskDueLabel(calculatedDue)} · ${trackerDdayLabel(calculatedDue)}` : "");
+  }), [taskPage.items, schedule]);
+  const [displayMode, setDisplayMode] = useState(initialSection === "activity" ? "activity" : "table");
+  useEffect(() => {
+    setDisplayMode(initialSection === "activity" ? "activity" : "table");
+  }, [taskPage.project?.id, initialSection]);
+  useEffect(() => {
+    if (displayMode === "activity" && activityState?.status === "idle") onLoadActivity?.();
+  }, [displayMode, activityState?.status, onLoadActivity]);
+  const selectTaskView = (nextView) => setDisplayMode(nextView === "gantt" || nextView === "activity" ? nextView : "table");
+
+  return <div className="view-stack campaign-schedule-root"><TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} query={query} canWrite={editable} canEditProject={Boolean(editable && role === "pocket")} onUpdate={onUpdate} onBatchUpdate={onBatchUpdate} onProjectUpdate={onProjectUpdate} onCreate={onCreate} displayMode={displayMode} onViewChange={selectTaskView} canViewActivity={role !== "client"} activityState={activityState} onLoadActivity={onLoadActivity} /></div>;
 }
 
 function localDateValue() {
@@ -1264,12 +1522,12 @@ function PlanView({ plan, project, planVariant }) {
   </div>;
 }
 
-function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onProjectUpdate, onDailyMeetingSave, onKpiSave, onKpiArchive, onAccessSave, canWrite }) {
+function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onTaskBatchUpdate, onProjectUpdate, onDailyMeetingSave, onKpiSave, onKpiArchive, onAccessSave, canWrite }) {
   if (pageState.status === "loading" && !pageState.data) return <LoadingState />;
   if (pageState.status === "error" && !pageState.data) return <ErrorState error={pageState.error} onRetry={onRetry} />;
   const data = pageState.data || {};
   if (view === "plan") return <PlanView plan={data} project={project} planVariant={planVariant} />;
-  if (view === "tasks" || view === "schedule") return <TasksView role={role} query={search} taskPage={{ ...data, project: { id: project.id, clientId: project.clientId, clientName: project.clientName, name: project.name, permissionCode: project.permissionCode, allowedPages: project.allowedPages, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion, ...(data.project || {}) } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} initialSection={view === "schedule" ? "schedule" : "list"} />;
+  if (view === "tasks" || view === "schedule") return <TasksView role={role} query={search} taskPage={{ ...data, project: { id: project.id, clientId: project.clientId, clientName: project.clientName, name: project.name, permissionCode: project.permissionCode, allowedPages: project.allowedPages, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion, ...(data.project || {}) } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onBatchUpdate={onTaskBatchUpdate} onProjectUpdate={onProjectUpdate} canWrite={canWrite} initialSection="schedule" />;
   if (view === "daily") return <DailyMeetingsView role={role} meetings={data.items || []} canWrite={canWrite && role !== "client"} onSave={onDailyMeetingSave} />;
   if (view === "content") return <ContentView role={role} query={search} contents={data.items || []} onCreate={onCreate} canWrite={canWrite} />;
   if (view === "tracking") return <TrackingView tracking={data} />;
@@ -1283,6 +1541,12 @@ const blankPage = { status: "idle", data: null, error: null, resource: null, pro
 const blankTaskActivity = { status: "idle", data: null, error: null, projectId: null };
 const RESOURCE_CACHE_TTL_MS = 10 * 60_000;
 const BOOTSTRAP_SESSION_CACHE_KEY = "pocket-marketing-hub.bootstrap.v2";
+const PERSISTED_RESOURCES = new Set(["tasks", "plan-client", "plan-internal", "daily", "performance"]);
+let pendingBootstrapCacheWrite = null;
+
+function serverInitialView(view) {
+  return view === "schedule" ? "tasks" : view;
+}
 
 function readBootstrapSessionCache(session) {
   try {
@@ -1299,16 +1563,35 @@ function readBootstrapSessionCache(session) {
 function writeBootstrapSessionCache(session, envelope) {
   try {
     if (!session?.user?.userId || !envelope) return;
-    globalThis.sessionStorage?.setItem(BOOTSTRAP_SESSION_CACHE_KEY, JSON.stringify({
-      userId: session.user.userId,
-      cachedAt: Date.now(),
-      envelope,
-    }));
+    if (pendingBootstrapCacheWrite !== null) {
+      if (typeof globalThis.cancelIdleCallback === "function") globalThis.cancelIdleCallback(pendingBootstrapCacheWrite);
+      else globalThis.clearTimeout(pendingBootstrapCacheWrite);
+    }
+    const commit = () => {
+      pendingBootstrapCacheWrite = null;
+      try {
+        globalThis.sessionStorage?.setItem(BOOTSTRAP_SESSION_CACHE_KEY, JSON.stringify({
+          userId: session.user.userId,
+          cachedAt: Date.now(),
+          envelope,
+        }));
+      } catch {}
+    };
+    pendingBootstrapCacheWrite = typeof globalThis.requestIdleCallback === "function"
+      ? globalThis.requestIdleCallback(commit, { timeout: 600 })
+      : globalThis.setTimeout(commit, 0);
   } catch {}
 }
 
 function clearBootstrapSessionCache() {
-  try { globalThis.sessionStorage?.removeItem(BOOTSTRAP_SESSION_CACHE_KEY); } catch {}
+  try {
+    if (pendingBootstrapCacheWrite !== null) {
+      if (typeof globalThis.cancelIdleCallback === "function") globalThis.cancelIdleCallback(pendingBootstrapCacheWrite);
+      else globalThis.clearTimeout(pendingBootstrapCacheWrite);
+      pendingBootstrapCacheWrite = null;
+    }
+    globalThis.sessionStorage?.removeItem(BOOTSTRAP_SESSION_CACHE_KEY);
+  } catch {}
 }
 
 export function App() {
@@ -1330,11 +1613,14 @@ export function App() {
   const [planVariant, setPlanVariant] = useState(initialLocation.planVariant);
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [desktopNavigationLevel, setDesktopNavigationLevel] = useState(DEFAULT_DESKTOP_NAVIGATION_LEVEL);
   const [bootstrapRetryKey, setBootstrapRetryKey] = useState(0);
   const [pageRefreshKey, setPageRefreshKey] = useState(0);
   const [createEntity, setCreateEntity] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
+  const [sheetSaveLock, setSheetSaveLock] = useState({ visible: false, label: "" });
+  const sheetWriteCountRef = useRef(0);
+  const sheetSaveShownAtRef = useRef(0);
+  const sheetSaveReleaseTimerRef = useRef(null);
   const activeProjectIdRef = useRef(null);
   const pageRefreshKeyRef = useRef(pageRefreshKey);
   const initializationRequestRef = useRef(null);
@@ -1348,14 +1634,50 @@ export function App() {
   const navigation = getNavigationPresentation({
     role: actorRole,
     compactViewport,
-    desktopLevel: desktopNavigationLevel,
     drawerOpen: sidebarOpen,
   });
   const authorizedPlanVariant = planVariant;
   const activeResource = viewResourceKey(view, authorizedPlanVariant);
   pageRefreshKeyRef.current = pageRefreshKey;
 
+  const runSheetWrite = useCallback(async (label, operation) => {
+    if (sheetSaveReleaseTimerRef.current !== null) {
+      window.clearTimeout(sheetSaveReleaseTimerRef.current);
+      sheetSaveReleaseTimerRef.current = null;
+    }
+    const startsBatch = sheetWriteCountRef.current === 0;
+    sheetWriteCountRef.current += 1;
+    if (startsBatch) sheetSaveShownAtRef.current = Date.now();
+    setSheetSaveLock((current) => ({
+      visible: true,
+      label: startsBatch ? label : current.label || label,
+    }));
+    try {
+      return await operation();
+    } finally {
+      sheetWriteCountRef.current = Math.max(0, sheetWriteCountRef.current - 1);
+      if (sheetWriteCountRef.current === 0) {
+        const elapsed = Date.now() - sheetSaveShownAtRef.current;
+        const releaseDelay = Math.max(SAVE_OVERLAY_COALESCE_MS, SAVE_OVERLAY_MIN_MS - elapsed);
+        sheetSaveReleaseTimerRef.current = window.setTimeout(() => {
+          sheetSaveReleaseTimerRef.current = null;
+          if (sheetWriteCountRef.current === 0) {
+            setSheetSaveLock({ visible: false, label: "" });
+          }
+        }, releaseDelay);
+      }
+    }
+  }, []);
+  const mutateWithSaveLock = useCallback((label, options) => runSheetWrite(label, () => source.mutate(options)), [runSheetWrite, source]);
+  const mutateBatchWithSaveLock = useCallback((label, options) => runSheetWrite(label, () => source.mutateBatch(options)), [runSheetWrite, source]);
+  const accessMutateWithSaveLock = useCallback((label, options) => runSheetWrite(label, () => source.accessAdminMutate(options)), [runSheetWrite, source]);
+
   useEffect(() => source?.subscribe(setSourceState), [source]);
+  useEffect(() => () => {
+    if (sheetSaveReleaseTimerRef.current !== null) {
+      window.clearTimeout(sheetSaveReleaseTimerRef.current);
+    }
+  }, []);
   useEffect(() => {
     if (live && session && sourceState.user === null && sourceState.error?.code === "unauthorized" && source.config.loginEnabled) {
       setSession(null);
@@ -1384,6 +1706,11 @@ export function App() {
     const fallbackView = firstAllowedView(allowedPages);
     setView(fallbackView);
     setPlanVariant(DEFAULT_PLAN_VARIANT);
+  }, [bootstrapState.status, bootstrapState.data, actorRole, activeProjectId, view]);
+  useEffect(() => {
+    if (bootstrapState.status !== "ready" || !activeProjectId || view !== "overview") return;
+    const allowedPages = bootstrapState.data?.projects?.[activeProjectId]?.allowedPages || [];
+    if (actorRole !== "client" || isViewAllowed("schedule", allowedPages)) setView("schedule");
   }, [bootstrapState.status, bootstrapState.data, actorRole, activeProjectId, view]);
 
   const applyBootstrapEnvelope = useCallback((envelope) => {
@@ -1421,10 +1748,11 @@ export function App() {
         const initialCache = {
           state: initialState,
           cachedAt: Date.now(),
-          refreshKey: pageRefreshKeyRef.current,
         };
         resourceCacheRef.current.set(initialCacheKey, initialCache);
-        if (data.initial.view === "tasks") writeResourceSessionCache(source?.getSession(), initialCacheKey, initialCache);
+        if (PERSISTED_RESOURCES.has(data.initial.view)) {
+          scheduleResourceSessionCacheWrite(source?.getSession(), initialCacheKey, initialCache);
+        }
         setResourceState(initialState);
       }
     }
@@ -1435,7 +1763,7 @@ export function App() {
     if (!source || !source.getSession()) return;
     setBootstrapState({ status: "loading", data: null, error: null });
     try {
-      const envelope = await source.bootstrap({ signal, initialView: view });
+      const envelope = await source.bootstrap({ signal, initialView: serverInitialView(view) });
       if (signal?.aborted) return;
       applyBootstrapEnvelope(envelope);
     } catch (error) {
@@ -1466,7 +1794,7 @@ export function App() {
         initializationRequestRef.current = {
           key: requestKey,
           promise: storedSession
-            ? source.bootstrap({ initialView: view }).catch((error) => {
+            ? source.bootstrap({ initialView: serverInitialView(view) }).catch((error) => {
               if (source.config.loginEnabled || error.code !== "unauthorized") throw error;
               source.logout();
               return Promise.all([
@@ -1506,39 +1834,41 @@ export function App() {
       }
     };
     initialize();
-    // React StrictMode replays effects in local development. Keep the single
-    // server request alive and let the replay subscribe to the same promise;
-    // aborting here makes Apps Script continue working while the browser starts
-    // an identical second request.
+    // Keep the single initialization request alive across transient effect
+    // cleanup so Apps Script never receives an identical second cold request.
     return () => { active = false; };
   }, [source, applyBootstrapEnvelope, bootstrapRetryKey]);
 
   useEffect(() => {
     if (!source || !activeProjectId || view !== "overview" || bootstrapState.status !== "ready") return undefined;
+    const allowedPages = bootstrapState.data?.projects?.[activeProjectId]?.allowedPages || [];
+    if (actorRole !== "client" || isViewAllowed("schedule", allowedPages)) return undefined;
     if (overviewState.status === "ready" && overviewState.projectId === activeProjectId && overviewState.refreshKey === pageRefreshKey) return undefined;
     const controller = new AbortController();
     setOverviewState({ status: "loading", data: null, error: null, resource: "overview", projectId: activeProjectId });
     source.overview({ projectId: activeProjectId, signal: controller.signal }).then((envelope) => setOverviewState({ status: "ready", data: overviewViewModel(envelope, bootstrapState.data.projects[activeProjectId]), error: null, resource: "overview", projectId: activeProjectId, refreshKey: pageRefreshKey })).catch((error) => { if (!controller.signal.aborted) { if (error.code === "unauthorized") setSession(null); setOverviewState({ status: "error", data: null, error, resource: "overview", projectId: activeProjectId, refreshKey: pageRefreshKey }); } });
     return () => controller.abort();
-  }, [source, activeProjectId, view, bootstrapState.status, bootstrapState.data, overviewState.status, overviewState.projectId, pageRefreshKey]);
+  }, [source, activeProjectId, view, bootstrapState.status, bootstrapState.data, actorRole, overviewState.status, overviewState.projectId, pageRefreshKey]);
 
   useEffect(() => {
     if (!source || !activeProjectId || view === "overview" || bootstrapState.status !== "ready") return undefined;
     const cacheKey = `${activeProjectId}:${activeResource}`;
     let cached = resourceCacheRef.current.get(cacheKey) || null;
-    if (!cached && activeResource === "tasks") {
+    if (!cached && PERSISTED_RESOURCES.has(activeResource)) {
       cached = readResourceSessionCache(source.getSession(), cacheKey);
       if (cached) resourceCacheRef.current.set(cacheKey, cached);
     }
     const cachedState = cached?.state || null;
+    const visibleState = resourceState.resource === activeResource && resourceState.projectId === activeProjectId && resourceState.data
+      ? resourceState
+      : null;
     const cacheIsFresh = Boolean(
       cached &&
-      cached.refreshKey === pageRefreshKey &&
       Date.now() - cached.cachedAt < RESOURCE_CACHE_TTL_MS
     );
     if (cachedState) setResourceState(cachedState);
     if (cacheIsFresh) return undefined;
-    if (!cachedState) setResourceState({ status: "loading", data: null, error: null, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey });
+    if (!cachedState && !visibleState) setResourceState({ status: "loading", data: null, error: null, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey });
     const params = { projectId: activeProjectId, limit: 200 };
     const requestKey = `${cacheKey}:${pageRefreshKey}`;
     const requestEpoch = resourceCacheEpochRef.current;
@@ -1567,20 +1897,19 @@ export function App() {
     request.then((data) => {
       if (resourceCacheEpochRef.current !== requestEpoch) return;
       const nextState = { status: "ready", data, error: null, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey };
-      const currentCache = resourceCacheRef.current.get(cacheKey);
-      if (!currentCache || currentCache.refreshKey <= pageRefreshKey) {
-        const nextCache = { state: nextState, cachedAt: Date.now(), refreshKey: pageRefreshKey };
-        resourceCacheRef.current.set(cacheKey, nextCache);
-        if (activeResource === "tasks") writeResourceSessionCache(source.getSession(), cacheKey, nextCache);
+      const nextCache = { state: nextState, cachedAt: Date.now() };
+      resourceCacheRef.current.set(cacheKey, nextCache);
+      if (PERSISTED_RESOURCES.has(activeResource)) {
+        scheduleResourceSessionCacheWrite(source.getSession(), cacheKey, nextCache);
       }
       if (active) setResourceState(nextState);
     }).catch((error) => {
       if (!active) return;
       if (error.code === "unauthorized") setSession(null);
-      if (!cachedState) setResourceState({ status: "error", data: null, error, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey });
+      if (!cachedState && !visibleState) setResourceState({ status: "error", data: null, error, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey });
     });
     return () => { active = false; };
-  }, [source, activeProjectId, view, authorizedPlanVariant, activeResource, bootstrapState.status, pageRefreshKey]);
+  }, [source, activeProjectId, view, authorizedPlanVariant, activeResource, bootstrapState.status, bootstrapState.data, pageRefreshKey]);
 
   useEffect(() => {
     const nextHash = viewLocationHash(view, planVariant);
@@ -1590,7 +1919,7 @@ export function App() {
   const handleLogin = async (credentials) => {
     setLoginError(null);
     try {
-      const result = await source.login({ ...credentials, initialView: view });
+      const result = await source.login({ ...credentials, initialView: serverInitialView(view) });
       if (result.bootstrap) applyBootstrapEnvelope(result.bootstrap);
       setSession(source.getSession());
       if (!result.bootstrap) await loadBootstrap();
@@ -1647,10 +1976,37 @@ export function App() {
     : resourceState.resource === activeResource && resourceState.projectId === activeProjectId
       ? resourceState
       : cachedPageForView || { ...blankPage, status: "loading", resource: activeResource, projectId: activeProjectId };
+  const notificationTaskState = resourceState.resource === "tasks" && resourceState.projectId === activeProjectId
+    ? resourceState
+    : resourceCacheRef.current.get(`${activeProjectId}:tasks`)?.state || null;
+  const notificationTasks = notificationTaskState?.data?.items || [];
+  const notificationsLoaded = Boolean(notificationTaskState?.data?.items);
   const taskCount = view === "tasks" && resourceState.resource === "tasks" ? Number(resourceState.data?.total || 0) : Number(project.metrics?.[0]?.value?.replace?.(/\D/g, "") || 0);
   const canWrite = live && ["ADMIN", "EDIT"].includes(project.permissionCode);
   const canWriteTasks = canOperateProjectTasks({ live, role, loginEnabled: source.config.loginEnabled });
   const connectionReady = live && Boolean(sourceState.lastSuccessfulAt);
+
+  const invalidateResource = (projectId, resource) => {
+    const cacheKey = `${projectId}:${resource}`;
+    resourceCacheEpochRef.current += 1;
+    resourceCacheRef.current.delete(cacheKey);
+    if (PERSISTED_RESOURCES.has(resource)) removeResourceSessionCache(source?.getSession(), cacheKey);
+    for (const requestKey of resourceRequestRef.current.keys()) {
+      if (requestKey.startsWith(`${cacheKey}:`)) resourceRequestRef.current.delete(requestKey);
+    }
+    if (projectId === activeProjectId && resource === activeResource) setPageRefreshKey((value) => value + 1);
+  };
+
+  const refreshCurrentPage = () => {
+    if (view === "overview") {
+      setOverviewState((current) => current.projectId === activeProjectId
+        ? { ...current, status: current.data ? "loading" : "idle", error: null }
+        : current);
+      setPageRefreshKey((value) => value + 1);
+      return;
+    }
+    invalidateResource(activeProjectId, activeResource);
+  };
 
   const loadTaskActivity = async () => {
     const projectId = activeProjectId;
@@ -1691,16 +2047,24 @@ export function App() {
 
   const createRecord = async (entityType, fields) => {
     const nextFields = entityType === "file" ? { ...fields, entity_type: "PROJECT", entity_id: activeProjectId } : fields;
-    const result = await source.mutate({
+    if (entityType === "task") resourceCacheEpochRef.current += 1;
+    const result = await mutateWithSaveLock("새 데이터를 원장에 기록하고 있습니다.", {
       projectId: activeProjectId,
       mutation: { entityType, operation: "CREATE", fields: nextFields },
     });
     // The canonical mutation response is the save acknowledgement. Activity
     // refresh is secondary and must not keep the create modal blocked.
     setSaveNotice("Google Sheets 원장에 저장했습니다.");
-    if (entityType === "task") setTaskActivityState({ ...blankTaskActivity, projectId: activeProjectId });
-    setPageRefreshKey((value) => value + 1);
-    source.activity({ projectId: activeProjectId, limit: 20 }).catch(() => {});
+    if (entityType === "task") {
+      const canonicalRecord = result?.data?.record;
+      const canonicalTask = canonicalRecord
+        ? tasksViewModel({ data: { items: [canonicalRecord], totalMatching: 1 }, generatedAt: result.generatedAt }).items[0]
+        : null;
+      if (!appendTaskResource(activeProjectId, canonicalTask)) invalidateResource(activeProjectId, "tasks");
+      setTaskActivityState({ ...blankTaskActivity, projectId: activeProjectId });
+    } else {
+      invalidateResource(activeProjectId, activeResource);
+    }
     return result;
   };
 
@@ -1724,8 +2088,33 @@ export function App() {
     if (nextState !== cached.state) {
       const nextCache = { ...cached, state: nextState, cachedAt: Date.now() };
       resourceCacheRef.current.set(cacheKey, nextCache);
-      writeResourceSessionCache(source?.getSession(), cacheKey, nextCache);
+      scheduleResourceSessionCacheWrite(source?.getSession(), cacheKey, nextCache);
     }
+  };
+
+  const appendTaskResource = (projectId, task) => {
+    if (!task?.id) return false;
+    const cacheKey = `${projectId}:tasks`;
+    const cached = resourceCacheRef.current.get(cacheKey);
+    const baseState = cached?.state || (
+      resourceState.resource === "tasks" && resourceState.projectId === projectId ? resourceState : null
+    );
+    if (!baseState?.data?.items) return false;
+    if (baseState.data.items.some((item) => item.id === task.id)) return true;
+    const nextState = {
+      ...baseState,
+      status: "ready",
+      data: {
+        ...baseState.data,
+        items: [...baseState.data.items, task],
+        total: Number(baseState.data.total || baseState.data.items.length) + 1,
+      },
+    };
+    const nextCache = { state: nextState, cachedAt: Date.now() };
+    resourceCacheRef.current.set(cacheKey, nextCache);
+    scheduleResourceSessionCacheWrite(source?.getSession(), cacheKey, nextCache);
+    if (activeProjectIdRef.current === projectId) setResourceState(nextState);
+    return true;
   };
 
   const updateTask = async (task, fields) => {
@@ -1741,7 +2130,7 @@ export function App() {
     resourceCacheEpochRef.current += 1;
     patchTaskResource(projectId, task.id, (current) => taskWithMutationFields(current, fields));
     try {
-      const result = await source.mutate({
+      const result = await mutateWithSaveLock("업무 변경사항을 원장에 기록하고 있습니다.", {
         projectId,
         mutation: {
           entityType: "task",
@@ -1759,12 +2148,62 @@ export function App() {
         ? { ...current, ...canonicalTask }
         : { ...taskWithMutationFields(current, fields), rowVersion: Number(current.rowVersion || 0) + 1 });
       setTaskActivityState({ ...blankTaskActivity, projectId });
-      setSaveNotice("업무 변경사항을 Google Sheets 원장에 저장했습니다.");
-      setPageRefreshKey((value) => value + 1);
+      setSaveNotice("업무 변경사항을 Supabase에 저장했습니다.");
       return canonicalTask;
     } catch (error) {
       patchTaskResource(projectId, task.id, () => previousTask);
-      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      if (error.code === "conflict") invalidateResource(projectId, "tasks");
+      throw error;
+    }
+  };
+
+  const updateTasksBatch = async (updates) => {
+    if (!canWriteTasks) {
+      const readOnlyError = new Error("이 계정은 업무를 수정할 권한이 없습니다.");
+      readOnlyError.code = "forbidden";
+      throw readOnlyError;
+    }
+    if (!Array.isArray(updates) || !updates.length || updates.length > 40) {
+      const batchError = new Error("한 번에 저장할 업무 변경은 1~40건이어야 합니다.");
+      batchError.code = "invalid_batch_size";
+      throw batchError;
+    }
+    const projectId = activeProjectId;
+    const previousTasks = new Map(updates.map(({ task }) => [task.id, { ...task }]));
+    resourceCacheEpochRef.current += 1;
+    updates.forEach(({ task, fields }) => {
+      patchTaskResource(projectId, task.id, (current) => taskWithMutationFields(current, fields));
+    });
+    try {
+      const result = await mutateBatchWithSaveLock(`${updates.length}개 업무 변경사항을 한 번에 기록하고 있습니다.`, {
+        projectId,
+        mutations: updates.map(({ task, fields }) => ({
+          entityType: "task",
+          operation: "UPDATE",
+          id: task.id,
+          expectedRowVersion: task.rowVersion,
+          fields,
+        })),
+      });
+      const canonicalTasks = (result?.data?.results || []).map((item) => item?.record)
+        .filter(Boolean)
+        .map((record) => tasksViewModel({ data: { items: [record], totalMatching: 1 }, generatedAt: result.generatedAt }).items[0]);
+      const canonicalById = new Map(canonicalTasks.map((task) => [task.id, task]));
+      updates.forEach(({ task, fields }) => {
+        const canonicalTask = canonicalById.get(task.id);
+        patchTaskResource(projectId, task.id, (current) => canonicalTask
+          ? { ...current, ...canonicalTask }
+          : { ...taskWithMutationFields(current, fields), rowVersion: Number(current.rowVersion || 0) + 1 });
+      });
+      setTaskActivityState({ ...blankTaskActivity, projectId });
+      setSaveNotice(`${updates.length}개 업무 일정을 Supabase에 저장했습니다.`);
+      return canonicalTasks;
+    } catch (error) {
+      updates.forEach(({ task }) => {
+        const previousTask = previousTasks.get(task.id);
+        if (previousTask) patchTaskResource(projectId, task.id, () => previousTask);
+      });
+      if (error.code === "conflict") invalidateResource(projectId, "tasks");
       throw error;
     }
   };
@@ -1778,11 +2217,11 @@ export function App() {
     if (!projectRow?.rowVersion) {
       const staleError = new Error("프로젝트 최신 정보를 다시 불러온 뒤 저장해 주세요.");
       staleError.code = "conflict";
-      setPageRefreshKey((value) => value + 1);
+      invalidateResource(activeProjectId, "tasks");
       throw staleError;
     }
     try {
-      await source.mutate({
+      await mutateWithSaveLock("프로젝트 착수일을 원장에 기록하고 있습니다.", {
         projectId: activeProjectId,
         mutation: {
           entityType: "project",
@@ -1793,11 +2232,11 @@ export function App() {
         },
       });
     } catch (error) {
-      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      if (error.code === "conflict") invalidateResource(activeProjectId, "tasks");
       throw error;
     }
     setSaveNotice("프로젝트 착수일을 Google Sheets 원장에 저장했습니다.");
-    setPageRefreshKey((value) => value + 1);
+    invalidateResource(activeProjectId, "tasks");
   };
 
   const saveDailyMeeting = async (meeting, fields) => {
@@ -1818,15 +2257,13 @@ export function App() {
       fields,
     };
     try {
-      await source.mutate({ projectId: activeProjectId, mutation });
+      await mutateWithSaveLock("회의록을 원장에 기록하고 있습니다.", { projectId: activeProjectId, mutation });
     } catch (error) {
-      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      if (error.code === "conflict") invalidateResource(activeProjectId, "daily");
       throw error;
     }
-    resourceCacheEpochRef.current += 1;
-    resourceCacheRef.current.delete(`${activeProjectId}:daily`);
     setSaveNotice(meeting ? "회의록을 수정했습니다." : "회의록을 저장했습니다.");
-    setPageRefreshKey((value) => value + 1);
+    invalidateResource(activeProjectId, "daily");
   };
 
   const saveKpiDefinition = async (kpi, fields) => {
@@ -1847,15 +2284,13 @@ export function App() {
       fields,
     };
     try {
-      await source.mutate({ projectId: activeProjectId, mutation });
+      await mutateWithSaveLock("KPI 설정을 원장에 기록하고 있습니다.", { projectId: activeProjectId, mutation });
     } catch (error) {
-      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      if (error.code === "conflict") invalidateResource(activeProjectId, "performance");
       throw error;
     }
-    resourceCacheEpochRef.current += 1;
-    resourceCacheRef.current.delete(`${activeProjectId}:performance`);
     setSaveNotice(kpi ? "KPI 목표를 Google Sheets 원장에 수정했습니다." : "새 KPI를 Google Sheets 원장에 추가했습니다.");
-    setPageRefreshKey((value) => value + 1);
+    invalidateResource(activeProjectId, "performance");
   };
 
   const archiveKpiDefinition = async (kpi) => {
@@ -1865,7 +2300,7 @@ export function App() {
       throw readOnlyError;
     }
     try {
-      await source.mutate({
+      await mutateWithSaveLock("KPI 보관 상태를 원장에 기록하고 있습니다.", {
         projectId: activeProjectId,
         mutation: {
           entityType: "kpi_definition",
@@ -1876,13 +2311,11 @@ export function App() {
         },
       });
     } catch (error) {
-      if (error.code === "conflict") setPageRefreshKey((value) => value + 1);
+      if (error.code === "conflict") invalidateResource(activeProjectId, "performance");
       throw error;
     }
-    resourceCacheEpochRef.current += 1;
-    resourceCacheRef.current.delete(`${activeProjectId}:performance`);
     setSaveNotice("KPI를 보관했습니다.");
-    setPageRefreshKey((value) => value + 1);
+    invalidateResource(activeProjectId, "performance");
   };
 
   const saveAccessAccount = async (account) => {
@@ -1891,11 +2324,9 @@ export function App() {
       forbidden.code = "forbidden";
       throw forbidden;
     }
-    await source.accessAdminMutate({ operation: account.operation, account });
-    resourceCacheEpochRef.current += 1;
-    resourceCacheRef.current.delete(`${activeProjectId}:permissions`);
+    await accessMutateWithSaveLock("계정과 페이지 권한을 원장에 기록하고 있습니다.", { operation: account.operation, account });
     setSaveNotice(account.operation === "DISABLE" ? "고객사 계정을 비활성화했습니다." : account.operation === "REMOVE_ACCESS" ? "선택한 프로젝트 권한을 제거했습니다." : "고객사 계정과 페이지 권한을 저장했습니다.");
-    setPageRefreshKey((value) => value + 1);
+    invalidateResource(activeProjectId, "permissions");
   };
 
   const selectClient = (clientId) => {
@@ -1904,13 +2335,14 @@ export function App() {
     setActiveClient(clientId);
     setActiveProjectId(client.projectId);
     activeProjectIdRef.current = client.projectId;
-    setOverviewState({ ...blankPage, status: "loading", resource: "overview", projectId: client.projectId });
+    setOverviewState(blankPage);
     setResourceState(blankPage);
     setTaskActivityState({ ...blankTaskActivity, projectId: client.projectId });
     taskActivityRequestRef.current = null;
-    setView("overview");
+    const nextProject = bootstrapState.data.projects[client.projectId];
+    const nextView = role !== "client" || isViewAllowed("schedule", nextProject?.allowedPages || []) ? "schedule" : firstAllowedView(nextProject?.allowedPages || []);
+    setView(nextView);
     setSearch("");
-    if (!navigation.usesDrawer) setDesktopNavigationLevel(2);
   };
 
   const navigateToView = (nextView, nextPlanVariant = planVariant) => {
@@ -1921,21 +2353,23 @@ export function App() {
   };
 
   const toggleNavigation = () => {
-    if (navigation.usesDrawer) {
-      setSidebarOpen((current) => !current);
-      return;
-    }
-    setDesktopNavigationLevel((level) => nextDesktopNavigationLevel(level));
+    if (navigation.usesDrawer) setSidebarOpen((current) => !current);
+  };
+
+  const openNotificationTask = (task) => {
+    navigateToView("schedule");
+    setSearch(task?.title || "");
   };
 
   return (
-    <div className={`app-shell ${navigation.shellCollapsed ? "is-navigation-collapsed" : ""} ${navigation.clientRailCollapsed ? "is-client-rail-collapsed" : ""} ${navigation.projectSidebarCollapsed ? "is-project-sidebar-collapsed" : ""} ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""}`}>
+    <div className={`app-shell ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""} ${sheetSaveLock.visible ? "is-sheet-saving" : ""}`} aria-busy={sheetSaveLock.visible}>
       <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
       <ProjectSidebar project={project} role={role} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
-      {navigation.isDrawerOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={() => setPageRefreshKey((value) => value + 1)} onCreate={setCreateEntity} onTaskUpdate={updateTask} onProjectUpdate={updateProjectStartDate} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "Google Sheets 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      {navigation.isDrawerOpen && <button className="mobile-overlay" type="button" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
+      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} notificationTasks={notificationTasks} notificationsLoaded={notificationsLoaded} onNotificationSelect={openNotificationTask} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={refreshCurrentPage} onCreate={setCreateEntity} onTaskUpdate={updateTask} onTaskBatchUpdate={updateTasksBatch} onProjectUpdate={updateProjectStartDate} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} clientName={project.clientName} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
+      {sheetSaveLock.visible && <GlobalSaveOverlay label={sheetSaveLock.label} />}
     </div>
   );
 }

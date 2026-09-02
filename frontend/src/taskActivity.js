@@ -4,6 +4,7 @@ const USER_FACING_TASK_FIELDS = new Set([
   "description",
   "planned_start_date",
   "due_date",
+  "schedule_dates_json",
   "progress_percent",
   "completion_url",
   "remarks",

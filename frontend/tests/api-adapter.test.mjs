@@ -59,6 +59,51 @@ test("live 읽기 성공 시 마지막 동기화 시각을 상태에 기록한�
   assert.equal(source.getState().lastSuccessfulAt, generatedAt);
 });
 
+test("후속 탭 조회와 저장은 전역 화면 상태를 불필요하게 다시 방출하지 않는다", async () => {
+  let generatedIndex = 0;
+  const live = {
+    getSession: () => ({ user: { userId: "USR-1" } }),
+    bootstrap: async () => ({ ok: true, generatedAt: `2026-09-02T10:00:0${generatedIndex++}+09:00`, data: {} }),
+    tasks: async () => ({ ok: true, generatedAt: `2026-09-02T10:00:0${generatedIndex++}+09:00`, data: { items: [] } }),
+    mutate: async () => ({ ok: true, generatedAt: `2026-09-02T10:00:0${generatedIndex++}+09:00`, data: { record: {} } }),
+  };
+  const source = createHubDataSource({
+    config: { endpoint: "https://example.invalid/api", hasEndpoint: true },
+    live,
+  });
+  const phases = [];
+  source.subscribe((state) => phases.push(state.phase));
+
+  await source.bootstrap();
+  await source.tasks({ projectId: "PRJ-1" });
+  await source.mutate({ projectId: "PRJ-1", mutation: { entityType: "task", operation: "UPDATE" } });
+
+  assert.deepEqual(phases, ["idle", "ready"]);
+  assert.equal(source.getState().lastSuccessfulAt, "2026-09-02T10:00:02+09:00");
+});
+
+test("일반 저장 실패는 정상 프로젝트 읽기 상태를 전역 오류 화면으로 바꾸지 않는다", async () => {
+  const failure = new HubApiError("저장 서버 지연", { code: "network_error", retriable: true });
+  const live = {
+    getSession: () => ({ user: { userId: "USR-1" } }),
+    bootstrap: async () => ({ ok: true, generatedAt: "2026-09-03T10:00:00+09:00", data: {} }),
+    mutate: async () => { throw failure; },
+  };
+  const source = createHubDataSource({
+    config: { endpoint: "https://example.invalid/api", hasEndpoint: true },
+    live,
+  });
+  const phases = [];
+  source.subscribe((state) => phases.push(state.phase));
+
+  await source.bootstrap();
+  await assert.rejects(source.mutate({ projectId: "PRJ-1", mutation: {} }), failure);
+
+  assert.deepEqual(phases, ["idle", "ready"]);
+  assert.equal(source.getState().phase, "ready");
+  assert.equal(source.getState().error.code, "network_error");
+});
+
 test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전달한다", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
@@ -100,8 +145,15 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
         fields: { start_date: "2026-09-07" },
       },
     });
+    await api.mutateBatch({
+      projectId: "P-1",
+      mutations: [
+        { entityType: "task", operation: "UPDATE", id: "T-1", expectedRowVersion: 2, fields: { due_date: "2026-09-08" } },
+        { entityType: "task", operation: "UPDATE", id: "T-2", expectedRowVersion: 4, fields: { due_date: "2026-09-09" } },
+      ],
+    });
 
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 5);
     calls.forEach((call) => {
       assert.equal(call.options.method, "POST");
       assert.equal(call.options.headers["Content-Type"], "text/plain;charset=UTF-8");
@@ -119,7 +171,100 @@ test("모든 live 요청은 text/plain POST이며 세션 토큰을 body로 전�
     assert.equal(calls[3].body.mutation.operation, "UPDATE");
     assert.equal(calls[3].body.mutation.expectedRowVersion, 7);
     assert.deepEqual(calls[3].body.mutation.fields, { start_date: "2026-09-07" });
+    assert.equal(calls[4].body.action, "mutate_batch");
+    assert.equal(calls[4].body.projectId, "P-1");
+    assert.equal(calls[4].body.mutations.length, 2);
+    assert.match(calls[4].body.mutations[0].mutationId, /^mut_/);
+    assert.equal(calls[4].body.mutations[1].expectedRowVersion, 4);
     assert.equal(JSON.stringify([...storageMap.values()]).includes("long-access-code"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("구버전 Apps Script는 같은 mutation id를 유지한 단건 저장으로 안전하게 호환한다", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const storageMap = new Map();
+  const sessionStore = createSessionStore({
+    getItem: (key) => storageMap.get(key) || null,
+    setItem: (key, value) => storageMap.set(key, value),
+    removeItem: (key) => storageMap.delete(key),
+  });
+  sessionStore.write({ token: "session-token", expiresIn: 3600, user: { userId: "U-1" } });
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body);
+    if (body.action === "mutate_batch") {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: { code: "invalid_request", status: 400, message: "요청 형식이 올바르지 않습니다." },
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      ok: true,
+      generatedAt: "2026-09-03T10:00:00+09:00",
+      data: { mutationId: body.mutation.mutationId, record: { task_id: body.mutation.id } },
+    }), { status: 200 });
+  };
+
+  try {
+    const api = createHubApi({ endpoint: "https://example.invalid/api", timeoutMs: 3000, credentials: "omit" }, { sessionStore });
+    const result = await api.mutateBatch({
+      projectId: "P-1",
+      mutations: [
+        { entityType: "task", operation: "UPDATE", id: "T-1", expectedRowVersion: 1, fields: { due_date: "2026-09-08" } },
+        { entityType: "task", operation: "UPDATE", id: "T-2", expectedRowVersion: 1, fields: { due_date: "2026-09-09" } },
+      ],
+    });
+    assert.deepEqual(calls.map((call) => call.action), ["mutate_batch", "mutate", "mutate"]);
+    assert.equal(calls[1].mutation.mutationId, calls[0].mutations[0].mutationId);
+    assert.equal(calls[2].mutation.mutationId, calls[0].mutations[1].mutationId);
+    assert.equal(result.data.fallback, true);
+    assert.equal(result.data.results.length, 2);
+
+    await api.mutateBatch({
+      projectId: "P-1",
+      mutations: [
+        { entityType: "task", operation: "UPDATE", id: "T-3", expectedRowVersion: 1, fields: { due_date: "2026-09-10" } },
+        { entityType: "task", operation: "UPDATE", id: "T-4", expectedRowVersion: 1, fields: { due_date: "2026-09-11" } },
+      ],
+    });
+    assert.deepEqual(calls.map((call) => call.action), ["mutate_batch", "mutate", "mutate", "mutate", "mutate"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("간트 한 행 변경은 배치 지원 탐색 없이 단건 mutation 한 번만 호출한다", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const storageMap = new Map();
+  const sessionStore = createSessionStore({
+    getItem: (key) => storageMap.get(key) || null,
+    setItem: (key, value) => storageMap.set(key, value),
+    removeItem: (key) => storageMap.delete(key),
+  });
+  sessionStore.write({ token: "session-token", expiresIn: 3600, user: { userId: "U-1" } });
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body);
+    return new Response(JSON.stringify({
+      ok: true,
+      generatedAt: "2026-09-03T10:00:00+09:00",
+      data: { mutationId: body.mutation.mutationId, record: { task_id: body.mutation.id } },
+    }), { status: 200 });
+  };
+
+  try {
+    const api = createHubApi({ endpoint: "https://example.invalid/api", timeoutMs: 3000, credentials: "omit" }, { sessionStore });
+    const result = await api.mutateBatch({
+      projectId: "P-1",
+      mutations: [{ entityType: "task", operation: "UPDATE", id: "T-1", expectedRowVersion: 2, fields: { schedule_dates_json: "[]" } }],
+    });
+    assert.deepEqual(calls.map((call) => call.action), ["mutate"]);
+    assert.equal(result.data.fallback, true);
+    assert.equal(result.data.results.length, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -448,11 +593,13 @@ test("Sheets 응답을 Pocket 화면 뷰모델로 변환한다", () => {
         plan_week: 2,
         contract_linked: true,
         customer_status_text: "촬영 일정 확인 중",
+        schedule_dates_json: '["2026-09-02","2026-09-04"]',
         progress_percent: 35,
         completion_url: "https://example.com/result",
         remarks: "9월 촬영",
         assignee_user_id: "USR-POCKET-1",
         sort_order: 20,
+        created_at: "2026-09-03T09:15:00+09:00",
         row_version: 4,
       }, {
         task_id: "T-2",
@@ -473,9 +620,11 @@ test("Sheets 응답을 Pocket 화면 뷰모델로 변환한다", () => {
   assert.equal(trackedTask.planWeek, 2);
   assert.equal(trackedTask.contractLinked, true);
   assert.equal(trackedTask.customerStatus, "촬영 일정 확인 중");
+  assert.deepEqual(trackedTask.scheduleDates, ["2026-09-02", "2026-09-04"]);
   assert.equal(trackedTask.progressPercent, 35);
   assert.equal(trackedTask.completionUrl, "https://example.com/result");
   assert.equal(trackedTask.remarks, "9월 촬영");
+  assert.equal(trackedTask.createdAt, "2026-09-03T09:15:00+09:00");
   assert.equal(taskPage.members[0].userId, "USR-POCKET-1");
   assert.equal(taskPage.members[0].displayName, "포켓 담당자");
   assert.equal(taskPage.members[0].organization, "포켓컴퍼니");
@@ -540,7 +689,7 @@ test("업무 활동 뷰모델은 제목, 행위자, 동작, 변경값을 보존�
     ],
     createdAt: "2026-08-26T10:30:00+09:00",
     meta: activity.items[0].meta,
-    internalMeta: "Google Sheets 활동로그",
+    internalMeta: "활동로그",
   });
 });
 
@@ -624,6 +773,7 @@ test("업무 로그 변경값의 상태·담당 조직 코드를 화면 라벨�
         changes: [
           { field: "status_code", label: "상태", before: "IN_PROGRESS", after: "DONE" },
           { field: "responsible_org_code", label: "담당 조직", before: "POCKET", after: "CLIENT" },
+          { field: "schedule_dates_json", label: "간트 일정", before: "[]", after: '["2026-09-01","2026-09-03"]' },
         ],
       }],
     },
@@ -632,6 +782,7 @@ test("업무 로그 변경값의 상태·담당 조직 코드를 화면 라벨�
   assert.deepEqual(activity.items[0].changes, [
     { field: "status_code", label: "상태", before: "진행", after: "완료" },
     { field: "responsible_org_code", label: "담당 조직", before: "포켓", after: "고객사" },
+    { field: "schedule_dates_json", label: "간트 일정", before: "일정 없음", after: "2일 · 2026-09-01~2026-09-03" },
   ]);
 });
 

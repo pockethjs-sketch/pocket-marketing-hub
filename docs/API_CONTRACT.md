@@ -61,11 +61,37 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 
 Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `action`, `projectId`로 라우팅한다. 인증 세션도 query string이나 커스텀 헤더가 아니라 JSON 본문의 `auth.sessionToken`으로 전달한다. 프런트는 각 요청 URL에 데이터 의미와 무관한 `_mh` 난수를 붙여 만료된 Apps Script 302 리다이렉트가 재사용되는 것을 막는다.
 
+간트의 다중 행 수정은 `mutate_batch`를 사용한다. 한 요청에는 같은 `projectId`의 `task / UPDATE`만 최대 40건까지 포함할 수 있으며 업무 ID와 `mutationId`는 요청 안에서 중복될 수 없다. 서버는 모든 행의 권한·허용 필드·`expectedRowVersion`을 쓰기 전에 검사하고, 행별 canonical record를 입력 순서대로 `data.results`에 반환한다. 대량 요청은 프런트가 40건 단위로 순차 분할한다.
+
+```json
+{
+  "action": "mutate_batch",
+  "auth": { "sessionToken": "signed-session" },
+  "projectId": "PRJ-UND-90D-001",
+  "mutations": [
+    {
+      "mutationId": "mut_unique_1",
+      "entityType": "task",
+      "operation": "UPDATE",
+      "id": "TSK-1",
+      "expectedRowVersion": 3,
+      "fields": {
+        "planned_start_date": "2026-09-03",
+        "due_date": "2026-09-05",
+        "schedule_dates_json": "[\"2026-09-03\",\"2026-09-05\"]"
+      }
+    }
+  ]
+}
+```
+
 성과 화면의 KPI 설정은 `mutate`에 `entityType = kpi_definition`을 사용합니다. 내부 운영 계정은 `11_KPI정의`의 생성·수정·보관을 요청할 수 있고, 수정·보관에는 현재 `row_version`이 필요합니다. 허용 필드는 KPI명, 목표값, 단위, 측정주기, 채널, 고객 공개 여부이며 실제 실적은 이 mutation으로 입력하지 않습니다.
 
 `performance_tracking`은 별도 실적을 저장하지 않는 읽기 전용 집계입니다. 첫 응답이 지연되지 않도록 `12_성과일별`의 비용·노출·반응·클릭·문의·전환·매출만 선택 기간 기준으로 한 번 읽어 합산합니다. 고객 역할일 때만 `05_프로젝트채널.customer_visible = true` 채널 목록을 추가 확인합니다. 프런트가 계산하는 전환율과 병목은 이 응답의 실제 합계만 사용하며, 원장 행이 없으면 0원·0건으로 가장하지 않고 연결된 빈 상태를 표시합니다. 이 경량 조회는 모든 화면에서 실행되는 `project_snapshot`에 포함하지 않고 성과 추적 탭 진입 시에만 호출합니다.
 
 고객 계정 생성·수정·비활성화는 `access_admin_mutate` 전용 action을 사용합니다. 입력은 계정 ID, 표시 이름, 프로젝트, 허용 페이지 배열, 활성 상태이며 신규 계정은 8자 이상의 임시 비밀번호가 필요합니다. 서버는 포켓 관리자 권한을 다시 검사하고 사용자·프로젝트권한 원장과 Script Properties의 비밀번호 digest를 갱신합니다. 고객 세션의 화면별 조회는 메뉴 숨김과 별개로 서버에서도 `allowed_pages_json`을 검사해 미허용 action을 `403 page_access_denied`로 거부합니다.
+
+`ops_maintenance.operation = migrate_campaign_schedule_v1`은 Pocket 관리자 전용 캠페인 HTML 이관 작업입니다. `mugeuk`, `und` 두 seed 캠페인을 함께 받아 각각 고정 프로젝트로 매핑하며, `06_업무`가 비어 있거나 기존 이관 원천 ID 집합과 정확히 일치할 때만 동작합니다. 첫 쓰기와 데이터 보정 전에 전체 스프레드시트를 강제 복제하고 21개 원장의 셀 해시가 모두 일치해야 진행합니다. 일정 일자 배열이 없는 구배포 원장은 `schedule_dates_json` 열을 먼저 생성하고 기존 동일 ID 행을 보정합니다. 결과는 사용자 업무 로그가 아니라 `TASK_BATCH` 감사 이벤트로 기록합니다.
 
 ```json
 {
@@ -99,7 +125,9 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 `tasks`는 업무 목록 외에 프로젝트 일정 기준과 콘텐츠 발행 집계를 함께 반환합니다.
 
-프로젝트와 업무의 날짜 필드는 `yyyy-MM-dd` 날짜 전용 문자열입니다. 프런트의 `일정표` 보기는 같은 `tasks` 응답의 `title`, `description`, `planned_start_date`, `due_date`, `progress_percent`, `status_code`, `completion_url`, `remarks`를 왼쪽 9개 업무 열에 표시하고, 같은 행 오른쪽의 일자별 셀에 시작일~종료일 실행 구간을 표시합니다. 기간(일)은 두 날짜에서 파생하며 별도 일정 API나 복제 테이블을 사용하지 않습니다.
+프로젝트와 업무의 날짜 필드는 `yyyy-MM-dd` 날짜 전용 문자열입니다. 프런트의 `일정표` 보기는 같은 `tasks` 응답의 `title`, `description`, `planned_start_date`, `due_date`, `schedule_dates_json`, `progress_percent`, `status_code`, `completion_url`, `remarks`를 사용합니다. 업무의 `created_at`은 서버 생성 시각이며, 생성 후 24시간 신규 표시의 유일한 기준입니다. `updated_at`은 신규 판정에 사용하지 않습니다. `schedule_dates_json`은 정렬·중복 제거된 ISO 날짜 배열 문자열이며 간트 드래그의 비연속 선택을 보존합니다. 값이 없는 구버전 행은 시작일~종료일 전체를 선택한 것으로 해석하고, `[]`는 일정이 없음을 의미합니다. 별도 일정 API나 복제 테이블은 사용하지 않습니다.
+
+간트 UPDATE에서 `schedule_dates_json`을 보내면 서버가 배열을 검증하고 `planned_start_date`·`due_date`를 첫 날짜·마지막 날짜로 다시 계산합니다. 일반 수정 화면이 시작일 또는 종료일만 바꾸면 명시 날짜 배열을 비우고 새 경계의 연속 구간 모델로 돌아갑니다. 배열은 업무당 최대 500일입니다.
 
 `progress_percent`는 0~100 범위의 사용자 직접 입력값입니다. 신규 업무의 기본값은 상태와 관계없이 0이며, `DONE`·`NOT_STARTED` 전환이나 종료일 경과로 서버가 자동 변경하지 않습니다.
 
@@ -132,6 +160,7 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
       "category_code": "플랫폼 확정",
       "title": "킥오프 실시",
       "status_code": "NOT_STARTED",
+      "created_at": "2026-09-03T09:15:00+09:00",
       "plan_week": 1,
       "due_date": null,
       "contract_linked": false,

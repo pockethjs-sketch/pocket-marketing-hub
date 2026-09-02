@@ -60,7 +60,7 @@ function mhHandleMutation_(request, actor) {
   }
 }
 
-function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, actor, project, requestHash) {
+function mhPrepareMutationLocked_(mutationId, entityType, operation, mutation, actor, project, requestHash) {
   var spec = MH_ENTITY_SPECS[entityType];
   var fields = mutation.fields && typeof mutation.fields === 'object' ? mutation.fields : {};
   var id = mhAsText_(mutation.id || mutation.recordId || mutation.record_id);
@@ -77,6 +77,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
     after.project_id = mhAsText_(project.project_id);
     mhAssertApproverAssignmentAllowed_(entityType, fields, null, actor);
     mhApplyAllowedFields_(after, fields, spec, actor);
+    mhApplyTaskGanttSchedule_(after, fields, entityType, null);
     mhApplyCreateDefaults_(after, entityType, actor, now);
     mhApplyTaskCompletionStamp_(after, null, entityType, now);
     mhValidateMutationRecord_(after, spec, entityType, actor, project, null);
@@ -104,6 +105,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
       if (!Object.keys(fields).length) throw mhApiError_('validation_error', 'empty_update', 400);
       mhAssertApproverAssignmentAllowed_(entityType, fields, before, actor);
       mhApplyAllowedFields_(after, fields, spec, actor);
+      mhApplyTaskGanttSchedule_(after, fields, entityType, before);
     }
     if (operation === 'ARCHIVE') after.archived_at = now;
     after.updated_at = now;
@@ -116,8 +118,37 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
     mutationId, entityType, mhAsText_(after[spec.idField]), operation,
     before, after, actor, project, 'PREPARE', now, requestHash
   );
-  mhAppendRecord_(MH_SHEETS.ACTIVITY, prepareLog);
-  mhRememberMutationRegistry_(prepareLog, requestHash);
+  return {
+    mutationId: mutationId,
+    entityType: entityType,
+    operation: operation,
+    requestHash: requestHash,
+    spec: spec,
+    existingResult: existingResult,
+    before: before,
+    after: after,
+    prepareLog: prepareLog
+  };
+}
+
+function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, actor, project, requestHash) {
+  var prepared = mhPrepareMutationLocked_(
+    mutationId, entityType, operation, mutation, actor, project, requestHash
+  );
+  var spec = prepared.spec;
+  var existingResult = prepared.existingResult;
+  var before = prepared.before;
+  var after = prepared.after;
+  var prepareLog = prepared.prepareLog;
+  // Reuse the same activity sheet/header reference for PREPARE and COMMIT.
+  // Re-reading the growing audit ledger after PREPARE made even a one-row
+  // task update progressively slower over time.
+  var activityTable = mhReadTable_(MH_SHEETS.ACTIVITY);
+  mhAppendRecordsToTable_(activityTable, [prepareLog], true);
+  // PREPARE is already durably flushed to the activity ledger. Duplicating it
+  // in the mutation index added another Sheets write/flush to every click.
+  // A retry without an index row falls back to the activity ledger and runs
+  // the same prepared-mutation recovery path; only the final result is indexed.
 
   try {
     if (operation === 'CREATE') {
@@ -129,7 +160,7 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
       mutationId, entityType, mhAsText_(after[spec.idField]), operation,
       before, after, actor, project, 'COMMIT', mhNowIso_(), requestHash
     );
-    mhAppendRecord_(MH_SHEETS.ACTIVITY, commitLog);
+    mhAppendRecordsToTable_(activityTable, [commitLog], true);
     mhRememberMutationRegistry_(commitLog, requestHash);
     mhInvalidateClientReadCache_(project.project_id);
     return {
@@ -146,10 +177,126 @@ function mhApplyMutationLocked_(mutationId, entityType, operation, mutation, act
         before, { error_code: error.apiCode || 'write_failed' }, actor, project,
         'FAILED', mhNowIso_(), requestHash
       );
-      mhAppendRecord_(MH_SHEETS.ACTIVITY, failedLog);
+      mhAppendRecordsToTable_(activityTable, [failedLog], true);
       mhRememberMutationRegistry_(failedLog, requestHash);
     } catch (ignored) {}
     throw error;
+  }
+}
+
+function mhHandleMutationBatch_(request, actor) {
+  var mutations = Array.isArray(request.mutations) ? request.mutations : [];
+  if (!mutations.length || mutations.length > 40) {
+    throw mhApiError_('validation_error', 'invalid_batch_size', 400);
+  }
+  var projectId = mhAsText_(request.projectId || request.project_id || mutations[0].projectId || mutations[0].project_id);
+  var mutationIds = {};
+  var recordIds = {};
+  var normalized = mutations.map(function (mutation) {
+    var mutationId = mhAsText_(mutation.mutationId || mutation.mutation_id);
+    var entityType = mhAsText_(mutation.entityType || mutation.entity_type).toLowerCase();
+    var operation = mhAsText_(mutation.operation).toUpperCase();
+    var mutationProjectId = mhAsText_(mutation.projectId || mutation.project_id || projectId);
+    var recordId = mhAsText_(mutation.id || mutation.recordId || mutation.record_id);
+    if (!/^mut_[A-Za-z0-9_-]{8,120}$/i.test(mutationId)) {
+      throw mhApiError_('validation_error', 'invalid_mutation_id', 400);
+    }
+    if (!projectId || mutationProjectId !== projectId || entityType !== 'task' || operation !== 'UPDATE' || !recordId) {
+      throw mhApiError_('invalid_request', 'invalid_batch_mutation_shape', 400);
+    }
+    if (mutationIds[mutationId]) throw mhApiError_('validation_error', 'duplicate_batch_mutation_id', 400);
+    if (recordIds[recordId]) throw mhApiError_('validation_error', 'duplicate_batch_record_id', 400);
+    mutationIds[mutationId] = true;
+    recordIds[recordId] = true;
+    return {
+      mutation: mutation,
+      mutationId: mutationId,
+      entityType: entityType,
+      operation: operation,
+      projectId: mutationProjectId,
+      requestHash: mhMutationRequestHash_(entityType, operation, mutationProjectId, mutation, actor.userId)
+    };
+  });
+
+  mhBeginMutationTables_([
+    MH_SHEETS.USERS, MH_SHEETS.MEMBERSHIPS, MH_SHEETS.PROJECTS,
+    MH_SHEETS.TASKS, MH_SHEETS.ACTIVITY, MH_SHEETS.MUTATIONS
+  ]);
+  if (actor.role === 'CLIENT_VIEWER' && MH_PUBLIC_TASK_WRITES_ENABLED) actor.allowPreviewTaskWrite = true;
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) throw mhApiError_('lock_timeout', 'write_lock_timeout', 409);
+  try {
+    var access = mhRequireProjectAccess_(actor, projectId, true);
+    var scope = mhScopeForProject_(actor, access.project);
+    var results = new Array(normalized.length);
+    var pending = [];
+    var logsByMutationId = mhFindMutationLogsBatch_(normalized.map(function (item) { return item.mutationId; }));
+
+    normalized.forEach(function (item, index) {
+      var mutationLogs = logsByMutationId[item.mutationId];
+      var mutationState = mutationLogs.commit || mutationLogs.prepare;
+      if (mutationState && (
+        mhAsText_(mutationState.entity_type).toLowerCase() !== item.entityType ||
+        mhAsText_(mutationState.action_code) !== mhMutationActionCode_(item.operation)
+      )) {
+        throw mhApiError_('conflict', 'mutation_id_reused_for_different_operation', 409);
+      }
+      if (mutationState && mhAsText_(mutationState.project_id) !== projectId) {
+        throw mhApiError_('forbidden', 'mutation_scope_mismatch', 403);
+      }
+      if (mutationLogs.commit) {
+        mhAssertMutationRequestHash_(mutationState, item.requestHash);
+        results[index] = mhMutationReplay_(mutationState, actor);
+        return;
+      }
+      if (mutationLogs.prepare) {
+        mhAssertMutationRequestHash_(mutationState, item.requestHash);
+        var recovered = mhRecoverPreparedMutation_(mutationState, actor, access.project, item.requestHash);
+        if (!recovered) throw mhApiError_('conflict', 'prepared_mutation_incomplete', 409);
+        results[index] = recovered;
+        return;
+      }
+      var prepared = mhPrepareMutationLocked_(
+        item.mutationId, item.entityType, item.operation, item.mutation,
+        actor, access.project, item.requestHash
+      );
+      prepared.resultIndex = index;
+      pending.push(prepared);
+    });
+
+    if (pending.length) {
+      var activityTable = mhReadTable_(MH_SHEETS.ACTIVITY);
+      mhAppendRecordsToTable_(activityTable, pending.map(function (item) { return item.prepareLog; }), true);
+      mhUpdateRecords_(pending[0].existingResult.table, pending.map(function (item) {
+        return { rowNumber: item.before.__rowNumber, record: item.after };
+      }));
+
+      var commitLogs = pending.map(function (item) {
+        return mhActivityRecord_(
+          item.mutationId, item.entityType, mhAsText_(item.after[item.spec.idField]), item.operation,
+          item.before, item.after, actor, access.project, 'COMMIT', mhNowIso_(), item.requestHash
+        );
+      });
+      mhAppendRecordsToTable_(activityTable, commitLogs, true);
+      mhRememberMutationRegistries_(commitLogs.map(function (log, index) {
+        return { activity: log, requestHash: pending[index].requestHash };
+      }));
+      mhInvalidateClientReadCache_(projectId);
+
+      pending.forEach(function (item) {
+        results[item.resultIndex] = {
+          mutationId: item.mutationId,
+          duplicate: false,
+          entityType: item.entityType,
+          operation: item.operation,
+          record: mhMutationResponseRecord_(item.after, item.spec, actor)
+        };
+      });
+    }
+    return { scope: scope, data: { batch: true, results: results } };
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -205,6 +352,52 @@ function mhApplyCreateDefaults_(record, entityType, actor, now) {
       record.customer_visible = true;
     }
   }
+}
+
+function mhApplyTaskGanttSchedule_(record, fields, entityType, before) {
+  if (entityType !== 'task') return;
+  var hasScheduleDates = Object.prototype.hasOwnProperty.call(fields || {}, 'schedule_dates_json');
+  var hasDateBounds = Object.prototype.hasOwnProperty.call(fields || {}, 'planned_start_date') ||
+    Object.prototype.hasOwnProperty.call(fields || {}, 'due_date');
+
+  // Manual date edits return the row to the legacy contiguous-range model.
+  // A Gantt paint request sends schedule_dates_json and therefore takes
+  // precedence over its derived start/end bounds.
+  if (!hasScheduleDates) {
+    var startChanged = Object.prototype.hasOwnProperty.call(fields || {}, 'planned_start_date') &&
+      mhDateOnly_(record.planned_start_date) !== mhDateOnly_(before && before.planned_start_date);
+    var endChanged = Object.prototype.hasOwnProperty.call(fields || {}, 'due_date') &&
+      mhDateOnly_(record.due_date) !== mhDateOnly_(before && before.due_date);
+    if (hasDateBounds && (!before || startChanged || endChanged)) record.schedule_dates_json = '';
+    return;
+  }
+
+  var parsed;
+  try {
+    parsed = JSON.parse(mhAsText_(record.schedule_dates_json) || '[]');
+  } catch (error) {
+    throw mhApiError_('validation_error', 'invalid_schedule_dates_json', 400);
+  }
+  if (!Array.isArray(parsed) || parsed.length > 500) {
+    throw mhApiError_('validation_error', 'invalid_schedule_dates_json', 400);
+  }
+  var seen = {};
+  var dates = [];
+  parsed.forEach(function (value) {
+    var date = mhAsText_(value).slice(0, 10);
+    var parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(date + 'T00:00:00Z') : null;
+    if (!parsedDate || isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) {
+      throw mhApiError_('validation_error', 'invalid_schedule_date', 400);
+    }
+    if (!seen[date]) {
+      seen[date] = true;
+      dates.push(date);
+    }
+  });
+  dates.sort();
+  record.schedule_dates_json = JSON.stringify(dates);
+  record.planned_start_date = dates.length ? dates[0] : '';
+  record.due_date = dates.length ? dates[dates.length - 1] : '';
 }
 
 function mhApplyTaskCompletionStamp_(record, before, entityType, now) {
@@ -433,6 +626,45 @@ function mhFindMutationLogs_(mutationId) {
     if (status === 'COMMIT' && !found.commit) found.commit = rows[i];
     if (status === 'PREPARE' && !found.prepare) found.prepare = rows[i];
     if (found.commit && found.prepare) break;
+  }
+  return found;
+}
+
+function mhFindMutationLogsBatch_(mutationIds) {
+  var targets = {};
+  var found = {};
+  (mutationIds || []).forEach(function (mutationId) {
+    var id = mhAsText_(mutationId);
+    targets[id] = true;
+    found[id] = { commit: null, prepare: null };
+  });
+
+  if (mhOperationsSheetExists_(MH_SHEETS.MUTATIONS)) {
+    mhReadTable_(MH_SHEETS.MUTATIONS).rows.forEach(function (row) {
+      var id = mhAsText_(row.mutation_id);
+      if (!targets[id]) return;
+      var status = mhAsText_(row.event_status_code).toUpperCase();
+      if (status === 'COMMIT') found[id].commit = row;
+      if (status === 'PREPARE') found[id].prepare = row;
+    });
+  }
+
+  var unresolved = {};
+  Object.keys(found).forEach(function (id) {
+    if (!found[id].commit && !found[id].prepare) unresolved[id] = true;
+  });
+  if (!Object.keys(unresolved).length) return found;
+
+  var rows = mhReadTable_(MH_SHEETS.ACTIVITY).rows;
+  for (var index = rows.length - 1; index >= 0; index -= 1) {
+    var row = rows[index];
+    var mutationId = mhAsText_(row.mutation_id);
+    if (!unresolved[mutationId]) continue;
+    var eventStatus = mhAsText_(row.event_status_code).toUpperCase();
+    if (eventStatus === 'COMMIT' && !found[mutationId].commit) found[mutationId].commit = row;
+    if (eventStatus === 'PREPARE' && !found[mutationId].prepare) found[mutationId].prepare = row;
+    if (found[mutationId].commit || found[mutationId].prepare) delete unresolved[mutationId];
+    if (!Object.keys(unresolved).length) break;
   }
   return found;
 }

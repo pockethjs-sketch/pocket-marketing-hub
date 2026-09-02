@@ -1,46 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEFAULT_DESKTOP_NAVIGATION_LEVEL, getNavigationPresentation, nextDesktopNavigationLevel } from "../src/navigationState.js";
+import { getNavigationPresentation } from "../src/navigationState.js";
 import { parseViewLocation, viewLocationHash, viewResourceKey } from "../src/planNavigation.js";
 
-test("데스크톱 탐색은 메인 → 프로젝트 메뉴 → 전체 프로젝트 순서로 한 단계씩 열린다", () => {
-  const mainOnly = getNavigationPresentation({ role: "client", desktopLevel: 0 });
-  const projectOnly = getNavigationPresentation({ role: "client", desktopLevel: 1 });
-  const allVisible = getNavigationPresentation({ role: "pocket", desktopLevel: 2 });
-
-  assert.equal(mainOnly.usesDrawer, false);
-  assert.equal(mainOnly.controlVisible, true);
-  assert.equal(mainOnly.controlledIds, "project-navigation");
-  assert.equal(mainOnly.actionLabel, "프로젝트 메뉴 열기");
-  assert.equal(mainOnly.iconDirection, "right");
-  assert.equal(mainOnly.clientRailVisible, false);
-  assert.equal(mainOnly.projectSidebarVisible, false);
-  assert.equal(projectOnly.controlVisible, true);
-  assert.equal(projectOnly.controlledIds, "client-navigation");
-  assert.equal(projectOnly.actionLabel, "전체 프로젝트 열기");
-  assert.equal(projectOnly.iconDirection, "right");
-  assert.equal(projectOnly.clientRailVisible, false);
-  assert.equal(projectOnly.projectSidebarVisible, true);
-  assert.equal(allVisible.clientRailVisible, true);
-  assert.equal(allVisible.projectSidebarVisible, true);
-  assert.equal(allVisible.actionLabel, "탐색 메뉴 닫기");
-  assert.equal(allVisible.controlledIds, "client-navigation project-navigation");
-  assert.equal(allVisible.iconDirection, "left");
-  assert.equal(allVisible.shellCollapsed, false);
-});
-
-test("첫 데스크톱 화면은 고객사와 프로젝트 메뉴를 모두 펼친다", () => {
-  assert.equal(DEFAULT_DESKTOP_NAVIGATION_LEVEL, 2);
-  const initial = getNavigationPresentation({ role: "pocket" });
+test("데스크톱에서는 고객사와 프로젝트 메뉴를 접기 버튼 없이 항상 표시한다", () => {
+  const initial = getNavigationPresentation({ role: "pocket", desktopLevel: 0 });
+  assert.equal(initial.usesDrawer, false);
+  assert.equal(initial.controlVisible, false);
   assert.equal(initial.clientRailVisible, true);
   assert.equal(initial.projectSidebarVisible, true);
-});
-
-test("하나의 데스크톱 탐색 버튼은 세 단계를 순환한다", () => {
-  assert.equal(nextDesktopNavigationLevel(0), 1);
-  assert.equal(nextDesktopNavigationLevel(1), 2);
-  assert.equal(nextDesktopNavigationLevel(2), 0);
+  assert.equal(initial.clientRailCollapsed, false);
+  assert.equal(initial.projectSidebarCollapsed, false);
 });
 
 test("작은 화면에서는 포켓·NS 계정도 임시 탐색 서랍을 사용한다", () => {

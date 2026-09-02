@@ -1,3 +1,5 @@
+import { scheduleDateBounds, taskScheduleDates } from "./taskGantt.js";
+
 const DAY_MS = 86_400_000;
 
 function dateOnly(value) {
@@ -21,6 +23,19 @@ function dayDiff(left, right) {
 
 export function taskScheduleCategory(task = {}) {
   return String(task.stream || task.category || task.parent || "미분류").trim() || "미분류";
+}
+
+const TASK_MEDIA_LABELS = {
+  YOUTUBE: "YouTube",
+  INSTAGRAM: "Instagram",
+  NAVER_BLOG: "네이버블로그",
+  TIKTOK: "TikTok",
+  ADS: "Ads",
+};
+
+export function taskScheduleMedia(task = {}) {
+  const code = String(task.categoryCode || "").trim().toUpperCase();
+  return TASK_MEDIA_LABELS[code] || String(task.category || task.parent || "미지정").trim() || "미지정";
 }
 
 export function taskScheduleStatusGroup(task = {}) {
@@ -52,15 +67,15 @@ export function filterTaskSchedule(tasks = [], filters = {}, todayValue = new Da
     if (category !== "ALL" && taskScheduleCategory(task) !== category) return false;
     if (schedule === "ALL") return true;
 
-    const start = dateOnly(task.plannedStartDate);
-    const end = dateOnly(task.dueDate);
-    if (!today || !start || !end) return false;
+    const selectedDates = taskScheduleDates(task);
+    if (!today || !selectedDates.length) return false;
     const offset = schedule === "LAST_WEEK" ? -1 : schedule === "THIS_WEEK" ? 0 : schedule === "NEXT_WEEK" ? 1 : null;
     if (offset !== null) {
       const week = taskWeekRange(today, offset);
-      const taskStart = start <= end ? start : end;
-      const taskEnd = end >= start ? end : start;
-      return taskStart <= week.end && taskEnd >= week.start;
+      return selectedDates.some((date) => {
+        const selected = dateOnly(date);
+        return selected && selected >= week.start && selected <= week.end;
+      });
     }
     return true;
   });
@@ -79,10 +94,6 @@ export function sortTaskSchedule(tasks = []) {
   });
 }
 
-export function toggleScheduleTaskSelection(selectedTaskId, taskId) {
-  return selectedTaskId === taskId ? null : taskId;
-}
-
 export function toggleScheduleStatusFilter(currentStatus, selectedStatus) {
   const current = String(currentStatus || "ALL").toUpperCase();
   const selected = String(selectedStatus || "ALL").toUpperCase();
@@ -91,15 +102,18 @@ export function toggleScheduleStatusFilter(currentStatus, selectedStatus) {
 
 export function buildTaskTimeline(tasks = [], project = {}, todayValue = new Date()) {
   const candidates = tasks.map((task) => {
-    const start = dateOnly(task.plannedStartDate || task.dueDate);
-    const end = dateOnly(task.dueDate || task.plannedStartDate);
+    const bounds = scheduleDateBounds(taskScheduleDates(task));
+    const start = dateOnly(bounds.start || task.plannedStartDate || task.dueDate);
+    const end = dateOnly(bounds.end || task.dueDate || task.plannedStartDate);
     return start && end ? { task, start, end: end < start ? start : end } : null;
   }).filter(Boolean);
   const projectStart = dateOnly(project.startDate);
   const projectEnd = dateOnly(project.endDate);
-  const starts = candidates.map((item) => item.start).concat(projectStart ? [projectStart] : []);
-  // 실제 업무가 있으면 프로젝트 계약 종료일까지 빈 축을 늘리지 않는다.
-  // 프로젝트 종료일은 일정 업무가 하나도 없을 때만 예비 범위로 사용한다.
+  // 실제 업무가 있으면 원본 캠페인 간트처럼 업무의 첫 날짜와 마지막
+  // 날짜만 축으로 사용한다. 프로젝트 기간은 빈 일정의 예비 범위다.
+  const starts = candidates.length
+    ? candidates.map((item) => item.start)
+    : projectStart ? [projectStart] : [];
   const ends = candidates.length
     ? candidates.map((item) => item.end)
     : projectEnd ? [projectEnd] : [];

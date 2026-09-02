@@ -165,15 +165,26 @@ function mhHeaderIndex_(headers, field) {
 }
 
 function mhAppendRecord_(sheetName, record) {
-  var table = mhReadTable_(sheetName);
-  var values = table.headers.map(function (header) {
-    return Object.prototype.hasOwnProperty.call(record, header) ? record[header] : '';
-  });
-  var sheet = table.sheet || mhSheet_(sheetName);
-  sheet.appendRow(values);
-  SpreadsheetApp.flush();
-  mhInvalidateTableCache_(sheetName);
+  mhAppendRecordsToTable_(mhReadTable_(sheetName), [record], true);
   return record;
+}
+
+function mhAppendRecordsToTable_(table, records, shouldFlush) {
+  if (!records || !records.length) return records || [];
+  var sheet = table.sheet || mhSheet_(table.sheetName);
+  var values = records.map(function (record) {
+    return table.headers.map(function (header) {
+      return Object.prototype.hasOwnProperty.call(record, header) ? record[header] : '';
+    });
+  });
+  sheet.getRange(sheet.getLastRow() + 1, 1, values.length, table.headers.length).setValues(values);
+  if (shouldFlush !== false) SpreadsheetApp.flush();
+  mhInvalidateTableCache_(table.sheetName);
+  return records;
+}
+
+function mhAppendRecords_(sheetName, records, shouldFlush) {
+  return mhAppendRecordsToTable_(mhReadTable_(sheetName), records, shouldFlush);
 }
 
 function mhUpdateRecord_(table, rowNumber, record) {
@@ -200,6 +211,56 @@ function mhUpdateRecord_(table, rowNumber, record) {
   SpreadsheetApp.flush();
   mhInvalidateTableCache_(table.sheetName);
   return record;
+}
+
+function mhUpdateRecords_(table, updates) {
+  if (!updates || !updates.length) return [];
+  var ordered = updates.slice().sort(function (a, b) { return a.rowNumber - b.rowNumber; });
+  var seenRows = {};
+  ordered.forEach(function (update) {
+    if (!update || !isFinite(update.rowNumber) || update.rowNumber < 2 || seenRows[update.rowNumber]) {
+      throw mhApiError_('validation_error', 'invalid_batch_row', 400);
+    }
+    seenRows[update.rowNumber] = true;
+  });
+
+  var groups = [];
+  ordered.forEach(function (update) {
+    var group = groups[groups.length - 1];
+    if (!group || update.rowNumber !== group[group.length - 1].rowNumber + 1) groups.push([update]);
+    else group.push(update);
+  });
+
+  var sheet = table.sheet || mhSheet_(table.sheetName);
+  groups.forEach(function (group) {
+    var firstRow = group[0].rowNumber;
+    var range = sheet.getRange(firstRow, 1, group.length, table.headers.length);
+    var currentRows = range.getValues();
+    var formulaRows = range.getFormulas();
+    var changed = false;
+    var nextRows = currentRows.map(function (current, rowOffset) {
+      var record = group[rowOffset].record;
+      var next = current.slice();
+      table.headers.forEach(function (header, columnIndex) {
+        if (!Object.prototype.hasOwnProperty.call(record, header)) return;
+        var value = record[header];
+        if (mhStableJson_(mhToIsoValue_(current[columnIndex])) === mhStableJson_(mhToIsoValue_(value))) return;
+        if (formulaRows[rowOffset][columnIndex]) {
+          throw mhApiError_('schema_mismatch', 'formula_field_is_server_read_only', 500);
+        }
+        next[columnIndex] = value;
+        changed = true;
+      });
+      formulaRows[rowOffset].forEach(function (formula, columnIndex) {
+        if (formula) next[columnIndex] = formula;
+      });
+      return next;
+    });
+    if (changed) range.setValues(nextRows);
+  });
+  SpreadsheetApp.flush();
+  mhInvalidateTableCache_(table.sheetName);
+  return ordered.map(function (update) { return update.record; });
 }
 
 function mhAssertHeaders_(sheetName, requiredHeaders) {

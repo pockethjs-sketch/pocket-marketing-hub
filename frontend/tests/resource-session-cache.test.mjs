@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { clearResourceSessionCache, readResourceSessionCache, writeResourceSessionCache } from "../src/resourceSessionCache.js";
+import {
+  clearResourceSessionCache,
+  readResourceSessionCache,
+  removeResourceSessionCache,
+  scheduleResourceSessionCacheWrite,
+  writeResourceSessionCache,
+} from "../src/resourceSessionCache.js";
 
 function memoryStorage() {
   const values = new Map();
@@ -36,5 +42,27 @@ test("오래된 업무 캐시와 로그아웃 캐시는 재사용하지 않는�
 
   writeResourceSessionCache(session, "PRJ-1:tasks", { ...stale, cachedAt: Date.now() }, { storage });
   clearResourceSessionCache({ storage });
+  assert.equal(readResourceSessionCache(session, "PRJ-1:tasks", { storage }), null);
+});
+
+test("연속 업무 변경은 마지막 브라우저 캐시만 유휴 시간에 기록한다", () => {
+  const storage = memoryStorage();
+  const session = { user: { userId: "USR-POCKET" } };
+  const jobs = [];
+  const schedule = (callback) => {
+    const job = { callback, cancelled: false };
+    jobs.push(job);
+    return () => { job.cancelled = true; };
+  };
+  const first = { state: { status: "ready", data: { items: [{ id: "TASK-1", title: "처음" }] } }, cachedAt: Date.now() };
+  const last = { state: { status: "ready", data: { items: [{ id: "TASK-1", title: "마지막" }] } }, cachedAt: Date.now() };
+
+  assert.equal(scheduleResourceSessionCacheWrite(session, "PRJ-1:tasks", first, { storage, schedule }), true);
+  assert.equal(scheduleResourceSessionCacheWrite(session, "PRJ-1:tasks", last, { storage, schedule }), true);
+  assert.equal(jobs[0].cancelled, true);
+  jobs.forEach((job) => { if (!job.cancelled) job.callback(); });
+  assert.equal(readResourceSessionCache(session, "PRJ-1:tasks", { storage }).state.data.items[0].title, "마지막");
+
+  assert.equal(removeResourceSessionCache(session, "PRJ-1:tasks", { storage }), true);
   assert.equal(readResourceSessionCache(session, "PRJ-1:tasks", { storage }), null);
 });

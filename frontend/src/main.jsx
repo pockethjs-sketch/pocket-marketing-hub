@@ -1,10 +1,9 @@
-import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
 import "./styles.css";
 
-createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+// The app already has deterministic request deduplication and contract tests.
+// Avoid StrictMode's development-only double mount here: on large task/Gantt
+// screens it doubled local render work and made the app feel slower than the
+// production Pages build users actually receive.
+createRoot(document.getElementById("root")).render(<App />);

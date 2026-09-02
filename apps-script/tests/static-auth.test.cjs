@@ -425,6 +425,15 @@ const cachedSnapshot = context.mhCachedClientRead_(
 assert.equal(cachedSnapshot.hit, true);
 assert.deepEqual(JSON.parse(JSON.stringify(cachedSnapshot.data)), largeSnapshot);
 
+const internalCacheActor = { userId: 'USR-POCKET', role: 'POCKET_MANAGER' };
+context.mhRememberClientRead_(
+  'tasks', { limit: 200 }, internalCacheActor, 'PRJ-UND-90D-001', { items: [{ task_id: 'TSK-1' }] },
+);
+assert.equal(
+  context.mhCachedClientRead_('tasks', { limit: 200 }, internalCacheActor, 'PRJ-UND-90D-001').hit,
+  true,
+);
+
 assert.deepEqual(Array.from(context.MH_ENTITY_SPECS.project.operations), ['UPDATE']);
 assert.deepEqual(Array.from(context.MH_ENTITY_SPECS.project.fields), ['start_date']);
 const mutationSource = fs.readFileSync(path.join(root, 'Mutations.gs'), 'utf8');
@@ -432,6 +441,7 @@ assert.match(mutationSource, /spec\.operations && spec\.operations\.indexOf\(ope
 assert.match(mutationSource, /\['start_date', 'planned_start_date'/);
 assert.match(mutationSource, /\['MASTER', 'POCKET_MANAGER', 'POCKET_EDITOR'\]\.indexOf\(actor\.role\) < 0/);
 assert.match(mutationSource, /mhInvalidateClientReadCache_\(project\.project_id\)/);
+assert.match(readApiSource, /function mhProjectTask_\([\s\S]*?'sort_order', 'created_at', 'updated_at', 'row_version'/);
 
 // Task activity is a safe, task-specific audit projection: only committed
 // task events are returned, with the task title, actor display name, and

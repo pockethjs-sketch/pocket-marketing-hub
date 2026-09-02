@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleStatusGroup, toggleScheduleStatusFilter, toggleScheduleTaskSelection, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한다", () => {
   const timeline = buildTaskTimeline([
@@ -25,6 +25,14 @@ test("일정표 끝은 프로젝트 종료일이 아니라 가장 늦은 업무 
   assert.equal(timeline.start, "2026-09-01");
   assert.equal(timeline.end, "2026-09-12");
   assert.equal(timeline.dayCount, 12);
+});
+
+test("업무가 있으면 프로젝트 착수일보다 실제 첫 업무일에서 간트가 시작한다", () => {
+  const timeline = buildTaskTimeline([
+    { id: "A", plannedStartDate: "2026-09-01", dueDate: "2026-09-05" },
+  ], { startDate: "2026-08-24", endDate: "2026-12-14" });
+  assert.equal(timeline.start, "2026-09-01");
+  assert.equal(timeline.end, "2026-09-05");
 });
 
 test("등록된 업무 일정이 없을 때만 프로젝트 기간을 예비 축으로 사용한다", () => {
@@ -59,6 +67,11 @@ test("일정표 업무를 상태와 카테고리로 함께 필터링한다", () 
   assert.deepEqual(filterTaskSchedule(tasks, { status: "ACTIVE", category: "마케팅" }, "2026-09-01").map((task) => task.id), ["A"]);
 });
 
+test("간트 그룹은 업무 분야와 분리해 원본 매체 이름을 사용한다", () => {
+  assert.equal(taskScheduleMedia({ categoryCode: "YOUTUBE", stream: "마케팅" }), "YouTube");
+  assert.equal(taskScheduleMedia({ categoryCode: "NAVER_BLOG", stream: "디자인" }), "네이버블로그");
+});
+
 test("일정 구간은 월요일부터 일요일까지 지난주·이번주·다음주로 구분한다", () => {
   const tasks = [
     { id: "LAST", statusCode: "DONE", plannedStartDate: "2026-08-24", dueDate: "2026-08-30" },
@@ -72,6 +85,17 @@ test("일정 구간은 월요일부터 일요일까지 지난주·이번주·다
   assert.deepEqual(filterTaskSchedule(tasks, { schedule: "THIS_WEEK" }, new Date(2026, 8, 1, 9, 30)).map((task) => task.id), ["THIS"]);
 });
 
+test("비연속 간트 일정은 시작일과 종료일 사이의 빈 주를 일정으로 오인하지 않는다", () => {
+  const tasks = [{
+    id: "HOLE",
+    plannedStartDate: "2026-08-30",
+    dueDate: "2026-09-07",
+    scheduleDates: ["2026-08-30", "2026-09-07"],
+  }];
+  assert.deepEqual(filterTaskSchedule(tasks, { schedule: "THIS_WEEK" }, "2026-09-01"), []);
+  assert.deepEqual(filterTaskSchedule(tasks, { schedule: "NEXT_WEEK" }, "2026-09-01").map((task) => task.id), ["HOLE"]);
+});
+
 test("일정표는 시작일과 종료일이 빠른 업무를 먼저 두고 미등록 업무를 마지막에 둔다", () => {
   const tasks = [
     { id: "NONE", title: "일정 없음" },
@@ -82,30 +106,26 @@ test("일정표는 시작일과 종료일이 빠른 업무를 먼저 두고 미�
   assert.deepEqual(sortTaskSchedule(tasks).map((task) => task.id), ["EARLY-A", "EARLY-B", "LATE", "NONE"]);
 });
 
-test("일정 블록은 첫 클릭에 수정 버튼을 열고 같은 블록 재클릭에 닫는다", () => {
-  assert.equal(toggleScheduleTaskSelection(null, "TASK-1"), "TASK-1");
-  assert.equal(toggleScheduleTaskSelection("TASK-1", "TASK-1"), null);
-  assert.equal(toggleScheduleTaskSelection("TASK-1", "TASK-2"), "TASK-2");
-});
-
 test("일정표 상단 상태 요약은 같은 상태를 다시 누르면 전체로 돌아간다", () => {
   assert.equal(toggleScheduleStatusFilter("ALL", "DONE"), "DONE");
   assert.equal(toggleScheduleStatusFilter("DONE", "DONE"), "ALL");
   assert.equal(toggleScheduleStatusFilter("DONE", "ACTIVE"), "ACTIVE");
 });
 
-test("일정표는 날짜 셀 반복 채움 대신 시작점 하나의 간트 블록을 사용한다", () => {
+test("간트는 날짜별 선택 셀과 연속 구간 모서리를 표시한다", () => {
   const appSource = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
   const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-  assert.match(appSource, /starts \? <div className=\{`task-schedule-bar-shell/);
-  assert.match(appSource, /task-schedule-color/);
-  assert.match(appSource, /task-schedule-bar-edit/);
-  assert.match(appSource, /<th rowSpan="2">상태<\/th><th rowSpan="2">담당<\/th>/);
+  assert.match(appSource, /className="gantt reference-gantt"/);
+  assert.match(appSource, /starts \? " rs"/);
+  assert.match(appSource, /ends \? " re"/);
+  assert.doesNotMatch(appSource, /g-c task-schedule-cell/);
+  assert.match(appSource, /className="g-rail-dot"/);
+  assert.match(appSource, /<div className="g-months">/);
   assert.match(appSource, /taskResponsibleOrgLabel\(task\.responsibleOrgCode, project\.clientName\)/);
   assert.match(appSource, /className="task-schedule-date"/);
-  assert.match(styles, /\.task-schedule-row/);
-  assert.match(styles, /\.task-schedule-date/);
-  assert.match(styles, /\.is-schedule-start/);
+  assert.match(styles, /\.g-row/);
+  assert.match(styles, /\.g-d\.ref/);
+  assert.match(styles, /\.g-c\.on\.rs::before/);
   assert.doesNotMatch(appSource, /<select value=\{statusFilter\}/);
   assert.match(appSource, /scheduleWeekFilters/);
 });

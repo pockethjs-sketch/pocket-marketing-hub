@@ -1,0 +1,3 @@
+-- Intentionally empty.
+-- Production data is imported only after the remote schema, RLS, role isolation,
+-- CRUD, rollback, and Sheets reconciliation gates have passed.

@@ -66,7 +66,7 @@ function mhSetupEnsureDailyMeetingsSheet() {
 }
 
 function mhSetupEnsureTaskTableFields() {
-  var fields = ['progress_percent', 'completion_url', 'remarks'];
+  var fields = ['progress_percent', 'completion_url', 'remarks', 'schedule_dates_json'];
   var sheet = mhPlanEnsureSheet_(mhSpreadsheet_(), MH_SHEETS.TASKS, fields);
   mhInvalidateTableCache_(MH_SHEETS.TASKS);
   var table = mhReadTable_(MH_SHEETS.TASKS);

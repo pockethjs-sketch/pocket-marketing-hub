@@ -8,6 +8,9 @@ node_modules/
 *.log
 dist/
 tmp/
+.tmp-npm-cache/
+.tmp-npm-cache-supabase-cli/
+.tmp-pglite/
 .clasp.json
 Secrets.gs
 apps-script/.local-secrets.json

@@ -69,6 +69,7 @@ export function createHttpClient(config) {
     const actionTimeouts = {
       login: 30000,
       mutate: 30000,
+      mutate_batch: 30000,
       access_admin_mutate: 30000,
       project_plan: 25000,
       daily_meetings: 25000,

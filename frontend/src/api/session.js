@@ -1,4 +1,6 @@
-export const SESSION_STORAGE_KEY = "pocket_marketing_hub_session_v1";
+// v2 forces one clean sign-in when task persistence moves from Apps Script to
+// Supabase, ensuring both sessions exist before the first task read.
+export const SESSION_STORAGE_KEY = "pocket_marketing_hub_session_v2";
 
 function safeStorage(candidate) {
   if (candidate) return candidate;

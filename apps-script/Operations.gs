@@ -83,6 +83,7 @@ function mhRunOperationsMaintenance_(request, actor) {
   if (operation === 'install_backup') return mhSetupInstallDailyBackup();
   if (operation === 'run_backup') return mhRunDailyBackup();
   if (operation === 'verify_backup') return mhVerifyLatestBackup();
+  if (operation === 'migrate_campaign_schedule_v1') return mhMigrateCampaignScheduleV1_(request, actor);
   throw mhApiError_('invalid_request', 'unsupported_operations_maintenance', 400);
 }
 
@@ -152,6 +153,37 @@ function mhRememberMutationRegistry_(activity, requestHash) {
   if (existing[0]) mhUpdateRecord_(table, existing[0].__rowNumber, record);
   else mhAppendRecord_(MH_SHEETS.MUTATIONS, record);
   mhCacheMutationRegistryRow_(record);
+  return true;
+}
+
+function mhRememberMutationRegistries_(entries) {
+  if (!entries || !entries.length || !mhOperationsSheetExists_(MH_SHEETS.MUTATIONS)) return false;
+  var table = mhReadTable_(MH_SHEETS.MUTATIONS);
+  var existingIds = {};
+  table.rows.forEach(function (row) { existingIds[mhAsText_(row.mutation_id)] = true; });
+  var records = entries.map(function (entry) {
+    var activity = entry.activity;
+    if (existingIds[mhAsText_(activity.mutation_id)]) {
+      throw mhApiError_('conflict', 'duplicate_mutation_registry_key', 409);
+    }
+    return {
+      mutation_id: activity.mutation_id,
+      request_hash: entry.requestHash,
+      event_status_code: activity.event_status_code,
+      entity_type: activity.entity_type,
+      entity_id: activity.entity_id,
+      project_id: activity.project_id,
+      action_code: activity.action_code,
+      before_json: activity.before_json,
+      after_json: activity.after_json,
+      actor_user_id: activity.actor_user_id,
+      actor_role_code: activity.actor_role_code,
+      created_at: activity.created_at,
+      updated_at: activity.created_at
+    };
+  });
+  mhAppendRecordsToTable_(table, records, true);
+  records.forEach(mhCacheMutationRegistryRow_);
   return true;
 }
 

@@ -79,7 +79,6 @@ function mhClientReadCacheKey_(action, request, actor, projectId) {
 }
 
 function mhCachedClientRead_(action, request, actor, projectId) {
-  if (actor.role !== 'CLIENT_VIEWER') return { hit: false, data: null };
   try {
     var raw = CacheService.getScriptCache().get(
       mhClientReadCacheKey_(action, request, actor, projectId)
@@ -101,7 +100,6 @@ function mhCachedClientRead_(action, request, actor, projectId) {
 }
 
 function mhRememberClientRead_(action, request, actor, projectId, data) {
-  if (actor.role !== 'CLIENT_VIEWER') return;
   try {
     var serialized = JSON.stringify(data);
     var payload = 'j:' + serialized;
@@ -822,7 +820,7 @@ function mhTaskActivityChanges_(row) {
   var after = mhParseJson_(mhAsText_(row.after_json), {});
   var fields = [
     ['title', '업무명'], ['status_code', '상태'], ['responsible_org_code', '담당 조직'], ['priority_code', '우선순위'],
-    ['planned_start_date', '시작일'], ['due_date', '마감일'],
+    ['planned_start_date', '시작일'], ['due_date', '마감일'], ['schedule_dates_json', '간트 일정'],
     ['progress_percent', '진행률'], ['completion_url', '완료링크'], ['remarks', '비고'],
     ['completed_at', '완료일'], ['customer_status_text', '고객 공유 메모']
   ];
@@ -864,9 +862,9 @@ function mhProjectTask_(row, actor) {
   var fields = [
     'task_id', 'project_id', 'source_task_id', 'parent_task_id', 'phase_code', 'workstream_code',
     'category_code', 'title', 'description', 'status_code', 'priority_code',
-    'plan_week', 'planned_start_date', 'due_date', 'completed_at', 'customer_status_text',
+    'plan_week', 'planned_start_date', 'due_date', 'schedule_dates_json', 'completed_at', 'customer_status_text',
     'progress_percent', 'completion_url', 'remarks',
-    'sort_order', 'updated_at', 'row_version'
+    'sort_order', 'created_at', 'updated_at', 'row_version'
   ];
   if (actor.role !== 'CLIENT_VIEWER') {
     fields = fields.concat([

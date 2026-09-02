@@ -2,11 +2,18 @@
 
 ## 현재 운영 배포
 
-- 백엔드: `2026-09-01-page-catalog-v39`
-- Web App 배포: @96
-- 운영 검증: health `READY`; 고객 페이지 권한 카탈로그와 세부 로그 분리
+- 백엔드: `2026-09-02-campaign-schedule-migration-v41` (현재 운영)
+- Web App 배포: @101
+- 운영 검증: health `READY`, writes 활성; 무극 23건·UND 78건 일정과 일별 간트 배열 대조 완료
 - 권한 격리: UND는 UND 프로젝트 1개만 노출, 무극 직접 조회 거부, NS 권한 관리 거부
-- 최신 백업: 21개 시트 manifest 해시 일치
+- 최신 백업: `PocketMarketingHub_20260902_195807`, 21개 시트 manifest 해시 일치
+
+## 다음 배포 후보
+
+- 로컬 소스: `2026-09-03-new-task-awareness-v44` (미배포)
+- 변경: v43의 간트 업무 UPDATE 배치 처리에 더해 업무 응답에 `created_at`을 포함합니다. 프런트는 이 서버 생성 시각만 기준으로 24시간 동안 일정표·간트의 신규 배지와 우측 알림을 표시합니다.
+- 안전성: PREPARE는 `15_활동로그`에 먼저 flush되며, 중단 후 같은 `mutation_id` 재시도는 활동로그를 조회해 기존 복구 절차를 그대로 수행합니다. 최종 COMMIT/FAILED만 `20_뮤테이션`에 색인합니다.
+- 배포 전 조건: 전체 테스트 통과 후 기존 Web App의 새 버전으로만 배포하고 health의 `backendVersion`이 위 값인지 확인합니다.
 
 ## 1. clasp 프로젝트 연결
 
@@ -47,6 +54,10 @@ Script Properties가 비어 있으면 `Secrets.gs`의 `MH_LOCAL_SECRETS`를 fall
 1. Apps Script 편집기에서 `mhSetupInitialize`를 실행합니다.
 2. 실행 결과의 `sheetConfigured`, `sessionSecretConfigured`, `accessCodePepperConfigured`, `schemaValid`가 모두 참인지 확인합니다.
 3. 쓰기는 계속 꺼둡니다.
+
+### 간트 일정 스키마 반영 순서
+
+`2026-09-02-gantt-schedule-v40` 배포 전에는 Apps Script 편집기에서 새 소스를 저장한 뒤 `mhSetupEnsureTaskTableFields()`를 먼저 실행합니다. 이 함수가 `06_업무.schedule_dates_json` 헤더를 추가하고 기존 행은 빈 값으로 유지합니다. 빈 값은 기존 `planned_start_date`~`due_date` 연속 구간으로 읽기 때문에 데이터 재작성은 필요 없습니다. 함수 결과의 `ok`와 `addedFields`를 확인하고 `mhSetupValidate()`의 `schemaValid`를 확인한 뒤 새 Web App 버전을 배포합니다. 이 순서를 거꾸로 하면 새 배포의 전체 스키마 검사가 해당 헤더가 생길 때까지 실패합니다.
 
 ## 4. 접근 계정 등록
 
@@ -92,8 +103,10 @@ GitHub Pages에는 이 Web App URL만 공개 설정으로 넣습니다. `SHEET_I
 11. 대상 원장과 `15_활동로그`에 PREPARE/COMMIT가 함께 기록되는지 확인.
 12. 같은 `mutationId` 재전송 시 중복 행이 생기지 않는지 확인.
 13. 같은 행을 오래된 `expectedRowVersion`으로 수정해 conflict가 나는지 확인.
-14. `ops_maintenance`의 `status`, `schema_audit`, `verify_backup`을 확인합니다.
-15. GitHub Actions의 `Backup marketing hub sheet`를 수동 실행하고 `21_백업로그` 새 행을 확인합니다.
+14. 간트에서 2개 이상의 업무 행을 한 번에 변경해 실행 로그에 `mutate_batch` 한 건만 생기고 각 업무의 `row_version`, PREPARE/COMMIT, `20_뮤테이션` 색인이 모두 증가하는지 확인합니다.
+15. 새 업무를 등록해 `tasks.items[].created_at`이 반환되고 일정표·간트의 `신규` 배지와 우측 알림이 표시되는지 확인합니다. 업무 수정만으로 신규 표시 시간이 연장되면 안 됩니다.
+16. `ops_maintenance`의 `status`, `schema_audit`, `verify_backup`을 확인합니다.
+17. GitHub Actions의 `Backup marketing hub sheet`를 수동 실행하고 `21_백업로그` 새 행을 확인합니다.
 
 ## 7. 사고 대응
 

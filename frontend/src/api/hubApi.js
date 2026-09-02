@@ -43,6 +43,7 @@ export function createMutationId(prefix = "mut") {
 export function createHubApi(config, options = {}) {
   const http = createHttpClient(config);
   const sessionStore = options.sessionStore || createSessionStore();
+  let batchMutationSupported = null;
 
   function sessionToken() {
     const session = sessionStore.read();
@@ -163,6 +164,89 @@ export function createHubApi(config, options = {}) {
     }
   }
 
+  async function mutateBatch(input = {}) {
+    const mutations = Array.isArray(input.mutations) ? input.mutations : [];
+    if (!mutations.length || mutations.length > 40) {
+      throw new HubApiError("한 번에 저장할 업무 변경은 1~40건이어야 합니다.", {
+        code: "invalid_batch_size",
+        action: "mutate_batch",
+        retriable: false,
+      });
+    }
+    const normalizedMutations = mutations.map((mutation) => {
+      if (!mutation || typeof mutation !== "object") {
+        throw new HubApiError("저장할 변경 내용이 올바르지 않습니다.", {
+          code: "missing_mutation",
+          action: "mutate_batch",
+          retriable: false,
+        });
+      }
+      return {
+        mutationId: mutation.mutationId || createMutationId(),
+        entityType: mutation.entityType || mutation.entity,
+        operation: String(mutation.operation || "").toUpperCase(),
+        projectId: input.projectId ?? mutation.projectId ?? null,
+        id: mutation.id ?? null,
+        expectedRowVersion: mutation.expectedRowVersion ?? null,
+        fields: mutation.fields || mutation.values || {},
+      };
+    });
+    const requestOptions = {
+      signal: input.signal,
+      body: {
+        auth: { sessionToken: sessionToken() },
+        projectId: input.projectId ?? null,
+        mutations: normalizedMutations,
+      },
+    };
+    const runSequentialFallback = async () => {
+      const responses = [];
+      for (const mutation of normalizedMutations) {
+        responses.push(await mutate({
+          projectId: input.projectId,
+          mutationId: mutation.mutationId,
+          signal: input.signal,
+          mutation,
+        }));
+      }
+      const last = responses[responses.length - 1];
+      return {
+        ...last,
+        data: { batch: true, fallback: true, results: responses.map((response) => response.data) },
+      };
+    };
+
+    // A one-row Gantt toggle is a normal task update. Sending mutate_batch
+    // first only adds a failed Apps Script round trip on the deployed v41 API.
+    if (normalizedMutations.length === 1 || batchMutationSupported === false) {
+      return runSequentialFallback();
+    }
+
+    const sendBatch = async () => {
+      try {
+        const result = await http.request("mutate_batch", requestOptions);
+        batchMutationSupported = true;
+        return result;
+      } catch (error) {
+        // Remember the capability for this browser API instance. Before v43,
+        // probing the unsupported route on every drag doubled save latency.
+        if (error?.code === "invalid_request") {
+          batchMutationSupported = false;
+          return runSequentialFallback();
+        }
+        throw error;
+      }
+    };
+
+    try {
+      return await sendBatch();
+    } catch (error) {
+      if (!error?.retriable || input.signal?.aborted) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250 + Math.random() * 250));
+      return sendBatch();
+    }
+  }
+
   async function accessAdminMutate(input = {}) {
     return http.request("access_admin_mutate", {
       signal: input.signal,
@@ -196,5 +280,6 @@ export function createHubApi(config, options = {}) {
     permissions: (params) => read("permissions", params),
     accessAdminMutate,
     mutate,
+    mutateBatch,
   });
 }

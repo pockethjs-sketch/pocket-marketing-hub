@@ -55,9 +55,9 @@ const makeSheet = (name, headers, rows) => {
       getValues: () => {
         reads.set(name, (reads.get(name) || 0) + 1);
         if (row === 1) return [headers, ...rows];
-        return [rows[row - 2].slice(column - 1, column - 1 + columnCount)];
+        return rows.slice(row - 2, row - 2 + rowCount).map((values) => values.slice(column - 1, column - 1 + columnCount));
       },
-      getFormulas: () => [Array(columnCount).fill('')],
+      getFormulas: () => Array.from({ length: rowCount }, () => Array(columnCount).fill('')),
       setValue: () => { writes.setValue += 1; },
       setValues: (payload) => { writes.setValues += 1; writes.payloads.push(payload); },
     }),
@@ -83,6 +83,18 @@ context.mhUpdateRecord_(context.mhReadTable_('06_업무'), 2, {
 assert.equal(writes.setValues, 1);
 assert.equal(writes.setValue, 0);
 
+makeSheet('batch-sheet', ['task_id', 'title', 'row_version'], [
+  ['TSK-B1', '기존 1', 1],
+  ['TSK-B2', '기존 2', 1],
+]);
+const batchTable = context.mhReadTable_('batch-sheet');
+const writesBeforeBatch = writes.setValues;
+context.mhUpdateRecords_(batchTable, [
+  { rowNumber: 2, record: { task_id: 'TSK-B1', title: '변경 1', row_version: 2 } },
+  { rowNumber: 3, record: { task_id: 'TSK-B2', title: '변경 2', row_version: 2 } },
+]);
+assert.equal(writes.setValues - writesBeforeBatch, 1, 'contiguous task rows must use one setValues call');
+
 makeSheet('formula-sheet', ['task_id', 'title', 'computed'], [['TSK-2', '기존', '계산 결과']]);
 const formulaSheet = sheets.get('formula-sheet');
 formulaSheet.getRange = (row, column, rowCount, columnCount) => ({
@@ -100,5 +112,17 @@ context.mhUpdateRecord_(context.mhReadTable_('formula-sheet'), 2, {
 });
 assert.deepEqual(JSON.parse(JSON.stringify(writes.payloads.at(-1))), [['TSK-2', '변경', '=A2']]);
 assert.equal(writes.setValue, 0);
+
+const mutationSource = fs.readFileSync(path.join(root, 'Mutations.gs'), 'utf8');
+assert.doesNotMatch(
+  mutationSource,
+  /mhRememberMutationRegistry_\(prepareLog/,
+  'PREPARE must use the durable activity ledger instead of a duplicate registry write',
+);
+assert.match(
+  mutationSource,
+  /var activityTable = mhReadTable_\(MH_SHEETS\.ACTIVITY\);[\s\S]*mhAppendRecordsToTable_\(activityTable, \[prepareLog\],[\s\S]*mhAppendRecordsToTable_\(activityTable, \[commitLog\]/,
+  'single mutation must reuse the activity table reference instead of re-reading the full ledger',
+);
 
 console.log('Mutation performance checks passed.');

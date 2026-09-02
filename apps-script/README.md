@@ -125,6 +125,8 @@ Apps Script ContentService 특성상 애플리케이션 오류도 HTTP 200으로
 
 같은 `mutationId`가 다시 들어오면 원장을 다시 수정하지 않고 기존 성공 결과를 반환합니다. `UPDATE/ARCHIVE`는 `expectedRowVersion`이 현재 `row_version`과 정확히 일치해야 합니다.
 
+간트처럼 같은 프로젝트의 여러 업무 일정을 저장할 때는 `action=mutate_batch`에 `task / UPDATE` mutation을 최대 40건까지 전달합니다. 서버는 한 번의 권한 검사와 잠금 안에서 로그·업무 행·mutation 색인을 배치 기록하며 결과 순서는 요청 순서와 같습니다.
+
 ## 운영 전 필수 데이터
 
 1. `03_사용자`에 실제 이메일·역할·ACTIVE 상태를 등록합니다.

@@ -126,6 +126,12 @@ function doPost(e) {
         requestId, actor, mutationResult.scope, mutationResult.data, mhRevision_()
       ));
     }
+    if (action === 'mutate_batch') {
+      var mutationBatchResult = mhHandleMutationBatch_(request, actor);
+      return mhJsonOutput_(mhSuccess_(
+        requestId, actor, mutationBatchResult.scope, mutationBatchResult.data, mhRevision_()
+      ));
+    }
     throw mhApiError_('invalid_request', 'unsupported_action', 400);
   } catch (error) {
     outcomeForLog = error.apiCode || 'internal_error';

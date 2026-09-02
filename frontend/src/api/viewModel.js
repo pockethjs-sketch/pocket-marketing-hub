@@ -1,3 +1,5 @@
+import { normalizeScheduleDates } from "../taskGantt.js";
+
 const PHASE_LABELS = {
   P0: "구축",
   M1: "운영 1개월차",
@@ -85,6 +87,12 @@ export function taskResponsibleOrganization(value) {
 
 function activityChangeValue(field, value) {
   if (value === null || value === undefined || value === "") return value ?? "";
+  if (field === "schedule_dates_json") {
+    const dates = normalizeScheduleDates(value);
+    if (!dates?.length) return "일정 없음";
+    const periodLabel = dates.length > 1 ? ` · ${dates[0]}~${dates[dates.length - 1]}` : ` · ${dates[0]}`;
+    return `${dates.length}일${periodLabel}`;
+  }
   const normalized = String(value).trim().toUpperCase();
   if (field === "status_code") return STATUS_LABELS[normalized] || value;
   if (field === "responsible_org_code") {
@@ -302,7 +310,7 @@ function activityViewModel(row) {
     changes,
     createdAt: row.created_at || null,
     meta: relativeTimestamp(row.created_at),
-    internalMeta: "Google Sheets 활동로그",
+    internalMeta: "활동로그",
   };
 }
 
@@ -400,6 +408,7 @@ export function tasksViewModel(envelope) {
         due: dateOnly(row.due_date),
         dueDate: row.due_date ? String(row.due_date).slice(0, 10) : null,
         plannedStartDate: row.planned_start_date ? String(row.planned_start_date).slice(0, 10) : null,
+        scheduleDates: normalizeScheduleDates(row.schedule_dates_json),
         completedAt: row.completed_at || null,
         completedDate: row.completed_at ? String(row.completed_at).slice(0, 10) : null,
         clientVisible: true,
@@ -419,6 +428,7 @@ export function tasksViewModel(envelope) {
         sourceCode: row.source_code || "",
         sortOrder: row.sort_order === undefined || row.sort_order === null || row.sort_order === "" ? null : numberFrom(row.sort_order),
         visibilityCode: String(row.visibility_code || "").toUpperCase(),
+        createdAt: row.created_at || null,
         updatedAt: row.updated_at || null,
         rowVersion: row.row_version,
       };
