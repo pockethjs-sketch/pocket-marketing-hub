@@ -3,6 +3,8 @@ import { HubApiError } from "../api/errors.js";
 import { createHubApi } from "../api/hubApi.js";
 import { createSessionStore } from "../api/session.js";
 import { getSupabaseClient } from "./client.js";
+import { createSupabaseAccessAdmin } from "./accessAdmin.js";
+import { createSupabaseCoreDomainApi } from "./coreDomainApi.js";
 import { createSupabaseTaskReader } from "./taskRead.js";
 import { createSupabaseTaskActivityReader } from "./taskActivityRead.js";
 import { createSupabaseTaskBatchMutator, createSupabaseTaskMutator } from "./taskMutation.js";
@@ -89,13 +91,74 @@ export function summarizeSupabaseTasks(items = []) {
 export function createSupabaseHybridApi(storageConfig, options = {}) {
   const env = options.env ?? import.meta.env;
   const sessionStore = options.sessionStore || createSessionStore();
-  const sheets = createHubApi(options.legacyConfig || readApiConfig(env), { ...options, sessionStore });
+  const legacySessionStore = options.legacySessionStore || createSessionStore(undefined, "pocket_marketing_hub_legacy_session_v1");
+  const sheets = createHubApi(options.legacyConfig || readApiConfig(env), { ...options, sessionStore: legacySessionStore });
   const client = options.supabaseClient || getSupabaseClient(env);
+  const core = createSupabaseCoreDomainApi(client);
+  const accessAdmin = createSupabaseAccessAdmin(client);
   const readTasks = createSupabaseTaskReader(client, options);
   const readTaskActivity = createSupabaseTaskActivityReader(client, options);
   const mutateTask = createSupabaseTaskMutator(client, options);
   const mutateTasksBatch = createSupabaseTaskBatchMutator(client, options);
   const projectIds = new Map();
+  let legacyLoginPromise = null;
+
+  function rememberProjectMappings(envelope) {
+    (envelope?.data?.projects || []).forEach((project) => {
+      const legacyId = String(project.project_id || "").trim();
+      const numericId = String(project.supabase_id || "").trim();
+      if (legacyId && numericId) projectIds.set(legacyId, numericId);
+    });
+  }
+
+  function accountEmail(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    return normalized.includes("@") ? normalized : `${normalized}@hub.local`;
+  }
+
+  function publicUser(profile = {}) {
+    return {
+      userId: profile.userId,
+      displayName: profile.displayName,
+      role: profile.role,
+      organization: profile.organization,
+    };
+  }
+
+  function mainSessionPayload(authSession, profile) {
+    // Supabase refreshes its access token independently. This tab-local shell
+    // only decides whether to render the signed-in UI, so keep it for a workday
+    // and let requireAuth() fail closed if the actual refresh session disappears.
+    const expiresIn = Math.max(12 * 60 * 60, Number(authSession?.expires_at || 0) - Math.floor(Date.now() / 1000));
+    return { token: authSession.access_token, expiresIn, user: publicUser(profile) };
+  }
+
+  function warmLegacySession(credentials) {
+    legacyLoginPromise = fetchBridge(storageConfig, credentials)
+      .then((payload) => {
+        legacySessionStore.write(payload.data.legacy.session);
+        return payload.data.legacy.session;
+      })
+      .catch(() => null)
+      .finally(() => { legacyLoginPromise = null; });
+  }
+
+  async function requireLegacySession() {
+    if (legacySessionStore.read()) return;
+    if (legacyLoginPromise) await legacyLoginPromise;
+    if (!legacySessionStore.read()) {
+      throw new HubApiError("이 화면의 기존 Sheets 연결 세션이 만료되었습니다. 다시 로그인해 주세요.", {
+        code: "legacy_session_required",
+        action: "legacy_sheet",
+        retriable: false,
+      });
+    }
+  }
+
+  const legacyRead = (method) => async (params = {}) => {
+    await requireLegacySession();
+    return sheets[method](params);
+  };
 
   async function requireAuth() {
     const { data, error } = await client.auth.getSession();
@@ -137,23 +200,39 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
   }
 
   async function login(credentials = {}) {
-    const payload = await fetchBridge(storageConfig, credentials);
-    const { error } = await client.auth.setSession({
-      access_token: payload.data.session.access_token,
-      refresh_token: payload.data.session.refresh_token,
-    });
-    if (error) throw bridgeError({ error }, 401);
-    const legacy = payload.data.legacy;
-    sessionStore.write(legacy.session);
+    const email = accountEmail(credentials.account || credentials.email);
+    let authSession;
+    let usedBridge = false;
+    const direct = await client.auth.signInWithPassword({ email, password: String(credentials.accessCode || "") });
+    if (direct.error || !direct.data?.session) {
+      const payload = await fetchBridge(storageConfig, credentials);
+      const { error } = await client.auth.setSession({ access_token: payload.data.session.access_token, refresh_token: payload.data.session.refresh_token });
+      if (error) throw bridgeError({ error }, 401);
+      authSession = payload.data.session;
+      legacySessionStore.write(payload.data.legacy.session);
+      usedBridge = true;
+    } else {
+      authSession = direct.data.session;
+    }
+    const bootstrap = await core.bootstrap({ signal: credentials.signal });
+    const profile = bootstrap.data.currentUser;
+    sessionStore.write(mainSessionPayload(authSession, profile));
     projectIds.clear();
+    rememberProjectMappings(bootstrap);
+    if (!usedBridge) warmLegacySession(credentials);
     return {
       ok: true,
       generatedAt: new Date().toISOString(),
-      data: legacy.session,
-      bootstrap: legacy.bootstrap
-        ? { ok: true, generatedAt: new Date().toISOString(), data: legacy.bootstrap }
-        : null,
+      data: mainSessionPayload(authSession, profile),
+      bootstrap,
     };
+  }
+
+  async function bootstrap(params = {}) {
+    await requireAuth();
+    const result = await core.bootstrap(params);
+    rememberProjectMappings(result);
+    return result;
   }
 
   async function tasks(params = {}) {
@@ -184,9 +263,13 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
   }
 
   async function mutate(input = {}) {
-    if (entityType(input) !== "TASK") return sheets.mutate(input);
     const projectId = await resolveProjectId(input.projectId ?? input.mutation?.projectId);
-    return mutateTask({ ...input, projectId, mutation: { ...input.mutation, projectId } });
+    const type = entityType(input);
+    if (type === "TASK") return mutateTask({ ...input, projectId, mutation: { ...input.mutation, projectId } });
+    if (type === "DAILY_MEETING") return core.mutateMeeting({ ...input, projectId, mutation: { ...input.mutation, projectId } });
+    if (type === "KPI_DEFINITION") return core.mutateKpi({ ...input, projectId, mutation: { ...input.mutation, projectId } });
+    await requireLegacySession();
+    return sheets.mutate(input);
   }
 
   async function mutateBatch(input = {}) {
@@ -206,6 +289,7 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
 
   function logout() {
     sessionStore.clear();
+    legacySessionStore.clear();
     projectIds.clear();
     void client.auth.signOut({ scope: "local" });
   }
@@ -217,19 +301,19 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     previewSession: sheets.previewSession,
     previewBootstrap: sheets.previewBootstrap,
     previewOverview: sheets.previewOverview,
-    bootstrap: sheets.bootstrap,
-    workspace: sheets.workspace,
+    bootstrap,
+    workspace: legacyRead("workspace"),
     overview,
-    plan: sheets.plan,
+    plan: legacyRead("plan"),
     tasks,
-    dailyMeetings: sheets.dailyMeetings,
-    contents: sheets.contents,
-    tracking: sheets.tracking,
-    performance: sheets.performance,
-    files: sheets.files,
+    dailyMeetings: async (params = {}) => core.dailyMeetings({ ...params, projectId: await resolveProjectId(params.projectId) }),
+    contents: legacyRead("contents"),
+    tracking: legacyRead("tracking"),
+    performance: async (params = {}) => core.performance({ ...params, projectId: await resolveProjectId(params.projectId) }),
+    files: legacyRead("files"),
     activity,
-    permissions: sheets.permissions,
-    accessAdminMutate: sheets.accessAdminMutate,
+    permissions: () => accessAdmin.read(),
+    accessAdminMutate: (input) => accessAdmin.mutate(input),
     mutate,
     mutateBatch,
   });

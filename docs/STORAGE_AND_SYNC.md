@@ -1,9 +1,19 @@
 # 저장·연동 원칙
 
+## 2026-09-03 목표 저장 경계
+
+- 운영 쓰기: Supabase PostgreSQL 단일 쓰기
+- 직접 로그인: Supabase Auth
+- 적용 도메인: 업무, 업무 로그, 데일리 회의록, KPI, 고객 계정·페이지 권한
+- 기존 Sheets 전용 도메인: 실행계획, 콘텐츠/성과 추적, 세부 로그의 미전환 데이터
+- 재해복구: Supabase 업무 스냅샷을 별도 숨김·보호 Sheets 탭에 매일 기록하고 전체 Drive 복제본으로 다시 백업
+
+브라우저 동작 하나를 Supabase와 운영 Sheets에 동시에 쓰지 않습니다. 이중 쓰기 성공/실패가 갈리면 어느 쪽이 최신인지 결정할 수 없기 때문입니다. Sheets 미러는 사용자 요청과 분리된 예약 백업이며 운영 원장으로 편집하지 않습니다.
+
 ## 현재 단계적 전환 원칙
 
-- 업무·업무 로그의 활성 원장은 Supabase다. 로그인은 Supabase Edge Function이 기존 Apps Script 계정을 검증해 Supabase 세션과 호환 세션을 함께 발급한다.
-- 총괄·실행계획·회의록·콘텐츠·성과·파일·권한은 완전 이관 전까지 Google Sheets + Apps Script를 유지한다. 총괄의 업무 집계만 Supabase 값을 사용한다.
+- 업무·업무 로그·회의록·KPI·고객 계정 및 페이지 권한의 활성 원장은 Supabase다. 로그인은 Supabase Auth가 직접 처리하고, Sheets 전용 화면의 호환 세션만 백그라운드에서 발급한다.
+- 총괄의 비업무 집계·실행계획·콘텐츠·성과 추적·파일·세부 로그는 완전 이관 전까지 Google Sheets + Apps Script를 유지한다. 총괄의 업무 집계만 Supabase 값을 사용한다.
 - Google Sheets 업무 원본 101건은 검증·롤백 대조용으로 보존한다. Supabase 업무 변경을 시트에 동기식 이중 쓰기하지 않는다.
 - 프런트 전환은 `VITE_POCKET_DATA_BACKEND` 기능 플래그로 통제한다. 운영 빌드는 `supabase`, 비상 롤백 빌드는 `sheets`다.
 - 브라우저에는 Supabase URL과 publishable key만 제공한다. secret/service-role key는 브라우저·Git·`VITE_` 환경변수에 넣지 않는다.
@@ -14,7 +24,7 @@
 - 업무·회의록·KPI·권한 변경은 DB 트리거 기반 감사 로그에 남긴다.
 - 데이터 수량·기본키·관계·업무 일정 배열·권한 결과를 Sheets 원장과 대조한다. 2026-09-03 기준 업무 101건 대조는 완료했다.
 
-목표 운영 흐름은 `브라우저 → Supabase Auth/RLS/Postgres`이며, Sheets는 전체 전환 후 백업·보고서 대상으로 축소합니다. 현재는 업무 도메인만 이 목표 구조로 먼저 전환했습니다. 전환 범위와 롤백 기준은 [Supabase 이전 현황](SUPABASE_MIGRATION.md)에 기록합니다.
+목표 운영 흐름은 `브라우저 → Supabase Auth/RLS/Postgres`이며, Sheets는 전체 전환 후 백업·보고서 대상으로 축소합니다. 현재 전환 범위와 롤백 기준은 [Supabase 이전 현황](SUPABASE_MIGRATION.md)에 기록합니다.
 
 ## 업무 쓰기 흐름(Supabase)
 
@@ -24,7 +34,7 @@
 4. RPC 트랜잭션이 대상 행의 `row_version`을 검사하고 생성·수정·보관과 감사 이벤트를 원자적으로 확정한다.
 5. 성공 응답과 새 `row_version`을 브라우저에 반환한 뒤 저장 오버레이를 해제한다. 네트워크 오류 재시도는 같은 `mutation_id`를 재사용한다.
 
-동일 `mutation_id`가 다시 들어오면 중복 저장하지 않고 기존 성공 결과를 반환합니다. 회의록·KPI·권한 등 미전환 엔터티는 아래의 기존 Apps Script 쓰기 흐름을 계속 사용합니다.
+동일 `mutation_id`가 다시 들어오면 중복 저장하지 않고 기존 성공 결과를 반환합니다. 실행계획·콘텐츠·파일 등 미전환 엔터티는 아래의 기존 Apps Script 쓰기 흐름을 계속 사용합니다.
 
 ## 미전환 엔터티 쓰기 흐름(Apps Script)
 
@@ -77,6 +87,7 @@ Apps Script가 로그인 호환 세션과 시트 권한표를 확인한 뒤 `Loc
 ## 백업
 
 - GitHub Actions가 매일 03:00 KST에 관리자 세션과 분리된 러너 비밀값으로 백업 API를 호출합니다.
+- Supabase Edge Function이 업무 스냅샷을 내보내면 Apps Script가 기존 원장과 분리된 `[백업] Supabase업무` 탭에 기록하고 숨김·보호합니다. 그 뒤 전체 Drive 복제본을 생성합니다.
 - 백업은 원본 스프레드시트의 별도 Google Drive 복제본이며 성공 이력과 시트별 행·열·SHA-256 manifest는 `21_백업로그`에 저장합니다.
 - 같은 날짜의 중복 호출은 건너뜁니다. 검증은 원본과 복제본의 21개 전체 시트 표시값 행렬을 다시 해시해 누락·불일치를 판정합니다.
 - 30일 자동 정리와 운영 원장으로의 실제 복원 훈련은 남은 과제입니다.

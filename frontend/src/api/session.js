@@ -1,6 +1,6 @@
 // v2 forces one clean sign-in when task persistence moves from Apps Script to
 // Supabase, ensuring both sessions exist before the first task read.
-export const SESSION_STORAGE_KEY = "pocket_marketing_hub_session_v2";
+export const SESSION_STORAGE_KEY = "pocket_marketing_hub_session_v3";
 
 function safeStorage(candidate) {
   if (candidate) return candidate;
@@ -11,7 +11,7 @@ function safeStorage(candidate) {
   }
 }
 
-export function createSessionStore(storageCandidate) {
+export function createSessionStore(storageCandidate, storageKey = SESSION_STORAGE_KEY) {
   const storage = safeStorage(storageCandidate);
   let memorySession = null;
 
@@ -19,7 +19,7 @@ export function createSessionStore(storageCandidate) {
     let value = memorySession;
     if (storage) {
       try {
-        value = JSON.parse(storage.getItem(SESSION_STORAGE_KEY) || "null");
+        value = JSON.parse(storage.getItem(storageKey) || "null");
       } catch {
         value = null;
       }
@@ -42,7 +42,7 @@ export function createSessionStore(storageCandidate) {
     memorySession = value;
     if (storage) {
       try {
-        storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(value));
+        storage.setItem(storageKey, JSON.stringify(value));
       } catch {
         // The in-memory copy still keeps the current tab usable.
       }
@@ -54,7 +54,7 @@ export function createSessionStore(storageCandidate) {
     memorySession = null;
     if (storage) {
       try {
-        storage.removeItem(SESSION_STORAGE_KEY);
+        storage.removeItem(storageKey);
       } catch {
         // Ignore unavailable browser storage.
       }

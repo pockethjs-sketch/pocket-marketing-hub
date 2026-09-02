@@ -293,14 +293,94 @@ function mhConfigureBackupRunner_(request) {
 }
 
 function mhRunScheduledBackup_(request) {
+  mhAssertBackupRunner_(request);
+  var result = mhRunDailyBackup(false);
+  result.verification = mhVerifyLatestBackup();
+  return result;
+}
+
+function mhAssertBackupRunner_(request) {
   var supplied = mhAsText_(request && request.runnerSecret);
   var expected = mhAsText_(mhSetting_(MH_PROPERTY_KEYS.BACKUP_RUNNER_DIGEST, ''));
   if (!supplied || !expected || !mhConstantTimeEquals_(mhHashToken_(supplied), expected)) {
     throw mhApiError_('unauthorized', 'invalid_backup_runner', 401);
   }
-  var result = mhRunDailyBackup(false);
-  result.verification = mhVerifyLatestBackup();
-  return result;
+}
+
+function mhWriteSupabaseTaskBackup_(request) {
+  mhAssertBackupRunner_(request);
+  var snapshot = request && request.snapshot;
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    throw mhApiError_('invalid_request', 'supabase_snapshot_required', 400);
+  }
+  var rows = Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
+  if (rows.length > 5000 || Number(snapshot.taskCount) !== rows.length) {
+    throw mhApiError_('invalid_request', 'supabase_snapshot_count_mismatch', 400);
+  }
+  var headers = [
+    'snapshot_id', 'exported_at', 'task_id', 'legacy_id', 'project_id', 'project_name',
+    'client_name', 'title', 'description', 'phase_code', 'workstream_code',
+    'category_code', 'responsible_org_code', 'status_code', 'priority_code',
+    'planned_start_date', 'due_date', 'schedule_dates_json', 'progress_percent',
+    'completion_url', 'remarks', 'visibility_code', 'row_version', 'created_at',
+    'updated_at', 'archived_at'
+  ];
+  var snapshotId = mhAsText_(snapshot.snapshotId);
+  var exportedAt = mhAsText_(snapshot.exportedAt);
+  if (!snapshotId || !exportedAt || mhAsText_(snapshot.source) !== 'SUPABASE') {
+    throw mhApiError_('invalid_request', 'invalid_supabase_snapshot_metadata', 400);
+  }
+  var values = rows.map(function (row) {
+    return headers.map(function (header) {
+      if (header === 'snapshot_id') return snapshotId;
+      if (header === 'exported_at') return exportedAt;
+      if (header === 'schedule_dates_json') return JSON.stringify(row.schedule_dates || []);
+      var value = row[header];
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'object') return JSON.stringify(value);
+      return value;
+    });
+  });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) throw mhApiError_('lock_timeout', 'backup_lock_timeout', 409);
+  try {
+    var spreadsheet = mhSpreadsheet_();
+    var sheet = spreadsheet.getSheetByName(MH_SHEETS.SUPABASE_TASK_BACKUP);
+    if (!sheet) sheet = spreadsheet.insertSheet(MH_SHEETS.SUPABASE_TASK_BACKUP);
+    sheet.clearContents();
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    if (values.length) sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+    sheet.setFrozenRows(1);
+    sheet.hideSheet();
+    var protectedSheet = false;
+    try {
+      var protections = sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+      var protection = protections.length ? protections[0] : sheet.protect();
+      protection.setDescription('Supabase 자동 백업 - 직접 편집 금지');
+      protection.setWarningOnly(false);
+      var ownerEmail = Session.getEffectiveUser().getEmail();
+      var editors = protection.getEditors();
+      if (editors.length) protection.removeEditors(editors.filter(function (editor) {
+        return editor.getEmail() !== ownerEmail;
+      }));
+      if (ownerEmail && !protection.canEdit()) protection.addEditor(ownerEmail);
+      protectedSheet = true;
+    } catch (protectionError) {
+      console.warn('[marketing-hub] supabase backup protection fallback: ' + protectionError);
+    }
+    SpreadsheetApp.flush();
+    mhInvalidateTableCache_(MH_SHEETS.SUPABASE_TASK_BACKUP);
+    return {
+      ok: true,
+      snapshotId: snapshotId,
+      exportedAt: exportedAt,
+      taskCount: rows.length,
+      hidden: sheet.isSheetHidden(),
+      protected: protectedSheet
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function mhRunDailyBackup(force) {

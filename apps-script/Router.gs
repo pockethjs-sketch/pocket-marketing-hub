@@ -80,6 +80,9 @@ function doPost(e) {
     if (action === 'scheduled_backup') {
       return mhJsonOutput_(mhSuccess_(requestId, null, null, mhRunScheduledBackup_(request), mhRevision_()));
     }
+    if (action === 'supabase_task_backup') {
+      return mhJsonOutput_(mhSuccess_(requestId, null, null, mhWriteSupabaseTaskBackup_(request), mhRevision_()));
+    }
 
     var actor = mhResolveActor_(request);
     if (action === 'deep_health') {

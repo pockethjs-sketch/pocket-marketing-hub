@@ -7,7 +7,7 @@
 
 var MH_CONTRACT_VERSION = '2026-09-02-gantt-schedule-v12';
 var MH_SCHEMA_VERSION = '2026-09-02-gantt-schedule-v5';
-var MH_BACKEND_VERSION = '2026-09-03-new-task-awareness-v44';
+var MH_BACKEND_VERSION = '2026-09-03-supabase-backup-v45';
 
 // Login is required. Public preview sessions cannot read internal plans or
 // mutate tasks even if stale preview configuration remains in Script Properties.
@@ -54,7 +54,8 @@ var MH_SHEETS = {
   PLAN_SECTIONS: '18_실행계획섹션',
   DAILY_MEETINGS: '19_데일리회의록',
   MUTATIONS: '20_뮤테이션',
-  BACKUP_LOG: '21_백업로그'
+  BACKUP_LOG: '21_백업로그',
+  SUPABASE_TASK_BACKUP: '[백업] Supabase업무'
 };
 
 var MH_VISIBILITY_LEVEL = {

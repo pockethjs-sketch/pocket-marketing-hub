@@ -17,10 +17,26 @@ jobs:
       - name: Create daily Google Sheets backup
         env:
           POCKET_API_URL: ${{ vars.POCKET_API_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_BACKUP_TOKEN: ${{ secrets.SUPABASE_BACKUP_TOKEN }}
           BACKUP_RUNNER_SECRET: ${{ secrets.BACKUP_RUNNER_SECRET }}
         run: |
           test -n "$POCKET_API_URL"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_BACKUP_TOKEN"
           test -n "$BACKUP_RUNNER_SECRET"
+          snapshot=$(curl --silent --show-error --fail-with-body --retry 2 --max-time 60 \
+            -X POST \
+            -H "x-backup-token: $SUPABASE_BACKUP_TOKEN" \
+            "$SUPABASE_URL/functions/v1/task-backup-export")
+          echo "$snapshot" | jq -e '.ok == true and .data.source == "SUPABASE" and (.data.taskCount == (.data.tasks | length))'
+          mirror_payload=$(echo "$snapshot" | jq -c --arg secret "$BACKUP_RUNNER_SECRET" \
+            '{action:"supabase_task_backup",runnerSecret:$secret,snapshot:.data}')
+          mirror_response=$(curl --location --silent --show-error --fail-with-body --retry 2 --max-time 90 \
+            -H 'Content-Type: text/plain;charset=utf-8' \
+            --data-binary "$mirror_payload" \
+            "$POCKET_API_URL")
+          echo "$mirror_response" | jq -e '.ok == true and .data.ok == true and .data.hidden == true and .data.protected == true and .data.taskCount > 0'
           payload=$(jq -nc --arg secret "$BACKUP_RUNNER_SECRET" '{action:"scheduled_backup",runnerSecret:$secret}')
           response=$(curl --location --silent --show-error --fail-with-body --retry 2 --max-time 90 \
             -H 'Content-Type: text/plain;charset=utf-8' \

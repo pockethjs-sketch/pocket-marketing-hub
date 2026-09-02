@@ -38,6 +38,17 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(context.mhRunScheduledBackup_({ runnerSecret: 'runner-secret-that-is-long-enough-1234' }))),
   { ok: true, force: false, verification: { ok: true, verifiedSheets: 21 } },
 );
+assert.throws(
+  () => context.mhWriteSupabaseTaskBackup_({ runnerSecret: 'wrong-runner-secret', snapshot: {} }),
+  /invalid_backup_runner/,
+);
+assert.throws(
+  () => context.mhWriteSupabaseTaskBackup_({
+    runnerSecret: 'runner-secret-that-is-long-enough-1234',
+    snapshot: { source: 'SUPABASE', snapshotId: 'qa', exportedAt: new Date().toISOString(), taskCount: 1, tasks: [] },
+  }),
+  /supabase_snapshot_count_mismatch/,
+);
 
 const manifest = { sheets: { A: { rows: 2, columns: 2, digest: 'same' } } };
 assert.deepEqual(
