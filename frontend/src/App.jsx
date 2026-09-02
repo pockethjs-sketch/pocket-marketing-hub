@@ -55,7 +55,7 @@ import {
   viewLocationHash,
   viewResourceKey,
 } from "./planNavigation.js";
-import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmissionFields } from "./taskForm.js";
+import { TASK_RESPONSIBLE_ORG_OPTIONS, taskCreateInitialFields, taskCreateSubmissionFields, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
 import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, withDisplayDeadline } from "./taskTimeline.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
@@ -557,6 +557,55 @@ function TrackerTaskRow({ task, role, canWrite, onUpdate, isDone }) {
   </article>;
 }
 
+function TaskEditModal({ task, onClose, onUpdate }) {
+  const [fields, setFields] = useState(() => taskUpdateInitialFields(task));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const setField = (name, value) => setFields((current) => ({ ...current, [name]: value }));
+
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    globalThis.addEventListener?.("keydown", closeOnEscape);
+    return () => globalThis.removeEventListener?.("keydown", closeOnEscape);
+  }, [onClose, saving]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      await onUpdate(task, taskUpdateSubmissionFields(fields));
+      onClose();
+    } catch (saveError) {
+      setError(saveError);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+    <section className="create-modal task-edit-modal" role="dialog" aria-modal="true" aria-labelledby="task-edit-title">
+      <header><div><p className="editorial-kicker">프로젝트 일정표</p><h2 id="task-edit-title">업무 수정</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header>
+      <form onSubmit={submit}>
+        <label className="create-field is-wide"><span>업무명</span><input autoFocus required maxLength={200} value={fields.title} disabled={saving} onChange={(event) => setField("title", event.target.value)} /></label>
+        <div className="create-field is-wide task-edit-status"><span>상태</span><div className="tracker-status-actions">{trackerStatusOptions.map(([code, label]) => <button key={code} type="button" disabled={saving} className={fields.status_code === code ? "is-active" : ""} onClick={() => setField("status_code", code)}>{label}</button>)}</div></div>
+        <label className="create-field"><span>시작일</span><input type="date" value={fields.planned_start_date} max={fields.due_date || undefined} disabled={saving} onChange={(event) => setField("planned_start_date", event.target.value)} /></label>
+        <label className="create-field"><span>종료일</span><input type="date" value={fields.due_date} min={fields.planned_start_date || undefined} disabled={saving} onChange={(event) => setField("due_date", event.target.value)} /></label>
+        <label className="create-field"><span>진행률 (%)</span><input type="number" min="0" max="100" value={fields.progress_percent} disabled={saving} onChange={(event) => setField("progress_percent", event.target.value)} /></label>
+        <FormSelect label="우선순위" value={fields.priority_code} onChange={(value) => setField("priority_code", value)} options={[["LOW", "낮음"], ["NORMAL", "보통"], ["HIGH", "높음"], ["CRITICAL", "긴급"]]} />
+        <FormSelect label="담당" value={fields.responsible_org_code} onChange={(value) => setField("responsible_org_code", value)} options={TASK_RESPONSIBLE_ORG_OPTIONS} />
+        <label className="create-field is-wide"><span>세부내용</span><textarea rows="3" maxLength={10000} value={fields.description} disabled={saving} onChange={(event) => setField("description", event.target.value)} /></label>
+        <label className="create-field is-wide"><span>완료링크</span><input type="url" pattern="https://.*" value={fields.completion_url} disabled={saving} onChange={(event) => setField("completion_url", event.target.value)} placeholder="https://" /></label>
+        <label className="create-field is-wide"><span>비고</span><textarea rows="2" maxLength={10000} value={fields.remarks} disabled={saving} onChange={(event) => setField("remarks", event.target.value)} /></label>
+        {error && <div className="form-error"><AlertCircle size={15} /><span>{error.message || "업무를 저장하지 못했습니다."}</span></div>}
+        <footer><p>저장하면 Google Sheets 업무 원장과 업무 로그에 반영됩니다.</p><div><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.title.trim()}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "변경 저장"}</button></div></footer>
+      </form>
+    </section>
+  </div>;
+}
+
 function taskActivityValue(value) {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "예" : "아니요";
@@ -600,15 +649,17 @@ function ScheduleFilterButtons({ label, value, options, onChange }) {
   return <div className="task-schedule-filter-group"><span>{label}</span><div role="group" aria-label={label}>{options.map(([id, text]) => <button type="button" key={id} className={value === id ? "is-active" : ""} aria-pressed={value === id} onClick={() => onChange(id)}>{text}</button>)}</div></div>;
 }
 
-function TaskScheduleTimeline({ tasks, project }) {
+function TaskScheduleTimeline({ tasks, project, canWrite, onUpdate }) {
   const [showDetails, setShowDetails] = useState(false);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [scheduleFilter, setScheduleFilter] = useState("ALL");
+  const [editingTaskId, setEditingTaskId] = useState(null);
   useEffect(() => {
     setStatusFilter("ALL");
     setCategoryFilter("ALL");
     setScheduleFilter("ALL");
+    setEditingTaskId(null);
   }, [project.id]);
   const filteredTasks = useMemo(() => sortTaskSchedule(filterTaskSchedule(tasks, {
     status: statusFilter,
@@ -654,8 +705,9 @@ function TaskScheduleTimeline({ tasks, project }) {
       const row = datedRows.get(task.id);
       const duration = taskDurationDays(task.plannedStartDate, task.dueDate);
       const progress = task.progressPercent ?? 0;
-      return <tr className={`task-schedule-row ${scheduleClass(task)}`} key={task.id}><td><div className="task-schedule-identity"><span aria-hidden="true" /><div><strong>{task.title}</strong><small>{task.phase} · {task.parent || task.stream}</small></div></div></td><td>{task.description || "-"}</td><td><time title={task.plannedStartDate || ""}>{task.plannedStartDate ? trackerDateLabel(task.plannedStartDate) : "-"}</time></td><td><time title={task.dueDate || ""}>{task.dueDate ? trackerDateLabel(task.dueDate) : "-"}</time></td><td>{duration ?? "-"}</td><td>{progress === null ? "-" : <span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span>}</td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td>{task.completionUrl ? <a className="task-schedule-link" href={task.completionUrl} target="_blank" rel="noreferrer">결과물</a> : "-"}</td><td>{task.remarks || "-"}</td>{days.map((day) => { const active = row && day.iso >= row.startDate && day.iso <= row.endDate; const starts = active && day.iso === row.startDate; const barWidth = Math.max(22, (duration || 1) * 30 - 8); return <td key={`${task.id}-${day.iso}`} className={`task-schedule-cell ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""} ${active ? `has-schedule ${scheduleClass(task)}` : ""} ${starts ? "is-schedule-start" : ""}`} title={active ? `${task.title} · ${row.startDate}~${row.endDate}` : day.iso}>{starts ? <i style={{ width: `${barWidth}px` }}><b>{duration >= 4 ? task.title : ""}</b></i> : null}</td>; })}</tr>;
+      return <tr className={`task-schedule-row ${scheduleClass(task)}`} key={task.id}><td>{canWrite ? <button type="button" className="task-schedule-edit-trigger" onClick={() => setEditingTaskId(task.id)} aria-label={`${task.title} 수정`}><span className="task-schedule-identity"><span aria-hidden="true" /><span><strong>{task.title}</strong><small>{task.phase} · {task.parent || task.stream}</small></span></span><Pencil size={13} /></button> : <div className="task-schedule-identity"><span aria-hidden="true" /><div><strong>{task.title}</strong><small>{task.phase} · {task.parent || task.stream}</small></div></div>}</td><td>{task.description || "-"}</td><td><time title={task.plannedStartDate || ""}>{task.plannedStartDate ? trackerDateLabel(task.plannedStartDate) : "-"}</time></td><td><time title={task.dueDate || ""}>{task.dueDate ? trackerDateLabel(task.dueDate) : "-"}</time></td><td>{duration ?? "-"}</td><td>{progress === null ? "-" : <span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span>}</td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td>{task.completionUrl ? <a className="task-schedule-link" href={task.completionUrl} target="_blank" rel="noreferrer">결과물</a> : "-"}</td><td>{task.remarks || "-"}</td>{days.map((day) => { const active = row && day.iso >= row.startDate && day.iso <= row.endDate; const starts = active && day.iso === row.startDate; const barWidth = Math.max(22, (duration || 1) * 30 - 8); return <td key={`${task.id}-${day.iso}`} className={`task-schedule-cell ${day.weekend ? "is-weekend" : ""} ${day.iso === today ? "is-today" : ""} ${active ? `has-schedule ${scheduleClass(task)}` : ""} ${starts ? "is-schedule-start" : ""}`} title={active ? `${task.title} · ${row.startDate}~${row.endDate}` : day.iso}>{starts ? <i style={{ width: `${barWidth}px` }}><b>{duration >= 4 ? task.title : ""}</b></i> : null}</td>; })}</tr>;
     })}</tbody></table></div> : <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="시작일과 종료일이 없어 일정표를 만들 수 없습니다. 업무 수정에서 두 날짜를 입력해 주세요." />}
+    {editingTaskId && canWrite && <TaskEditModal key={editingTaskId} task={tasks.find((task) => task.id === editingTaskId)} onUpdate={onUpdate} onClose={() => setEditingTaskId(null)} />}
   </section>;
 }
 
@@ -811,7 +863,7 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
 
     <div className="task-section-switch" role="group" aria-label="업무 화면 선택"><button type="button" className={taskSection === "list" ? "is-active" : ""} aria-pressed={taskSection === "list"} onClick={() => setTaskSection("list")}>업무 목록</button><button type="button" className={taskSection === "schedule" ? "is-active" : ""} aria-pressed={taskSection === "schedule"} onClick={() => setTaskSection("schedule")}>일정표</button>{role !== "client" && <button type="button" className={taskSection === "activity" ? "is-active" : ""} aria-pressed={taskSection === "activity"} onClick={() => setTaskSection("activity")}>업무 로그</button>}</div>
 
-    {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} /> : <>
+    {taskSection === "activity" ? <TaskActivityLog state={activityState} onRefresh={onLoadActivity} /> : taskSection === "schedule" ? <TaskScheduleTimeline tasks={tasks} project={taskPage.project || {}} canWrite={editable} onUpdate={onUpdate} /> : <>
 
     <section className="tracker-control-panel panel" aria-label="업무 요약 및 90일 진행 흐름">
       <div className="tracker-control-top">

@@ -57,3 +57,37 @@ test("업무 생성은 표·일정 필드를 보존하고 진행률을 숫자로
   assert.equal(payload.completion_url, "https://example.com/result");
   assert.equal(payload.remarks, "비고");
 });
+
+test("일정표 수정 폼은 업무 원장의 현재 값을 그대로 연다", () => {
+  const fields = taskForm.taskUpdateInitialFields({
+    title: "콘텐츠 제작",
+    statusCode: "COMPLETED",
+    description: "상세",
+    plannedStartDate: "2026-09-02",
+    dueDate: "2026-09-05",
+    progressPercent: 80,
+    responsibleOrgCode: "NS",
+  });
+  assert.equal(fields.status_code, "DONE");
+  assert.equal(fields.planned_start_date, "2026-09-02");
+  assert.equal(fields.due_date, "2026-09-05");
+  assert.equal(fields.progress_percent, 80);
+  assert.equal(fields.responsible_org_code, "NS");
+});
+
+test("일정표 수정 요청은 목록 수정과 같은 업무 필드를 숫자·코드로 정규화한다", () => {
+  const fields = taskForm.taskUpdateSubmissionFields({
+    title: "  콘텐츠 제작  ",
+    status_code: "on_hold",
+    planned_start_date: "2026-09-02",
+    due_date: "2026-09-05",
+    progress_percent: "35",
+    priority_code: "high",
+    responsible_org_code: "ns",
+  });
+  assert.equal(fields.title, "콘텐츠 제작");
+  assert.equal(fields.status_code, "ON_HOLD");
+  assert.equal(fields.progress_percent, 35);
+  assert.equal(fields.priority_code, "HIGH");
+  assert.equal(fields.responsible_org_code, "NS");
+});

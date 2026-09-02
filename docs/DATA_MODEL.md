@@ -80,6 +80,8 @@ UND 운영 업무는 P0/M1/M2/M3 단계와 `plan_week`를 기준으로 `planned_
 
 일정표의 기본 행 순서는 `planned_start_date` 오름차순, 같은 시작일이면 `due_date` 오름차순입니다. 두 날짜가 같으면 기존 `sort_order`를 보조 기준으로 사용하고, 시작일이 없는 업무는 마지막에 둡니다. 이 화면 정렬은 `06_업무.sort_order`를 수정하지 않으며 업무 목록의 승인 순서에도 영향을 주지 않습니다.
 
+일정표 업무명은 쓰기 권한이 있는 계정에서 수정 진입점으로 동작합니다. 수정 모달은 업무 목록과 동일한 UPDATE API를 사용하며, 저장된 값은 `06_업무`와 `15_활동로그`에 함께 반영합니다. 읽기 전용 고객 계정에는 수정 진입점을 노출하지 않습니다.
+
 ## 데일리 회의록
 
 `19_데일리회의록`은 프로젝트별 일일 회의 기록을 한 행씩 저장합니다. `meeting_date`, `title`, `attendees_text`, `discussion_text`, `decisions_text`, `action_items_text`, `created_by_user_id`, `visibility_code`를 분리하며 수정은 `row_version`, 생성·수정은 `15_활동로그` PREPARE/COMMIT으로 추적합니다. 기본 공개 범위는 `PROJECT_TEAM`이고 포켓 운영자만 고객 공개 또는 포켓 전용으로 변경할 수 있습니다.

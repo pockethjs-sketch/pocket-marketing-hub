@@ -6017,6 +6017,28 @@ table tbody tr:hover {
 .task-schedule-identity { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .task-schedule-identity > span { width: 8px; height: 28px; flex: 0 0 auto; border-radius: 999px; background: var(--schedule-bar); }
 .task-schedule-identity > div { min-width: 0; }
+.task-schedule-edit-trigger {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.task-schedule-edit-trigger > .task-schedule-identity { min-width: 0; }
+.task-schedule-edit-trigger > .task-schedule-identity > span:last-child { min-width: 0; }
+.task-schedule-edit-trigger > svg { flex: 0 0 auto; color: #8a98ad; opacity: .45; transition: color 140ms ease, opacity 140ms ease; }
+.task-schedule-edit-trigger:hover > svg,
+.task-schedule-edit-trigger:focus-visible > svg { color: var(--accent); opacity: 1; }
+.task-schedule-edit-trigger:focus-visible { outline: 2px solid rgba(23, 37, 84, .22); outline-offset: 4px; border-radius: 6px; }
+.task-edit-modal { width: min(720px, 100%); }
+.task-edit-status > span { color: var(--ink-soft); font-size: 11px; font-weight: 700; }
 .task-schedule-link { display: inline-flex; min-height: 25px; align-items: center; padding: 0 9px; border-radius: 7px; background: #edf2ff; }
 
 .task-timeline-summary > div:first-child > span {
