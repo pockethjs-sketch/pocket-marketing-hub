@@ -36,6 +36,7 @@ jobs:
             -H 'Content-Type: text/plain;charset=utf-8' \
             --data-binary "$mirror_payload" \
             "$POCKET_API_URL")
+          echo "$mirror_response" | jq '{ok, data: {ok: .data.ok, taskCount: .data.taskCount, hidden: .data.hidden, protected: .data.protected}, error}'
           echo "$mirror_response" | jq -e '.ok == true and .data.ok == true and .data.hidden == true and .data.protected == true and .data.taskCount > 0'
           payload=$(jq -nc --arg secret "$BACKUP_RUNNER_SECRET" '{action:"scheduled_backup",runnerSecret:$secret}')
           response=$(curl --location --silent --show-error --fail-with-body --retry 2 --max-time 90 \
