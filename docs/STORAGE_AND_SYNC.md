@@ -4,18 +4,18 @@
 
 - 운영 쓰기: Supabase PostgreSQL 단일 쓰기
 - 직접 로그인: Supabase Auth
-- 적용 도메인: 업무, 업무 로그, 데일리 회의록, KPI, 고객 계정·페이지 권한
-- 기존 Sheets 전용 도메인: 실행계획, 콘텐츠/성과 추적, 세부 로그의 미전환 데이터
+- 적용 도메인: 업무, 업무 로그, 데일리 회의록, KPI, 고객 계정·페이지 권한, 실행계획 조회
+- 기존 Sheets 전용 도메인: 콘텐츠/성과 추적, 파일, 세부 로그의 미전환 데이터
 - 재해복구: Supabase 업무 스냅샷을 별도 숨김·보호 Sheets 탭에 매일 기록하고 전체 Drive 복제본으로 다시 백업
 
 브라우저 동작 하나를 Supabase와 운영 Sheets에 동시에 쓰지 않습니다. 이중 쓰기 성공/실패가 갈리면 어느 쪽이 최신인지 결정할 수 없기 때문입니다. Sheets 미러는 사용자 요청과 분리된 예약 백업이며 운영 원장으로 편집하지 않습니다.
 
-단, 고객 계정과 허용 페이지는 과도기 예외입니다. 권한의 기준 원장은 Supabase지만 아직 Sheets에 남은 실행계획·세부 로그의 서명 세션을 발급할 수 있도록 같은 계정과 접근 범위를 Apps Script에 호환 복제합니다. Supabase 저장 뒤 복제가 실패하면 성공으로 숨기지 않고 재로그인·재저장을 요구하며, Sheets 전용 화면 이관이 끝나면 이 복제는 제거합니다.
+단, 고객 계정과 허용 페이지는 과도기 예외입니다. 권한의 기준 원장은 Supabase지만 아직 Sheets에 남은 콘텐츠·성과 추적·파일·세부 로그의 서명 세션을 발급할 수 있도록 같은 계정과 접근 범위를 Apps Script에 호환 복제합니다. Supabase 저장 뒤 복제가 실패하면 성공으로 숨기지 않고 재로그인·재저장을 요구하며, Sheets 전용 화면 이관이 끝나면 이 복제는 제거합니다.
 
 ## 현재 단계적 전환 원칙
 
 - 업무·업무 로그·회의록·KPI·고객 계정 및 페이지 권한의 활성 원장은 Supabase다. 로그인은 Supabase Auth가 직접 처리하고, Sheets 전용 화면의 호환 세션만 백그라운드에서 발급한다.
-- 총괄의 비업무 집계·실행계획·콘텐츠·성과 추적·파일·세부 로그는 완전 이관 전까지 Google Sheets + Apps Script를 유지한다. 총괄의 업무 집계만 Supabase 값을 사용한다.
+- 실행계획은 Supabase `plans`·`plan_sections`에서 직접 읽는다. 총괄의 비업무 집계·콘텐츠·성과 추적·파일·세부 로그는 완전 이관 전까지 Google Sheets + Apps Script를 유지하며, 총괄의 업무 집계만 Supabase 값을 사용한다.
 - Google Sheets 업무 원본 101건은 검증·롤백 대조용으로 보존한다. Supabase 업무 변경을 시트에 동기식 이중 쓰기하지 않는다.
 - 프런트 전환은 `VITE_POCKET_DATA_BACKEND` 기능 플래그로 통제한다. 운영 빌드는 `supabase`, 비상 롤백 빌드는 `sheets`다.
 - 브라우저에는 Supabase URL과 publishable key만 제공한다. secret/service-role key는 브라우저·Git·`VITE_` 환경변수에 넣지 않는다.
@@ -26,7 +26,7 @@
 - 업무·회의록·KPI·권한 변경은 DB 트리거 기반 감사 로그에 남긴다.
 - 데이터 수량·기본키·관계·업무 일정 배열·권한 결과를 Sheets 원장과 대조한다. 2026-09-03 기준 업무 101건 대조는 완료했다.
 
-목표 운영 흐름은 `브라우저 → Supabase Auth/RLS/Postgres`이며, Sheets는 전체 전환 후 백업·보고서 대상으로 축소합니다. 현재 전환 범위와 롤백 기준은 [Supabase 이전 현황](SUPABASE_MIGRATION.md)에 기록합니다.
+목표 운영 흐름은 `브라우저 → Supabase Auth/RLS/Postgres`이며, Sheets는 전체 전환 후 백업·보고서 대상으로 축소합니다. 업무·회의록·KPI·권한에 이어 실행계획 두 유형도 Supabase에서 직접 조회하며, 기존 계획 시트는 검증·복구 기준본으로 유지합니다. 현재 전환 범위와 롤백 기준은 [Supabase 이전 현황](SUPABASE_MIGRATION.md)에 기록합니다.
 
 ## 업무 쓰기 흐름(Supabase)
 
@@ -36,7 +36,7 @@
 4. RPC 트랜잭션이 대상 행의 `row_version`을 검사하고 생성·수정·보관과 감사 이벤트를 원자적으로 확정한다.
 5. 성공 응답과 새 `row_version`을 브라우저에 반환한 뒤 저장 오버레이를 해제한다. 네트워크 오류 재시도는 같은 `mutation_id`를 재사용한다.
 
-동일 `mutation_id`가 다시 들어오면 중복 저장하지 않고 기존 성공 결과를 반환합니다. 실행계획·콘텐츠·파일 등 미전환 엔터티는 아래의 기존 Apps Script 쓰기 흐름을 계속 사용합니다.
+동일 `mutation_id`가 다시 들어오면 중복 저장하지 않고 기존 성공 결과를 반환합니다. 실행계획은 현재 웹에서 조회 전용이며, 콘텐츠·파일 등 미전환 엔터티는 아래의 기존 Apps Script 쓰기 흐름을 계속 사용합니다.
 
 ## 미전환 엔터티 쓰기 흐름(Apps Script)
 
@@ -58,7 +58,8 @@ Apps Script가 로그인 호환 세션과 시트 권한표를 확인한 뒤 `Loc
 - 저장 성공 시 서버가 돌려준 업무 원본을 현재 목록과 캐시에 바로 병합하고 전체 업무 목록을 다시 요청하지 않는다. 서버 응답으로 안전하게 병합할 수 없는 생성·회의록·KPI·권한 변경과 충돌 복구만 해당 화면 캐시를 골라 폐기하며 다른 탭 캐시는 유지한다.
 - 유효한 세션이 있는 새로고침은 사용자 ID가 같은 최근 bootstrap을 `sessionStorage`에서 먼저 표시하고 서버 검증 응답으로 교체한다. 로그아웃하면 이 캐시는 삭제된다.
 - 시트 읽기는 실행 내 메모리 캐시와 최대 180초의 `CacheService` 캐시를 사용하며, 배포·스키마 버전이 달라지면 이전 캐시는 재사용하지 않는다.
-- 인증된 모든 역할의 완성 화면 응답은 사용자·역할·프로젝트·필터·캐시 epoch를 키로 분리해 일반 화면 120초, 실행계획과 프로젝트 스냅샷 300초까지 재사용한다. 따라서 시트를 웹 밖에서 직접 수정하면 화면 종류에 따라 최대 5분 뒤 반영될 수 있다. 웹 저장·복구·권한 변경은 프로젝트별 캐시 epoch를 즉시 변경하지만, 시트 직접 수정은 캐시 만료를 기다린다.
+- 실행계획은 인증된 사용자의 Supabase 세션으로 `plans`와 `plan_sections`를 직접 조회하며 프로젝트·페이지·가시성 RLS를 적용한다. Google Sheets `17_실행계획`·`18_실행계획섹션`은 더 이상 이 화면의 런타임 원천이 아니므로 시트만 수정해도 화면에는 반영되지 않는다.
+- 아직 Sheets를 사용하는 화면의 완성 응답은 사용자·역할·프로젝트·필터·캐시 epoch를 키로 분리해 일반 화면 120초, 프로젝트 스냅샷 300초까지 재사용한다. 웹 저장·복구·권한 변경은 프로젝트별 캐시 epoch를 즉시 변경하지만, 시트 직접 수정은 캐시 만료를 기다린다.
 - 웹 저장은 공유 읽기 캐시를 사용하지 않고 최신 시트를 다시 읽으며, 성공 즉시 대상 시트 캐시를 제거한다.
 
 ### 간트 다건 저장
@@ -103,7 +104,8 @@ Apps Script가 로그인 호환 세션과 시트 권한표를 확인한 뒤 `Loc
 - `POST action=preview_overview`: 공개 허용 프로젝트의 첫 총괄을 bootstrap과 병렬 조회
 - `POST action=bootstrap`: 로그인 사용자가 볼 수 있는 고객사·프로젝트·채널
 - `POST action=project_overview`: 총괄 화면에 필요한 집계와 상위 항목
-- `POST action=project_plan`: `planType=CLIENT_SHARE|INTERNAL`로 계획 종류를 고르고, 서버 역할에 허용된 섹션만 조회
+- Supabase `plans` + `plan_sections`: `planType=CLIENT_SHARE|INTERNAL`을 `source_code`로 변환하고, RLS가 허용한 계획·섹션만 직접 조회
+- `POST action=project_plan`: 비상 롤백용 Sheets 어댑터에서만 사용하는 호환 API
 - `POST action=project_snapshot`: 구버전 클라이언트 호환용. 현 프런트는 호출하지 않음
 - `POST action=tasks|contents|approvals|performance|files|activity`: 화면별 지연 조회
 - `POST action=mutate`: 행 단위 생성·수정·보관

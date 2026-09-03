@@ -8,6 +8,7 @@ import { createSupabaseCoreDomainApi } from "./coreDomainApi.js";
 import { createSupabaseTaskReader } from "./taskRead.js";
 import { createSupabaseTaskActivityReader } from "./taskActivityRead.js";
 import { createSupabaseTaskBatchMutator, createSupabaseTaskMutator } from "./taskMutation.js";
+import { createSupabasePlanReader } from "./planRead.js";
 
 function bridgeError(payload, status) {
   const code = String(payload?.error?.code || "auth_bridge_unavailable");
@@ -108,6 +109,7 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
   const accessAdmin = createSupabaseAccessAdmin(client);
   const readTasks = createSupabaseTaskReader(client, options);
   const readTaskActivity = createSupabaseTaskActivityReader(client, options);
+  const readPlan = createSupabasePlanReader(client, options);
   const mutateTask = createSupabaseTaskMutator(client, options);
   const mutateTasksBatch = createSupabaseTaskBatchMutator(client, options);
   const projectIds = new Map();
@@ -250,6 +252,11 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     return readTasks({ ...params, projectId });
   }
 
+  async function plan(params = {}) {
+    const projectId = await resolveProjectId(params.projectId);
+    return readPlan({ ...params, projectId });
+  }
+
   async function overview(params = {}) {
     const projectId = await resolveProjectId(params.projectId);
     const [legacyOverview, taskEnvelope] = await Promise.all([
@@ -337,7 +344,7 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     bootstrap,
     workspace: legacyRead("workspace"),
     overview,
-    plan: legacyRead("plan"),
+    plan,
     tasks,
     dailyMeetings: async (params = {}) => core.dailyMeetings({ ...params, projectId: await resolveProjectId(params.projectId) }),
     contents: legacyRead("contents"),

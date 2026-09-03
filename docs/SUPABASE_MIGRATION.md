@@ -8,8 +8,9 @@
 2. 회의록·KPI 읽기/쓰기 RPC
 3. 고객 계정·페이지 권한 관리 Edge Function
 4. Supabase 업무의 일일 Google Sheets 숨김 백업
+5. 클라이언트 공유용·내부 실행계획 Supabase 직접 조회
 
-위 네 항목의 구현과 원격 E2E는 완료했습니다. 기존 Sheets는 실행계획 등 미전환 영역과 복구 기준본 때문에 삭제·초기화하지 않습니다.
+위 다섯 항목의 구현과 원격 검증은 완료했습니다. 기존 Sheets는 미전환 영역과 실행계획 복구 기준본 때문에 삭제·초기화하지 않습니다.
 
 자동 백업 실검증은 2026-09-03 09:07 KST에 완료했습니다. Supabase 업무 101건의 내용 해시 스냅샷을 숨김·보호 탭에 기록하고, 같은 스냅샷이 포함된 전체 Google Drive 복제본의 시트 manifest를 다시 대조했습니다.
 
@@ -18,7 +19,7 @@
 - 프로젝트 루트 `.mcp.json`에 `https://mcp.supabase.com/mcp` 등록
 - 원격 프로젝트 연결 및 Supabase CLI 프로젝트 구조 생성
 - `@supabase/supabase-js` 버전 고정 및 lockfile 반영
-- PostgreSQL 마이그레이션 8개, 인덱스·RLS·감사 로그 트리거·업무·회의록·KPI RPC 적용
+- PostgreSQL 마이그레이션 9개, 인덱스·RLS·감사 로그 트리거·업무·회의록·KPI RPC·계획 이관 함수 적용
 - RLS/페이지 권한/외래키 인덱스/브라우저 열 노출 계약 테스트 작성
 - 원격 PostgreSQL에서 공개 테이블 22개 생성 확인
 - 공개 테이블 22개 전부 RLS 활성화, `anon` 권한 0개, `PUBLIC` 함수 실행권한 0개, 브라우저 DELETE·활동로그 원문·서버 전용 테이블 쓰기 권한 0개 확인
@@ -27,14 +28,15 @@
 - 고객 업무 응답에서 내부 계획·차단 사유·비고·실행 조직·프로젝트 구성원 차단 확인
 - Sheets에서 고객사 2건, 프로젝트 2건, 업무 101건(UND 78·무극 23) 복제 및 누락·중복·일정 불일치 0건 확인
 - Pocket·NS Supabase Auth 사용자, 프로필, 두 프로젝트 멤버십 생성 및 실제 로그인·업무 읽기·쓰기 검증
-- 프런트·Apps Script 테스트 144개, Supabase 원격 보안 계약, 프로덕션 빌드 통과
+- 프런트·Apps Script 테스트 148개, Supabase 원격 보안 계약, 프로덕션 빌드 통과
 - `npm audit` 운영·개발 의존성 취약점 0건. Vite는 보안 패치가 포함된 `6.4.3`으로 고정
 - 운영 프런트 기능 플래그와 GitHub Actions 저장소 변수를 `supabase`로 전환
-- 업무·업무 로그·회의록·KPI·권한과 총괄의 업무 집계는 Supabase, 나머지 화면은 Sheets를 사용하는 단계적 어댑터 적용
+- 업무·업무 로그·회의록·KPI·권한·실행계획과 총괄의 업무 집계는 Supabase, 나머지 화면은 Sheets를 사용하는 단계적 어댑터 적용
+- UND 클라이언트 계획 10개 섹션과 내부 계획 21개 섹션 이관. Pocket은 31개 전체, NS는 `POCKET_ONLY` 11개를 제외한 20개 섹션 조회 검증
 
 직접 로그인은 Pocket 0.585초, NS 0.292초, bootstrap까지 각각 0.762초, 0.465초로 측정했습니다. 회의록 생성·수정·조회·보관과 KPI 생성·수정·조회·보관, 고객 계정 생성·제한 조회·비활성화를 원격에서 검증했고 QA 데이터는 모두 제거했습니다.
 
-보안 Advisor에는 Auth의 유출 비밀번호 보호 비활성 경고와 공개 RPC 5개의 `SECURITY DEFINER` 경고가 남습니다. 이 RPC들은 브라우저 원본 테이블 쓰기를 막은 채 인증 사용자·활성 프로필·프로젝트 멤버십·페이지 권한을 함수 내부에서 다시 검사하고 `search_path`를 비운 의도적 경계입니다. 임의로 `SECURITY INVOKER`로 바꾸면 감사·중복방지 트랜잭션이 깨지므로 현재는 유지합니다. 성능 Advisor의 미사용 인덱스는 새 DB의 짧은 관측 기간 때문에 생긴 정보 수준 항목이라 실제 쿼리 통계가 쌓이기 전에는 삭제하지 않습니다.
+보안 Advisor에는 Auth의 유출 비밀번호 보호 비활성 경고와 공개 RPC 6개의 `SECURITY DEFINER` 경고가 남습니다. 이 RPC들은 브라우저 원본 테이블 쓰기를 막은 채 인증 사용자·활성 프로필·프로젝트 멤버십·페이지 권한을 함수 내부에서 다시 검사하고 `search_path`를 비운 의도적 경계입니다. 계획 이관 함수는 Pocket 관리자만 통과하며 일반 실행계획 읽기는 SECURITY DEFINER RPC가 아닌 RLS 테이블 조회입니다. 임의로 `SECURITY INVOKER`로 바꾸면 감사·중복방지 트랜잭션이 깨지므로 현재는 유지합니다. 성능 Advisor의 미사용 인덱스는 새 DB의 짧은 관측 기간 때문에 생긴 정보 수준 항목이라 실제 쿼리 통계가 쌓이기 전에는 삭제하지 않습니다. [보안 Advisor 설명](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)과 [유출 비밀번호 보호 설정](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)을 기준으로 운영 설정을 추적합니다.
 
 Edge Function의 `LEGACY_API_URL`, 서비스 역할 키, 백업 토큰은 코드에 하드코딩하지 않고 Supabase 런타임 secret으로만 제공합니다. 브라우저에는 publishable key만 노출합니다.
 
@@ -112,10 +114,10 @@ VITE_SUPABASE_PUBLISHABLE_KEY=
 
 남은 전체 이전 게이트:
 
-1. 실행계획·콘텐츠·성과 추적·파일·세부 로그용 마스킹 RPC와 프런트 어댑터
+1. 콘텐츠·성과 추적·파일·세부 로그용 마스킹 RPC와 프런트 어댑터
 2. 자동 백업본에서 Supabase 업무를 실제 복원하는 훈련
 3. Auth 유출 비밀번호 보호 설정 검토
 
 ## 롤백
 
-Google Sheets 업무 101건은 전환 기준본으로 보존합니다. 장애가 발생하면 먼저 업무 쓰기를 잠그고 Supabase의 `legacy_id`, `row_version`, 최근 mutation과 Sheets 기준본을 대조한 뒤 `VITE_POCKET_DATA_BACKEND=sheets`로 다시 빌드·배포합니다. 현재는 Supabase 변경을 Sheets에 자동 복제하지 않으므로 전환 후 생긴 업무 변경을 확인 없이 Sheets로 되돌리면 유실될 수 있습니다. 양쪽에 동시에 사용자 쓰기를 허용하는 장기 이중 쓰기는 충돌과 중복의 원인이므로 사용하지 않습니다.
+Google Sheets 업무 101건과 계획 2건·섹션 31건은 전환 기준본으로 보존합니다. 장애가 발생하면 먼저 쓰기를 잠그고 Supabase의 `legacy_id`, `row_version`, 최근 mutation과 Sheets 기준본을 대조한 뒤 `VITE_POCKET_DATA_BACKEND=sheets`로 다시 빌드·배포합니다. 현재는 Supabase 변경을 Sheets에 자동 복제하지 않으므로 전환 후 생긴 업무 변경을 확인 없이 Sheets로 되돌리면 유실될 수 있습니다. 양쪽에 동시에 사용자 쓰기를 허용하는 장기 이중 쓰기는 충돌과 중복의 원인이므로 사용하지 않습니다.
