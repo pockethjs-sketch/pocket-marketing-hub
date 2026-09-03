@@ -167,20 +167,26 @@ test("간트는 기준 HTML과 동일한 280px 업무열과 28px 날짜 셀을 �
   assert.match(styleSource, /\.g-row \.g-lbl\s*\{[\s\S]*height:\s*32px/);
 });
 
-test("프로젝트 회사는 상단에서 선택하고 왼쪽에는 화면 메뉴만 나열한다", () => {
+test("왼쪽 패널에서 프로젝트와 메뉴를 함께 펼치며 상단에는 선택기를 중복하지 않는다", () => {
   assert.doesNotMatch(appSource, /function ClientRail/);
-  assert.match(appSource, /className="topbar-company-tabs" aria-label="프로젝트 회사 선택"/);
+  assert.match(appSource, /className="sidebar-company-list" aria-label="프로젝트 회사 선택"/);
+  assert.doesNotMatch(appSource, /className="topbar-company-tabs"/);
   assert.match(appSource, /clients=\{bootstrapState\.data\.clients\} activeClient=\{selectedClient\.id\} onSelectClient=\{selectClient\}/);
   assert.match(appSource, /<ProjectSidebar project=\{project\}/);
   assert.doesNotMatch(appSource, /className="project-switcher"/);
   assert.doesNotMatch(appSource, /className="phase-brief"/);
-  assert.match(appSource, /navigation\.usesDrawer && <button className="navigation-toggle"/);
+  assert.match(appSource, /className="sidebar-toggle"/);
+  assert.match(appSource, /hidden=\{!visible\}/);
+  assert.match(appSource, /else setDesktopSidebarCollapsed/);
   assert.doesNotMatch(appSource, /setDesktopNavigationLevel/);
   assert.match(styleSource, /\.app-shell[\s\S]*grid-template-columns:\s*224px minmax\(0, 1fr\)/);
 });
 
-test("포켓·NS 내부 계정은 상단에서 프로젝트 회사를 생성한다", () => {
-  assert.match(appSource, /className="topbar-project-create"/);
+test("포켓·NS 내부 계정은 왼쪽 하단에서 프로젝트 생성과 견적 불러오기를 실행한다", () => {
+  assert.match(appSource, /<footer className="sidebar-project-tools">/);
+  assert.match(appSource, /className="sidebar-project-create"/);
+  assert.match(appSource, /className="sidebar-project-import"/);
+  assert.doesNotMatch(appSource, /className="topbar-project-create"/);
   assert.match(appSource, /function ProjectCreateModal/);
   assert.match(appSource, /\["pocket", "ns"\]\.includes\(role\)/);
   assert.match(appSource, /source\.createProject\(payload\)/);

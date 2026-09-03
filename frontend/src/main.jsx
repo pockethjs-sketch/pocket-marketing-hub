@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
 import "./styles.css";
+import "./sidebarWorkspace.css";
 
 // The app already has deterministic request deduplication and contract tests.
 // Avoid StrictMode's development-only double mount here: on large task/Gantt

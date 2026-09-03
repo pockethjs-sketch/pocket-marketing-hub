@@ -1,0 +1,103 @@
+/* Canonical shell: one collapsible left column for projects and page menus. */
+.app-shell.has-sidebar-workspace {
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+.app-shell.has-sidebar-workspace.is-sidebar-collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+.app-shell.has-sidebar-workspace > .app-main {
+  grid-column: 2;
+  min-width: 0;
+}
+.app-shell.has-sidebar-workspace > .project-sidebar {
+  position: sticky;
+  inset: 0 auto auto 0;
+  z-index: 45;
+  display: flex;
+  grid-column: 1;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  max-height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+  border-right: 1px solid #dce3ed;
+  background: #f8f9fc;
+  box-shadow: none;
+}
+.has-sidebar-workspace .sidebar-menu-header {
+  min-height: 64px;
+  flex: 0 0 64px;
+  padding: 0 14px;
+  background: #fff;
+}
+.has-sidebar-workspace.is-sidebar-collapsed .sidebar-menu-header {
+  justify-content: center;
+  padding: 0;
+}
+.sidebar-toggle {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 1px solid #dce3ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #172f68;
+  cursor: pointer;
+}
+.sidebar-toggle:hover { background: #edf1fa; border-color: #abbadb; }
+.sidebar-workspace-content { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.sidebar-workspace-content[hidden] { display: none; }
+.sidebar-workspace-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.sidebar-projects { margin: 0 14px; padding: 20px 0 16px; border-bottom: 1px solid #dde4ef; }
+.sidebar-section-label { display: block; padding: 0 8px; color: #738096; font-size: 10px; font-weight: 750; }
+.sidebar-company-list { display: grid; gap: 5px; margin-top: 10px; }
+.sidebar-company-list button {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #5b687c;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+  box-shadow: none;
+}
+.sidebar-company-list button span { min-width: 0; overflow-wrap: anywhere; }
+.sidebar-company-list button svg { flex: 0 0 auto; }
+.sidebar-company-list button:hover { background: #edf1f8; color: #172f68; }
+.sidebar-company-list button.is-active { background: #172f68; border-color: #172f68; color: #fff; }
+.sidebar-current-project { margin: 12px 8px 0; color: #7a879a; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.sidebar-pages-label { margin: 18px 14px 0; }
+.has-sidebar-workspace .project-sidebar .project-nav { flex: 0 0 auto; padding: 8px 12px 20px; }
+.sidebar-project-tools { display: grid; flex: 0 0 auto; gap: 7px; padding: 13px 14px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid #dce3ed; background: #fff; }
+.sidebar-project-tools button { display: flex; min-height: 36px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #dce3ed; border-radius: 8px; background: #fff; color: #34445f; font-size: 11px; font-weight: 750; cursor: pointer; box-shadow: none; }
+.sidebar-project-tools button:hover { background: #edf1fa; }
+.sidebar-project-tools .sidebar-project-create { border-color: #172f68; background: #172f68; color: #fff; }
+.sidebar-project-tools .sidebar-project-create:hover { background: #102550; }
+.topbar-project-context { display: grid; min-width: 0; gap: 4px; }
+.topbar-project-context small { color: #7a879a; font-size: 10px; }
+.topbar-project-context strong { overflow: hidden; color: #182b4c; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) {
+  .app-shell.has-sidebar-workspace { grid-template-columns: 56px minmax(0, 1fr); }
+  .app-shell.has-sidebar-workspace.is-navigation-drawer-open > .project-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 82; width: min(280px, calc(100vw - 56px)); }
+  .app-shell.has-sidebar-workspace > .mobile-overlay { inset: 0; z-index: 81; }
+  .has-sidebar-workspace .topbar { gap: 8px; padding-inline: 12px; }
+  .has-sidebar-workspace .topbar-leading { flex: 1; min-width: 0; }
+  .has-sidebar-workspace .topbar-actions { flex: 0 0 auto; gap: 6px; }
+  .has-sidebar-workspace .global-search { display: none; }
+}
+@media (max-width: 520px) {
+  .has-sidebar-workspace .actor-badge > span { display: none; }
+  .has-sidebar-workspace .actor-badge { padding: 0; border: 0; }
+  .topbar-project-context strong { font-size: 11px; }
+}
