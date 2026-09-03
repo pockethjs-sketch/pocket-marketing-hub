@@ -10,6 +10,10 @@ const profileDir = await mkdtemp(path.join(tmpdir(), "pocket-task-nav-"));
 const timeoutMs = Number(process.env.SMOKE_READY_TIMEOUT || 30000);
 const expectActivity = process.env.SMOKE_EXPECT_ACTIVITY !== "false";
 const expectedTasksMin = Number(process.env.SMOKE_EXPECT_TASKS_MIN || 0);
+const expectedCompanies = String(process.env.SMOKE_EXPECT_COMPANIES || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const chrome = spawn(chromePath, [
   "--headless=new",
@@ -170,6 +174,10 @@ try {
   assert(desktopNavigation.companyTabs > 0 && !desktopNavigation.clientRailPresent, "Company selection did not move exclusively to the top bar");
   assert(desktopNavigation.projectSidebar !== "none", "Desktop left menu is not persistently visible");
   assert(desktopNavigation.toggleCount === 0, "Desktop still exposes a chevron navigation toggle");
+  if (expectedCompanies.length) {
+    const companyLabels = await evaluate(client, "Array.from(document.querySelectorAll('.topbar-company-tabs button')).map((button) => button.textContent.trim())");
+    assert(expectedCompanies.every((name) => companyLabels.includes(name)), `Missing company tabs: expected ${expectedCompanies.join(',')}, received ${companyLabels.join(',')}`);
+  }
 
   assert(await evaluate(client, clickTab("간트")), "Gantt tab was not clickable");
   assert(await waitFor(client, "document.querySelector('.task-workspace-tabs button[aria-selected=\"true\"]')?.textContent.trim() === '간트'"), "Gantt tab did not activate");
