@@ -7,7 +7,7 @@
 
 var MH_CONTRACT_VERSION = '2026-09-02-gantt-schedule-v12';
 var MH_SCHEMA_VERSION = '2026-09-02-gantt-schedule-v5';
-var MH_BACKEND_VERSION = '2026-09-03-supabase-backup-v45';
+var MH_BACKEND_VERSION = '2026-09-03-supabase-backup-v46';
 
 // Login is required. Public preview sessions cannot read internal plans or
 // mutate tasks even if stale preview configuration remains in Script Properties.

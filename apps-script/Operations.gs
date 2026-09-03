@@ -358,13 +358,16 @@ function mhWriteSupabaseTaskBackup_(request) {
       var protection = protections.length ? protections[0] : sheet.protect();
       protection.setDescription('Supabase 자동 백업 - 직접 편집 금지');
       protection.setWarningOnly(false);
-      var ownerEmail = Session.getEffectiveUser().getEmail();
-      var editors = protection.getEditors();
-      if (editors.length) protection.removeEditors(editors.filter(function (editor) {
-        return editor.getEmail() !== ownerEmail;
-      }));
-      if (ownerEmail && !protection.canEdit()) protection.addEditor(ownerEmail);
-      protectedSheet = true;
+      protectedSheet = !protection.isWarningOnly();
+      try {
+        var effectiveUser = Session.getEffectiveUser();
+        protection.addEditor(effectiveUser);
+        var editors = protection.getEditors();
+        if (editors.length) protection.removeEditors(editors);
+        if (protection.canDomainEdit()) protection.setDomainEdit(false);
+      } catch (editorError) {
+        console.warn('[marketing-hub] supabase backup editor restriction fallback: ' + editorError);
+      }
     } catch (protectionError) {
       console.warn('[marketing-hub] supabase backup protection fallback: ' + protectionError);
     }
