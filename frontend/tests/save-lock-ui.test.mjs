@@ -20,10 +20,11 @@ test("원장 쓰기는 공통 저장 잠금과 중앙 모달을 사용한다", (
 });
 
 test("업무·이슈·프로젝트·회의록·KPI·권한 저장이 공통 잠금을 우회하지 않는다", () => {
-  assert.equal((appSource.match(/await mutateWithSaveLock\(/g) || []).length, 9);
+  assert.equal((appSource.match(/await mutateWithSaveLock\(/g) || []).length, 10);
   assert.equal((appSource.match(/await mutateBatchWithSaveLock\(/g) || []).length, 1);
   assert.equal((appSource.match(/await accessMutateWithSaveLock\(/g) || []).length, 1);
   assert.doesNotMatch(appSource, /await source\.mutate\(/);
   assert.doesNotMatch(appSource, /await source\.mutateBatch\(/);
   assert.doesNotMatch(appSource, /await source\.accessAdminMutate\(/);
+  assert.match(appSource, /runSheetWrite\("새 프로젝트와 편집 권한을 생성하고 있습니다\."/);
 });

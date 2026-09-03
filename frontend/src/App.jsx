@@ -337,8 +337,57 @@ function TaskNotificationCenter({ projectId, tasks, loaded, onSelect }) {
   </div>;
 }
 
-function Topbar({ clients, activeClient, onSelectClient, project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation, notificationTasks, notificationsLoaded, onNotificationSelect }) {
-  return <header className="topbar"><div className="topbar-leading">{navigation.usesDrawer && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.isDrawerOpen} aria-controls={navigation.controlledIds}><Menu size={18} strokeWidth={2} /></button>}<div className="topbar-company-switcher"><span>프로젝트 회사</span><nav className="topbar-company-tabs" aria-label="프로젝트 회사 선택">{clients.map((client) => <button key={client.id} type="button" className={client.id === activeClient ? "is-active" : ""} aria-current={client.id === activeClient ? "true" : undefined} onClick={() => onSelectClient(client.id)}><i className={`presence ${client.status}`} />{client.name}</button>)}</nav></div><div className="topbar-project-name" title={project.name}>{project.name}</div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무 검색" /></label><TaskNotificationCenter projectId={project.id} tasks={notificationTasks} loaded={notificationsLoaded} onSelect={onNotificationSelect} /><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+function Topbar({ clients, activeClient, onSelectClient, onCreateProject, canCreateProject, project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation, notificationTasks, notificationsLoaded, onNotificationSelect }) {
+  return <header className="topbar"><div className="topbar-leading">{navigation.usesDrawer && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.isDrawerOpen} aria-controls={navigation.controlledIds}><Menu size={18} strokeWidth={2} /></button>}<div className="topbar-company-switcher"><span>프로젝트 회사</span><div className="topbar-company-row"><nav className="topbar-company-tabs" aria-label="프로젝트 회사 선택">{clients.map((client) => <button key={client.id} type="button" className={client.id === activeClient ? "is-active" : ""} aria-current={client.id === activeClient ? "true" : undefined} onClick={() => onSelectClient(client.id)}><i className={`presence ${client.status}`} />{client.name}</button>)}</nav>{canCreateProject && <button type="button" className="topbar-project-create" onClick={onCreateProject}><Plus size={14} strokeWidth={2.5} />프로젝트 추가</button>}</div></div><div className="topbar-project-name" title={project.name}>{project.name}</div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무 검색" /></label><TaskNotificationCenter projectId={project.id} tasks={notificationTasks} loaded={notificationsLoaded} onSelect={onNotificationSelect} /><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+}
+
+function ProjectCreateModal({ onClose, onSubmit }) {
+  const [fields, setFields] = useState({ client_name: "", project_name: "", description: "", start_date: "", end_date: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const setField = (name, value) => setFields((current) => ({ ...current, [name]: value }));
+
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    globalThis.addEventListener?.("keydown", closeOnEscape);
+    return () => globalThis.removeEventListener?.("keydown", closeOnEscape);
+  }, [onClose, saving]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (fields.start_date && fields.end_date && fields.end_date < fields.start_date) {
+      setError(new Error("종료일은 시작일보다 빠를 수 없습니다."));
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(fields);
+      onClose();
+    } catch (saveError) {
+      setError(saveError);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+    <section className="create-modal project-create-modal" role="dialog" aria-modal="true" aria-labelledby="project-create-title">
+      <header><div><p className="editorial-kicker">새 운영 공간</p><h2 id="project-create-title">프로젝트 추가</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header>
+      <form onSubmit={submit}>
+        <label className="create-field"><span>프로젝트 회사</span><input autoFocus required maxLength={120} value={fields.client_name} disabled={saving} onChange={(event) => setField("client_name", event.target.value)} placeholder="예: 새 고객사" /></label>
+        <label className="create-field"><span>프로젝트명</span><input required maxLength={200} value={fields.project_name} disabled={saving} onChange={(event) => setField("project_name", event.target.value)} placeholder="예: 통합 마케팅 운영" /></label>
+        <label className="create-field"><span>시작일</span><input type="date" value={fields.start_date} max={fields.end_date || undefined} disabled={saving} onChange={(event) => setField("start_date", event.target.value)} /></label>
+        <label className="create-field"><span>종료일</span><input type="date" value={fields.end_date} min={fields.start_date || undefined} disabled={saving} onChange={(event) => setField("end_date", event.target.value)} /></label>
+        <label className="create-field is-wide"><span>프로젝트 설명</span><textarea rows="3" maxLength={5000} value={fields.description} disabled={saving} onChange={(event) => setField("description", event.target.value)} placeholder="운영 목표나 범위를 입력하세요" /></label>
+        <div className="project-create-note"><ShieldCheck size={16} /><span>생성자는 이 프로젝트의 편집 권한을 자동으로 받습니다. 고객 공개는 기본적으로 꺼집니다.</span></div>
+        {error && <div className="form-error"><AlertCircle size={15} /><span>{error.message || "프로젝트를 생성하지 못했습니다."}</span></div>}
+        <footer><p>회사와 프로젝트가 하나의 운영 단위로 생성됩니다.</p><div><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.client_name.trim() || !fields.project_name.trim()}>{saving ? <><LoaderCircle size={15} className="spin" /> 생성 중</> : "프로젝트 생성"}</button></div></footer>
+      </form>
+    </section>
+  </div>;
 }
 
 function CampaignWorkspaceHeader({ clients, activeClient, onSelectClient, project, role, activeView, activePlanVariant, onView, actor, onLogout, live, search, setSearch, connectionReady, sourceState }) {
@@ -838,7 +887,44 @@ function validInlineTaskUrl(value) {
   return !String(value || "").trim() || /^https?:\/\/[^\s]+$/i.test(String(value).trim());
 }
 
-function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, displayedStart, displayedEnd, newTask, rowClass, mediaColor }) {
+function TaskRowActions({ task, onEdit, onArchive, disabled = false, compact = false }) {
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!deleteArmed) return undefined;
+    const timer = globalThis.setTimeout?.(() => setDeleteArmed(false), 5000);
+    return () => globalThis.clearTimeout?.(timer);
+  }, [deleteArmed]);
+
+  const requestArchive = async () => {
+    if (disabled || deleting) return;
+    if (!deleteArmed) {
+      setDeleteArmed(true);
+      setError("");
+      return;
+    }
+    setDeleting(true);
+    setError("");
+    try {
+      await onArchive(task);
+    } catch (archiveError) {
+      setDeleteArmed(false);
+      setError(archiveError?.message || "업무를 삭제하지 못했습니다.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return <div className={`task-row-actions${compact ? " is-compact" : ""}${deleteArmed ? " is-delete-armed" : ""}`}>
+    <button type="button" className="task-action-edit" disabled={disabled || deleting} onClick={() => onEdit(task.id)} aria-label={`${task.title} 수정`} title="업무 수정"><Pencil size={13} /></button>
+    <button type="button" className="task-action-delete" disabled={disabled || deleting} onClick={() => void requestArchive()} aria-label={deleteArmed ? `${task.title} 삭제 확인` : `${task.title} 삭제`} title={deleteArmed ? "한 번 더 눌러 삭제" : "업무 삭제"}>{deleting ? <LoaderCircle size={13} className="spin" /> : deleteArmed ? <span>삭제?</span> : <Trash2 size={13} />}</button>
+    {error && <small className="task-row-action-error" role="alert" title={error}>{error}</small>}
+  </div>;
+}
+
+function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onArchive, displayedStart, displayedEnd, newTask, rowClass, mediaColor }) {
   const [draft, setDraft] = useState(() => taskInlineDraft(task, displayedStart, displayedEnd));
   const [savingField, setSavingField] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -956,16 +1042,17 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, displayedSta
     <td className="reference-task-owner"><div className="reference-task-cell"><button type="button" className={`task-inline-owner is-${String(draft.responsible_org_code || "POCKET").toLowerCase()}`} disabled={disabled} title={`눌러서 포켓 → NS → ${project.clientName || "고객사"} 순으로 변경`} onClick={cycleOwner}>{savingField === "responsible_org_code" ? <LoaderCircle size={12} className="spin" /> : ownerLabel}</button></div></td>
     <td className="reference-task-link"><div className="reference-task-cell"><span className="task-inline-link">{validInlineTaskUrl(draft.completion_url) && draft.completion_url && <a href={draft.completion_url} target="_blank" rel="noreferrer" aria-label={`${task.title} 완료링크 열기`}>열기 ↗</a>}<input className="task-inline-input" type="text" inputMode="url" aria-label={`${task.title} 완료링크`} maxLength={2048} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.completion_url} placeholder={canWrite ? "https://" : ""} onChange={(event) => setField("completion_url", event.target.value)} onBlur={(event) => void commitField("completion_url", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "completion_url")} /></span></div></td>
     <td className="reference-task-note"><div className="reference-task-cell"><textarea className="task-inline-textarea" aria-label={`${task.title} 비고`} rows="1" maxLength={10000} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.remarks} placeholder={canWrite ? "비고" : ""} onChange={(event) => setField("remarks", event.target.value)} onBlur={(event) => void commitField("remarks", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "remarks")} /></div></td>
+    {canWrite && <td className="reference-task-actions"><TaskRowActions task={task} onEdit={onEdit} onArchive={onArchive} disabled={Boolean(savingField)} /></td>}
   </tr>;
 }
 
-function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, ganttDrafts, freshnessNow, scheduleClass, mediaColor }) {
-  return <div className="task-schedule-matrix-scroll reference-task-scroll"><table className="task-schedule-matrix is-table-view is-detailed reference-task-table"><thead><tr><th>매체</th><th>업무</th><th>세부내용</th><th>시작일</th><th>종료일</th><th>기간</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th></tr></thead><tbody>{tasks.map((task) => {
+function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, onEdit, onArchive, ganttDrafts, freshnessNow, scheduleClass, mediaColor }) {
+  return <div className="task-schedule-matrix-scroll reference-task-scroll"><table className="task-schedule-matrix is-table-view is-detailed reference-task-table"><thead><tr><th>매체</th><th>업무</th><th>세부내용</th><th>시작일</th><th>종료일</th><th>기간</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th>{canWrite && <th>관리</th>}</tr></thead><tbody>{tasks.map((task) => {
     const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
     const bounds = scheduleDateBounds(scheduleDates);
     const displayedStart = bounds.start || task.plannedStartDate || "";
     const displayedEnd = bounds.end || task.dueDate || "";
-    return <TaskScheduleInlineRow key={task.id} task={task} project={project} canWrite={canWrite} onUpdate={onUpdate} displayedStart={displayedStart} displayedEnd={displayedEnd} newTask={isNewTask(task, freshnessNow)} rowClass={scheduleClass(task)} mediaColor={mediaColor(taskScheduleMedia(task))} />;
+    return <TaskScheduleInlineRow key={task.id} task={task} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={onEdit} onArchive={onArchive} displayedStart={displayedStart} displayedEnd={displayedEnd} newTask={isNewTask(task, freshnessNow)} rowClass={scheduleClass(task)} mediaColor={mediaColor(taskScheduleMedia(task))} />;
   })}</tbody></table></div>;
 }
 
@@ -1118,7 +1205,7 @@ function ProjectIssuePanel({ issues, canWrite, onCreate, onUpdate, onArchive }) 
   </section>;
 }
 
-function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWriteIssues, canEditProject, onUpdate, onBatchUpdate, onProjectUpdate, onCreate, onIssueCreate, onIssueUpdate, onIssueArchive, displayMode, onViewChange, canViewActivity, activityState, onLoadActivity }) {
+function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWriteIssues, canEditProject, onUpdate, onArchive, onBatchUpdate, onProjectUpdate, onCreate, onIssueCreate, onIssueUpdate, onIssueArchive, displayMode, onViewChange, canViewActivity, activityState, onLoadActivity }) {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [scheduleFilter, setScheduleFilter] = useState("ALL");
@@ -1401,7 +1488,7 @@ function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWrit
     <section className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
       <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : " · 업무명을 누르면 수정"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={onLoadActivity} disabled={activityState?.status === "loading"}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
       {displayMode === "gantt" && canWrite && <div className="g-hint"><span>✎</span><span>칸을 클릭하면 칠해지고, 다시 누르면 지워집니다. 옆으로 끌면 여러 칸을 한 번에 — 시작일·종료일·기간은 칠한 범위에 맞춰 자동으로 바뀝니다.</span></div>}
-      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} onRefresh={onLoadActivity} /> : filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ minWidth: `${280 + ganttTrackWidth}px` }}>
+      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} onRefresh={onLoadActivity} /> : filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={setEditingTaskId} onArchive={onArchive} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ minWidth: `${280 + ganttTrackWidth}px` }}>
         <div className="g-hrow"><div className="g-lbl g-corner"><span className="nm">매체 · 업무</span></div><div className="g-hstack" style={{ width: `${ganttTrackWidth}px` }}><div className="g-months">{months.map((month) => <div className="g-m" key={month.key} style={{ width: `${month.count * 28}px` }}>{month.label}</div>)}</div><div className="g-days">{days.map((day) => <div key={day.iso} className={`g-d${day.weekend ? " we" : ""}${day.weekday === "일" ? " sun" : ""}${day.iso === today ? " ref" : ""}`}><span>{day.day}</span><span className="dw">{day.weekday}</span></div>)}</div></div></div>
         {ganttGroups.map((group) => {
           const color = ganttCategoryColor(group.label);
@@ -1412,7 +1499,7 @@ function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWrit
             const scheduleSet = new Set(scheduleDates);
             const owner = taskResponsibleOrgLabel(task.responsibleOrgCode, project.clientName);
             const newTask = isNewTask(task, freshnessNow);
-            return <div className={`g-row${newTask ? " is-new-task" : ""}`} key={task.id} style={{ "--fill": ganttFillColor(task), "--rail": color }}><div className="g-lbl" title={`${group.label} · ${task.title}`}><i className="g-rail-dot" /><button type="button" className="g-task-open nm" disabled={!canWrite} onClick={() => canWrite && setEditingTaskId(task.id)}>{task.title}</button>{newTask && <span className="g-new-badge">신규</span>}<span className={`otag ${owner === "포켓컴퍼니" ? "op" : owner === "NS" ? "on" : "oc"}`}>{owner}</span></div><div className={`g-track ${canWrite ? "paint" : ""}`} style={{ width: `${ganttTrackWidth}px` }}>{days.map((day, dayIndex) => {
+            return <div className={`g-row${newTask ? " is-new-task" : ""}`} key={task.id} style={{ "--fill": ganttFillColor(task), "--rail": color }}><div className="g-lbl" title={`${group.label} · ${task.title}`}><i className="g-rail-dot" /><button type="button" className="g-task-open nm" disabled={!canWrite} onClick={() => canWrite && setEditingTaskId(task.id)}>{task.title}</button>{newTask && <span className="g-new-badge">신규</span>}<span className={`otag ${owner === "포켓컴퍼니" ? "op" : owner === "NS" ? "on" : "oc"}`}>{owner}</span>{canWrite && <TaskRowActions compact task={task} onEdit={setEditingTaskId} onArchive={onArchive} disabled={ganttSave.status === "saving"} />}</div><div className={`g-track ${canWrite ? "paint" : ""}`} style={{ width: `${ganttTrackWidth}px` }}>{days.map((day, dayIndex) => {
               const active = scheduleSet.has(day.iso);
               const starts = active && !scheduleSet.has(days[dayIndex - 1]?.iso);
               const ends = active && !scheduleSet.has(days[dayIndex + 1]?.iso);
@@ -1428,7 +1515,7 @@ function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWrit
   </div>;
 }
 
-function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCreate, canWrite, onUpdate, onBatchUpdate, onProjectUpdate, onIssueCreate, onIssueUpdate, onIssueArchive, initialSection = "schedule" }) {
+function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCreate, canWrite, onUpdate, onArchive, onBatchUpdate, onProjectUpdate, onIssueCreate, onIssueUpdate, onIssueArchive, initialSection = "schedule" }) {
   const editable = Boolean(canWrite);
   const schedule = useMemo(() => trackerSchedule(taskPage.project?.startDate), [taskPage.project?.startDate]);
   const tasks = useMemo(() => (taskPage.items || []).map((task) => {
@@ -1445,7 +1532,7 @@ function TasksView({ role, query, taskPage, activityState, onLoadActivity, onCre
   }, [displayMode, activityState?.status, onLoadActivity]);
   const selectTaskView = (nextView) => setDisplayMode(nextView === "gantt" || nextView === "activity" ? nextView : "table");
 
-  return <div className="view-stack campaign-schedule-root"><TaskScheduleTimeline tasks={tasks} issues={taskPage.issues || []} project={taskPage.project || {}} query={query} canWrite={editable} canWriteIssues={Boolean(editable && taskPage.issueCanWrite)} canEditProject={Boolean(editable && role === "pocket")} onUpdate={onUpdate} onBatchUpdate={onBatchUpdate} onProjectUpdate={onProjectUpdate} onCreate={onCreate} onIssueCreate={onIssueCreate} onIssueUpdate={onIssueUpdate} onIssueArchive={onIssueArchive} displayMode={displayMode} onViewChange={selectTaskView} canViewActivity={role !== "client"} activityState={activityState} onLoadActivity={onLoadActivity} /></div>;
+  return <div className="view-stack campaign-schedule-root"><TaskScheduleTimeline tasks={tasks} issues={taskPage.issues || []} project={taskPage.project || {}} query={query} canWrite={editable} canWriteIssues={Boolean(editable && taskPage.issueCanWrite)} canEditProject={Boolean(editable && role === "pocket")} onUpdate={onUpdate} onArchive={onArchive} onBatchUpdate={onBatchUpdate} onProjectUpdate={onProjectUpdate} onCreate={onCreate} onIssueCreate={onIssueCreate} onIssueUpdate={onIssueUpdate} onIssueArchive={onIssueArchive} displayMode={displayMode} onViewChange={selectTaskView} canViewActivity={role !== "client"} activityState={activityState} onLoadActivity={onLoadActivity} /></div>;
 }
 
 function localDateValue() {
@@ -1786,12 +1873,12 @@ function PlanView({ plan, project, planVariant }) {
   </div>;
 }
 
-function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onTaskBatchUpdate, onProjectUpdate, onIssueCreate, onIssueUpdate, onIssueArchive, onDailyMeetingSave, onKpiSave, onKpiArchive, onAccessSave, canWrite }) {
+function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onTaskArchive, onTaskBatchUpdate, onProjectUpdate, onIssueCreate, onIssueUpdate, onIssueArchive, onDailyMeetingSave, onKpiSave, onKpiArchive, onAccessSave, canWrite }) {
   if (pageState.status === "loading" && !pageState.data) return <LoadingState />;
   if (pageState.status === "error" && !pageState.data) return <ErrorState error={pageState.error} onRetry={onRetry} />;
   const data = pageState.data || {};
   if (view === "plan") return <PlanView plan={data} project={project} planVariant={planVariant} />;
-  if (view === "tasks" || view === "schedule") return <TasksView role={role} query={search} taskPage={{ ...data, project: { id: project.id, clientId: project.clientId, clientName: project.clientName, name: project.name, permissionCode: project.permissionCode, allowedPages: project.allowedPages, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion, ...(data.project || {}) } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onBatchUpdate={onTaskBatchUpdate} onProjectUpdate={onProjectUpdate} onIssueCreate={onIssueCreate} onIssueUpdate={onIssueUpdate} onIssueArchive={onIssueArchive} canWrite={canWrite} initialSection="schedule" />;
+  if (view === "tasks" || view === "schedule") return <TasksView role={role} query={search} taskPage={{ ...data, project: { id: project.id, clientId: project.clientId, clientName: project.clientName, name: project.name, permissionCode: project.permissionCode, allowedPages: project.allowedPages, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion, ...(data.project || {}) } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onArchive={onTaskArchive} onBatchUpdate={onTaskBatchUpdate} onProjectUpdate={onProjectUpdate} onIssueCreate={onIssueCreate} onIssueUpdate={onIssueUpdate} onIssueArchive={onIssueArchive} canWrite={canWrite} initialSection="schedule" />;
   if (view === "daily") return <DailyMeetingsView role={role} meetings={data.items || []} canWrite={canWrite && role !== "client"} onSave={onDailyMeetingSave} />;
   if (view === "content") return <ContentView role={role} query={search} contents={data.items || []} onCreate={onCreate} canWrite={canWrite} />;
   if (view === "tracking") return <TrackingView tracking={data} />;
@@ -1880,6 +1967,7 @@ export function App() {
   const [bootstrapRetryKey, setBootstrapRetryKey] = useState(0);
   const [pageRefreshKey, setPageRefreshKey] = useState(0);
   const [createEntity, setCreateEntity] = useState(null);
+  const [projectCreateOpen, setProjectCreateOpen] = useState(false);
   const [saveNotice, setSaveNotice] = useState(null);
   const [sheetSaveLock, setSheetSaveLock] = useState({ visible: false, label: "" });
   const sheetWriteCountRef = useRef(0);
@@ -2381,6 +2469,32 @@ export function App() {
     return true;
   };
 
+  const removeTaskResource = (projectId, taskId) => {
+    const patchState = (state) => {
+      if (state.resource !== "tasks" || state.projectId !== projectId || !state.data?.items) return state;
+      const items = state.data.items.filter((item) => item.id !== taskId);
+      if (items.length === state.data.items.length) return state;
+      return {
+        ...state,
+        data: {
+          ...state.data,
+          items,
+          total: Math.max(0, Number(state.data.total || state.data.items.length) - 1),
+        },
+      };
+    };
+    setResourceState(patchState);
+    const cacheKey = `${projectId}:tasks`;
+    const cached = resourceCacheRef.current.get(cacheKey);
+    if (!cached?.state) return;
+    const nextState = patchState(cached.state);
+    if (nextState !== cached.state) {
+      const nextCache = { ...cached, state: nextState, cachedAt: Date.now() };
+      resourceCacheRef.current.set(cacheKey, nextCache);
+      scheduleResourceSessionCacheWrite(source?.getSession(), cacheKey, nextCache);
+    }
+  };
+
   const patchIssueResource = (projectId, issueId, updater) => {
     const patchState = (state) => {
       if (state.resource !== "tasks" || state.projectId !== projectId || !state.data?.issues) return state;
@@ -2476,6 +2590,34 @@ export function App() {
       return canonicalTask;
     } catch (error) {
       patchTaskResource(projectId, task.id, () => previousTask);
+      if (error.code === "conflict") invalidateResource(projectId, "tasks");
+      throw error;
+    }
+  };
+
+  const archiveTask = async (task) => {
+    if (!canWriteTasks) {
+      const readOnlyError = new Error("이 계정은 업무를 삭제할 권한이 없습니다.");
+      readOnlyError.code = "forbidden";
+      throw readOnlyError;
+    }
+    const projectId = activeProjectId;
+    resourceCacheEpochRef.current += 1;
+    try {
+      await mutateWithSaveLock("업무를 원장에서 보관 처리하고 있습니다.", {
+        projectId,
+        mutation: {
+          entityType: "task",
+          operation: "ARCHIVE",
+          id: task.id,
+          expectedRowVersion: task.rowVersion,
+          fields: {},
+        },
+      });
+      removeTaskResource(projectId, task.id);
+      setTaskActivityState({ ...blankTaskActivity, projectId });
+      setSaveNotice("업무를 삭제했습니다. 원장에는 복구 가능한 보관 이력이 남습니다.");
+    } catch (error) {
       if (error.code === "conflict") invalidateResource(projectId, "tasks");
       throw error;
     }
@@ -2724,6 +2866,48 @@ export function App() {
     invalidateResource(activeProjectId, "permissions");
   };
 
+  const createProject = async (fields) => {
+    if (!["pocket", "ns"].includes(role) || typeof source.createProject !== "function") {
+      const forbidden = new Error("이 계정은 프로젝트를 생성할 권한이 없습니다.");
+      forbidden.code = "forbidden";
+      throw forbidden;
+    }
+    const result = await runSheetWrite("새 프로젝트와 편집 권한을 생성하고 있습니다.", () => source.createProject({ fields }));
+    const createdClientId = result?.data?.client?.client_id;
+    const createdProjectId = result?.data?.project?.project_id;
+    if (!createdClientId || !createdProjectId) {
+      const contractError = new Error("프로젝트는 생성됐지만 새 프로젝트 식별자를 받지 못했습니다. 목록을 다시 불러와 주세요.");
+      contractError.code = "invalid_contract";
+      throw contractError;
+    }
+
+    clearBootstrapSessionCache();
+    activeProjectIdRef.current = createdProjectId;
+    let envelope;
+    try {
+      envelope = await source.bootstrap({ initialView: "tasks" });
+    } catch {
+      initializationRequestRef.current = null;
+      setBootstrapRetryKey((current) => current + 1);
+      setSaveNotice("프로젝트 생성은 완료됐습니다. 새 목록을 다시 불러오는 중입니다.");
+      return result;
+    }
+    const nextBootstrap = applyBootstrapEnvelope(envelope);
+    if (!nextBootstrap.projects[createdProjectId] || !nextBootstrap.clients.some((client) => client.id === createdClientId)) {
+      initializationRequestRef.current = null;
+      setBootstrapRetryKey((current) => current + 1);
+      setSaveNotice("프로젝트 생성은 완료됐습니다. 새 목록 권한을 다시 확인하고 있습니다.");
+      return result;
+    }
+    setActiveClient(createdClientId);
+    setActiveProjectId(createdProjectId);
+    activeProjectIdRef.current = createdProjectId;
+    setView("schedule");
+    setSearch("");
+    setSaveNotice("새 프로젝트를 생성하고 편집 권한을 연결했습니다.");
+    return result;
+  };
+
   const selectClient = (clientId) => {
     const client = bootstrapState.data.clients.find((item) => item.id === clientId);
     if (!client) return;
@@ -2760,8 +2944,9 @@ export function App() {
     <div className={`app-shell ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""} ${sheetSaveLock.visible ? "is-sheet-saving" : ""}`} aria-busy={sheetSaveLock.visible}>
       <ProjectSidebar project={project} role={role} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" type="button" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelectClient={selectClient} project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} notificationTasks={notificationTasks} notificationsLoaded={notificationsLoaded} onNotificationSelect={openNotificationTask} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={refreshCurrentPage} onCreate={setCreateEntity} onTaskUpdate={updateTask} onTaskBatchUpdate={updateTasksBatch} onProjectUpdate={updateProjectStartDate} onIssueCreate={createProjectIssue} onIssueUpdate={updateProjectIssue} onIssueArchive={archiveProjectIssue} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelectClient={selectClient} onCreateProject={() => setProjectCreateOpen(true)} canCreateProject={live && ["pocket", "ns"].includes(role) && typeof source.createProject === "function"} project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} notificationTasks={notificationTasks} notificationsLoaded={notificationsLoaded} onNotificationSelect={openNotificationTask} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={refreshCurrentPage} onCreate={setCreateEntity} onTaskUpdate={updateTask} onTaskArchive={archiveTask} onTaskBatchUpdate={updateTasksBatch} onProjectUpdate={updateProjectStartDate} onIssueCreate={createProjectIssue} onIssueUpdate={updateProjectIssue} onIssueArchive={archiveProjectIssue} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} clientName={project.clientName} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
+      {projectCreateOpen && <ProjectCreateModal onClose={() => setProjectCreateOpen(false)} onSubmit={createProject} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
       {sheetSaveLock.visible && <GlobalSaveOverlay label={sheetSaveLock.label} />}
     </div>

@@ -104,6 +104,17 @@ export function createSupabaseCoreDomainApi(client) {
       });
       return { ok: true, generatedAt: new Date().toISOString(), data };
     },
+    createProject: (input = {}) => {
+      const fields = input.fields || {};
+      return mutate(client, "create_project", {
+        p_mutation_id: String(input.mutationId || createMutationId("project")),
+        p_client_name: String(fields.client_name || fields.clientName || "").trim(),
+        p_project_name: String(fields.project_name || fields.projectName || "").trim(),
+        p_description: String(fields.description || "").trim() || null,
+        p_start_date: fields.start_date || fields.startDate || null,
+        p_end_date: fields.end_date || fields.endDate || null,
+      }, "프로젝트를 생성하지 못했습니다.");
+    },
     mutateMeeting: (input) => mutate(client, "mutate_daily_meeting", mutationArgs(input, "p_meeting_id"), "회의록을 저장하지 못했습니다."),
     mutateKpi: (input) => mutate(client, "mutate_kpi_definition", mutationArgs(input, "p_kpi_id"), "KPI를 저장하지 못했습니다."),
     mutateIssue: (input) => mutate(client, "mutate_project_issue", mutationArgs(input, "p_issue_id"), "이슈사항을 저장하지 못했습니다."),

@@ -71,7 +71,11 @@ test("일정표는 참고 HTML 열 구조를 유지하며 셀 직접 수정과 �
   assert.match(appSource, /onClick=\{cycleStatus\}/);
   assert.match(appSource, /onClick=\{cycleOwner\}/);
   assert.match(appSource, /schedule_dates_json: start && end \? serializeScheduleDates\(scheduleDateRange\(start, end\)\) : null/);
-  assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*min-width:\s*1450px/);
+  assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*min-width:\s*1544px/);
+  assert.match(appSource, /<th>비고<\/th>\{canWrite && <th>관리<\/th>\}/);
+  assert.match(appSource, /function TaskRowActions/);
+  assert.match(appSource, /onArchive=\{onTaskArchive\}/);
+  assert.match(appSource, /operation: "ARCHIVE"/);
 });
 
 test("일정표 아래 이슈사항·추가요청 원장은 기준 HTML의 열과 직접 저장 동작을 유지한다", () => {
@@ -151,6 +155,15 @@ test("프로젝트 회사는 상단에서 선택하고 왼쪽에는 화면 메�
   assert.match(appSource, /navigation\.usesDrawer && <button className="navigation-toggle"/);
   assert.doesNotMatch(appSource, /setDesktopNavigationLevel/);
   assert.match(styleSource, /\.app-shell[\s\S]*grid-template-columns:\s*224px minmax\(0, 1fr\)/);
+});
+
+test("포켓·NS 내부 계정은 상단에서 프로젝트 회사를 생성한다", () => {
+  assert.match(appSource, /className="topbar-project-create"/);
+  assert.match(appSource, /function ProjectCreateModal/);
+  assert.match(appSource, /\["pocket", "ns"\]\.includes\(role\)/);
+  assert.match(appSource, /source\.createProject\(\{ fields \}\)/);
+  assert.match(appSource, /setActiveClient\(createdClientId\)/);
+  assert.match(appSource, /setActiveProjectId\(createdProjectId\)/);
 });
 
 test("왼쪽 프로젝트 메뉴는 기존 화면과 실행계획 하위 화면을 연결한다", () => {

@@ -9,6 +9,14 @@
 5. 고객 화면은 `client_id`, `project_id`, `visibility_code`, 권한 정보를 서버에서 검사한 결과만 반환한다.
 6. 사용자·콘텐츠·성과·승인은 서로 독립된 원장으로 관리한다.
 
+## 프로젝트 생성 계약
+
+- 현재 UI의 전역 선택 단위는 `clients` 한 행과 대표 `projects` 한 행의 1:1 운영 쌍이다. `프로젝트 추가`는 이 두 행과 생성자의 `project_memberships`를 `create_project` RPC 한 트랜잭션으로 생성한다.
+- 생성 가능 주체는 활성 `POCKET_MANAGER / POCKET_EDITOR / EXECUTOR_EDITOR`이며 조직은 `POCKET / NS`로 제한한다. 고객 계정은 생성할 수 없다.
+- 생성자 권한은 포켓 `ADMIN`, NS `EDIT`이고 기본 허용 페이지는 `overview / plan / tasks / daily / performance / files`다. `client_view_enabled`는 고객 계정을 별도 배정하기 전까지 `false`다.
+- 회사명은 활성 고객사 사이에서 대소문자·앞뒤 공백을 무시해 중복을 거부한다. `mutation_id` 재호출과 동시 생성은 advisory transaction lock으로 직렬화한다.
+- 같은 고객사 아래 여러 프로젝트를 추가하는 모델은 아직 UI 선택 계약에 포함하지 않는다. 이를 도입할 때는 회사 선택과 프로젝트 선택을 분리하고 `bootstrapViewModel`의 첫 프로젝트 선택 가정을 먼저 제거해야 한다.
+
 ## 탭 구조
 
 | 탭 | 역할 | 기본키 | 주요 연결 |
@@ -76,6 +84,8 @@
 | `completion_url` | 06_업무 | HTTPS 결과물·완료 링크 |
 | `remarks` | 06_업무 | 일정 이슈와 참고사항 |
 | `schedule_dates_json` | 06_업무 | 간트에서 사용자가 선택한 ISO 날짜 배열. 빈 문자열은 구버전 시작일~종료일 연속 구간, `[]`는 일정 전체 삭제를 뜻함 |
+
+일정표·간트의 업무 삭제는 `DELETE`가 아니라 `mutate_task`의 `ARCHIVE`다. 활성 조회에서는 즉시 제외되지만 `tasks.archived_at`, `updated_by_user_id`, `last_mutation_id`, `activity_events`는 남아 복구와 사용자 변경 추적이 가능하다.
 
 UND 운영 업무는 P0/M1/M2/M3 단계와 `plan_week`를 기준으로 `planned_start_date`와 `due_date`를 원장에 명시적으로 저장합니다. 날짜가 없는 구버전 행만 화면에서 프로젝트 착수일과 단계·주차를 기준으로 계산합니다.
 

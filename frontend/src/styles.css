@@ -4869,9 +4869,18 @@ table tbody tr:hover {
 
 .topbar-company-switcher {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   align-items: center;
   gap: 10px;
+}
+
+.topbar-company-row {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
 }
 
 .topbar-company-switcher > span {
@@ -4884,6 +4893,7 @@ table tbody tr:hover {
 
 .topbar-company-tabs {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   align-items: center;
   gap: 6px;
@@ -4943,6 +4953,32 @@ table tbody tr:hover {
 .topbar-company-tabs button.is-active .presence {
   background: #f2b94b;
   box-shadow: 0 0 0 3px rgba(242, 185, 75, .13);
+}
+
+.topbar .topbar-project-create {
+  display: inline-flex;
+  min-width: max-content;
+  height: 34px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px dashed #9fb0d1;
+  border-radius: 9px;
+  background: #f7f9fd;
+  color: #17356f;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.topbar .topbar-project-create:hover {
+  border-style: solid;
+  border-color: #172f68;
+  background: #edf2fc;
+  color: #10285c;
+  box-shadow: none;
 }
 
 .topbar-project-name {
@@ -5020,6 +5056,19 @@ table tbody tr:hover {
     height: 32px;
     padding-inline: 9px;
     font-size: 11px;
+  }
+
+  .topbar .topbar-project-create {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+    justify-content: center;
+    overflow: hidden;
+    color: transparent;
+  }
+
+  .topbar .topbar-project-create svg {
+    color: #17356f;
   }
 }
 
@@ -9934,7 +9983,7 @@ table tbody tr:hover {
 
 .campaign-schedule-surface .reference-task-table {
   width: 100%;
-  min-width: 1450px !important;
+  min-width: 1544px !important;
   border-collapse: separate;
   border-spacing: 0;
   color: #263247;
@@ -10026,6 +10075,8 @@ table tbody tr:hover {
 .campaign-schedule-surface .reference-task-table td:nth-child(10) { width: 220px; min-width: 220px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(11),
 .campaign-schedule-surface .reference-task-table td:nth-child(11) { width: 220px; min-width: 220px; }
+.campaign-schedule-surface .reference-task-table th:nth-child(12),
+.campaign-schedule-surface .reference-task-table td:nth-child(12) { width: 94px; min-width: 94px; }
 
 .campaign-schedule-surface .reference-task-table tbody tr:hover td,
 .campaign-schedule-surface .reference-task-table tbody tr:hover td:first-child,
@@ -10224,6 +10275,113 @@ table tbody tr:hover {
 
 .reference-task-row.is-saving {
   opacity: .72;
+}
+
+.reference-task-actions {
+  vertical-align: middle !important;
+}
+
+.reference-task-actions .task-row-actions {
+  min-height: 42px;
+  justify-content: center;
+}
+
+.task-row-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-row-actions > button {
+  display: inline-flex;
+  min-width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border: 1px solid #dce2ea;
+  border-radius: 7px;
+  background: #fff;
+  color: #526078;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.task-row-actions > button:hover:not(:disabled) {
+  border-color: #9fb2dc;
+  background: #f3f6fd;
+  color: #17356f;
+}
+
+.task-row-actions .task-action-delete:hover:not(:disabled),
+.task-row-actions.is-delete-armed .task-action-delete {
+  border-color: #e49aa3;
+  background: #fff1f2;
+  color: #b42334;
+}
+
+.task-row-actions > button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.task-row-action-error {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 4px);
+  right: 0;
+  width: max-content;
+  max-width: 220px;
+  padding: 5px 7px;
+  border: 1px solid #f0bbc2;
+  border-radius: 6px;
+  background: #fff5f6;
+  color: #a92537;
+  box-shadow: 0 5px 16px rgba(92, 18, 30, .12);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.g-lbl .task-row-actions.is-compact {
+  margin-left: 2px;
+  gap: 2px;
+}
+
+.g-lbl .task-row-actions.is-compact > button {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+}
+
+.g-lbl .task-row-actions.is-compact.is-delete-armed .task-action-delete {
+  width: auto;
+  min-width: 40px;
+  padding-inline: 5px;
+}
+
+.project-create-note {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid #dce5f5;
+  border-radius: 9px;
+  background: #f6f8fc;
+  color: #53627b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.project-create-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #17356f;
 }
 
 @media (max-width: 700px) {

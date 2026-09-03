@@ -61,6 +61,35 @@ test("도메인 RPC의 애플리케이션 오류는 저장 성공으로 처리�
   );
 });
 
+test("프로젝트 생성은 회사·프로젝트·기간을 단일 RPC 계약으로 전달한다", async () => {
+  const client = clientReturning({
+    create_project: { data: { ok: true, data: { client: { client_id: "CLT-NEW" }, project: { project_id: "PRJ-NEW" } } }, error: null },
+  });
+  const api = createSupabaseCoreDomainApi(client);
+  const result = await api.createProject({
+    mutationId: "project_12345678",
+    fields: {
+      client_name: "신규 고객사",
+      project_name: "신규 프로젝트",
+      description: "운영 범위",
+      start_date: "2026-09-03",
+      end_date: "2026-12-31",
+    },
+  });
+  assert.equal(result.data.project.project_id, "PRJ-NEW");
+  assert.deepEqual(client.calls[0], {
+    name: "create_project",
+    args: {
+      p_mutation_id: "project_12345678",
+      p_client_name: "신규 고객사",
+      p_project_name: "신규 프로젝트",
+      p_description: "운영 범위",
+      p_start_date: "2026-09-03",
+      p_end_date: "2026-12-31",
+    },
+  });
+});
+
 test("고객 권한의 Sheets 호환 복제는 Supabase membership id를 넘기지 않는다", () => {
   assert.deepEqual(legacyPermissionMirrorInput({
     operation: "UPSERT",

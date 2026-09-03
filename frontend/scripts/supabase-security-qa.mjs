@@ -24,7 +24,7 @@ async function expectDenied(sql, label) {
     await db.exec(sql);
   } catch (error) {
     const message = String(error?.message || error);
-    assert(/permission denied|row-level security|immutable_column|forbidden_project/i.test(message), `${label}: unexpected error ${message}`);
+    assert(/permission denied|row-level security|immutable_column|forbidden_project|project_create_forbidden/i.test(message), `${label}: unexpected error ${message}`);
     return;
   }
   throw new Error(`${label}: operation unexpectedly succeeded`);
@@ -84,6 +84,7 @@ assert(await scalar("select count(*)::int as count from pg_constraint c join pg_
 await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.client}', false);`);
 await expectDenied("select public.read_tasks(1, false)", "client tasks page permission");
 await expectDenied("select * from public.tasks", "client raw task table");
+await expectDenied(`select public.create_project('project_client_denied_001', '권한 우회 고객사', '권한 우회 프로젝트', null, null, null)`, "client project creation");
 assert(await scalar("select count(*)::int as count from public.profiles") === 1, "client can enumerate project executors");
 
 await db.exec(`reset role; update public.project_memberships set allowed_pages=array['overview','tasks'] where user_id='${userIds.client}'; set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.client}', false);`);
@@ -101,6 +102,30 @@ await expectDenied("select before_data from public.activity_events", "raw audit 
 
 await db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
 await expectDenied("select * from public.tasks", "NS raw task table");
+const { rows: [projectCreate] } = await db.query(`
+  select public.create_project(
+    'project_ns_create_0001', 'NS 신규 고객사', 'NS 신규 마케팅 프로젝트',
+    'NS 생성 권한 검증', '2026-09-03', '2026-12-31'
+  ) as response
+`);
+assert(projectCreate.response?.ok === true, `NS project creation failed: ${JSON.stringify(projectCreate.response)}`);
+const createdProjectLegacyId = projectCreate.response.data.project.project_id;
+const { rows: [projectReplay] } = await db.query(`
+  select public.create_project(
+    'project_ns_create_0001', 'NS 신규 고객사', 'NS 신규 마케팅 프로젝트',
+    'NS 생성 권한 검증', '2026-09-03', '2026-12-31'
+  ) as response
+`);
+assert(JSON.stringify(projectReplay.response) === JSON.stringify(projectCreate.response), "project idempotent replay changed the response");
+const { rows: [duplicateProject] } = await db.query(`
+  select public.create_project(
+    'project_ns_duplicate_01', 'NS 신규 고객사', '중복 회사 프로젝트', null, null, null
+  ) as response
+`);
+assert(duplicateProject.response?.ok === false && duplicateProject.response?.error?.code === "duplicate_client", "duplicate company name was accepted");
+const { rows: [nsBootstrap] } = await db.query("select public.read_bootstrap() as response");
+assert(nsBootstrap.response.projects.some((project) => project.project_id === createdProjectLegacyId && project.permission_code === "EDIT"), "created NS project is missing from bootstrap");
+assert(await scalar(`select count(*)::int as count from public.clients where display_name='NS 신규 고객사'`) === 1, "project replay created a duplicate client");
 const { rows: [nsRead] } = await db.query("select public.read_tasks(1, false) as response");
 assert(nsRead.response?.items?.length === 2, "NS task access mismatch");
 assert(nsRead.response.members.length === 2, "NS project member projection mismatch");
@@ -227,5 +252,7 @@ console.log(JSON.stringify({
   clientExecutorProfiles: "blocked",
   unknownMutationFields: "rejected",
   projectIssueLedger: "pass",
+  nsProjectCreation: "pass",
+  projectCreationIdempotency: "pass",
 }));
 await db.close();

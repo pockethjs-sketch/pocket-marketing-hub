@@ -328,6 +328,11 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     return readTaskActivity({ ...params, projectId });
   }
 
+  async function createProject(input = {}) {
+    await requireAuth();
+    return core.createProject(input);
+  }
+
   function logout() {
     sessionStore.clear();
     legacySessionStore.clear();
@@ -354,6 +359,7 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     files: legacyRead("files"),
     activity,
     permissions: () => accessAdmin.read(),
+    createProject,
     accessAdminMutate,
     mutate,
     mutateBatch,
