@@ -63,7 +63,7 @@ import {
 import { canOperateProjectTasks, nextTaskResponsibleOrgCode, nextTaskStatusCode, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskStatusMutationFields, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { TaskCreateModal } from "./TaskCreateModal.jsx";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
-import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, taskScheduleCategory, taskScheduleMedia, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
 import { buildGanttAxis, ganttMonthClass, groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
 import { readableTaskActivities, taskActivitySentence } from "./taskActivity.js";
 import { isNewTask, unacknowledgedNewTasks } from "./taskFreshness.js";
@@ -1274,26 +1274,10 @@ function ScheduleFilterButtons({ label, value, options, onChange }) {
 }
 
 function TaskScheduleFilters({ groups, count, total, onReset }) {
-  const [activeId, setActiveId] = useState("status");
-  const active = groups.find(group => group.id === activeId) || groups[0];
   const applied = groups.filter(group => group.value !== "ALL");
-  const selectTab = (event, index) => {
-    const target = event.key === "ArrowRight" ? (index + 1) % groups.length
-      : event.key === "ArrowLeft" ? (index + groups.length - 1) % groups.length
-        : event.key === "Home" ? 0 : event.key === "End" ? groups.length - 1 : null;
-    if (target === null) return;
-    event.preventDefault();
-    setActiveId(groups[target].id);
-    document.getElementById(`schedule-filter-tab-${groups[target].id}`)?.focus();
-  };
   return <section className="schedule-filter-panel" aria-label="일정표 업무 필터">
-    <header className="schedule-filter-heading">
-      <div className="schedule-filter-tabs" role="tablist" aria-label="필터 종류">{groups.map((group, index) => <button type="button" role="tab" key={group.id} id={`schedule-filter-tab-${group.id}`} aria-controls="schedule-filter-options" aria-selected={active.id === group.id} tabIndex={active.id === group.id ? 0 : -1} onKeyDown={event => selectTab(event, index)} onClick={() => setActiveId(group.id)}>{group.label}{group.value !== "ALL" && <i aria-label="적용 중" />}</button>)}</div>
-      <span className="schedule-filter-count" aria-live="polite"><strong>{count}</strong> / {total}건</span>
-    </header>
-    <div id="schedule-filter-options" role="tabpanel" aria-labelledby={`schedule-filter-tab-${active.id}`}>
-      <ScheduleFilterButtons label={active.label} value={active.value} options={active.options} onChange={active.onChange} />
-    </div>
+    <header className="schedule-filter-heading"><div><strong>업무 필터</strong><small>여러 조건을 함께 선택할 수 있습니다</small></div><span className="schedule-filter-count" aria-live="polite"><strong>{count}</strong> / {total}건</span></header>
+    <div className="schedule-filter-rows">{groups.map(group => <div key={group.id} id={`schedule-filter-${group.id}`}><ScheduleFilterButtons label={group.label} value={group.value} options={group.options} onChange={group.onChange} /></div>)}</div>
     {applied.length > 0 && <div className="schedule-applied-filters"><span>적용 조건</span>{applied.map(group => <button type="button" key={group.id} aria-label={`${group.label} 필터 해제`} onClick={() => group.onChange("ALL")}>{group.options.find(([id]) => id === group.value)?.[1] || group.value}<X size={11} /></button>)}<button type="button" className="schedule-filter-reset" onClick={onReset}>전체 해제</button></div>}
   </section>;
 }
@@ -1737,10 +1721,10 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
       {activityMode ? <div className="task-activity-toolbar-copy">사용자가 생성·완료·변경한 업무만 표시합니다.</div> : canEditProject && <div className="schedule-start-date refbox"><label><span>착수일</span><input type="date" value={startDateDraft} disabled={startDateSaving} onChange={(event) => { setStartDateDraft(event.target.value); setStartDateError(""); }} /></label><button type="button" className="btn" disabled={startDateSaving || !startDateDraft || startDateDraft === (project.startDate || "")} onClick={saveProjectStartDate}>{startDateSaving ? "저장 중" : "저장"}</button>{startDateError && <small role="alert">{startDateError}</small>}</div>}
     </div>
     {!activityMode && <TaskScheduleFilters key={project.id} count={filteredTasks.length} total={tasks.length} onReset={resetScheduleFilters} groups={[
-      { id: "status", label: "업무 상태별", value: statusFilter, options: scheduleStatusFilters, onChange: setStatusFilter },
-      { id: "category", label: "업무 분야별", value: categoryFilter, options: scheduleCategoryFilters, onChange: setCategoryFilter },
       { id: "media", label: "매체별", value: mediaFilter, options: mediaOptions, onChange: setMediaFilter },
+      { id: "category", label: "업무 분야별", value: categoryFilter, options: scheduleCategoryFilters, onChange: setCategoryFilter },
       { id: "period", label: "기간별", value: scheduleFilter, options: scheduleWeekFilters, onChange: setScheduleFilter },
+      { id: "status", label: "업무 상태별", value: statusFilter, options: scheduleStatusFilters, onChange: setStatusFilter },
       ...(canWrite ? [{ id: "owner", label: "담당 업무별", value: ownerFilter, options: ownerOptions, onChange: setOwnerFilter }] : []),
     ]} />}
     </>}
@@ -1758,7 +1742,7 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
             const scheduleSet = new Set(scheduleDates);
             const owner = taskResponsibleOrgLabel(task.responsibleOrgCode, project.clientName);
             const newTask = isNewTask(task, freshnessNow);
-            return <div className={`g-row${newTask ? " is-new-task" : ""}`} key={task.id} style={{ "--fill": ganttFillColor(task), "--rail": color }}><div className="g-lbl" title={`${group.label} · ${task.title}`}><i className="g-rail-dot" /><button type="button" className="g-task-open nm" disabled={!canWrite} onClick={() => canWrite && setEditingTaskId(task.id)}>{task.title}</button>{newTask && <span className="g-new-badge">신규</span>}{showOwners && <span className={`otag ${owner === "포켓컴퍼니" ? "op" : owner === "NS" ? "on" : "oc"}`}>{owner}</span>}{canWrite && <TaskRowActions compact task={task} onEdit={setEditingTaskId} onArchive={onArchive} disabled={ganttSave.status === "saving"} />}</div><div className={`g-track ${canWrite ? "paint" : ""}`} style={{ width: `${ganttTrackWidth}px` }}>{days.map((day, dayIndex) => {
+            return <div className={`g-row${newTask ? " is-new-task" : ""}`} key={task.id} style={{ "--fill": ganttFillColor(task), "--rail": color }}><div className="g-lbl" title={`${group.label} · ${task.title}`}><i className="g-rail-dot" /><button type="button" className="g-task-open nm" disabled={!canWrite} onClick={() => canWrite && setEditingTaskId(task.id)}>{task.title}</button>{newTask && <span className="g-new-badge">신규</span>}<span className={`g-task-status is-${taskScheduleStatusGroup(task).toLowerCase()}`} aria-label={`업무 상태: ${trackerStatusLabels[task.statusCode] || task.status || "미지정"}`}>{({ ACTIVE: "진행중", HOLD: "보류", DONE: "완료", TODO: "미착수" })[taskScheduleStatusGroup(task)] || trackerStatusLabels[task.statusCode] || "미지정"}</span>{showOwners && <span className={`otag ${owner === "포켓컴퍼니" ? "op" : owner === "NS" ? "on" : "oc"}`}>{owner}</span>}{canWrite && <TaskRowActions compact task={task} onEdit={setEditingTaskId} onArchive={onArchive} disabled={ganttSave.status === "saving"} />}</div><div className={`g-track ${canWrite ? "paint" : ""}`} style={{ width: `${ganttTrackWidth}px` }}>{days.map((day, dayIndex) => {
               const active = scheduleSet.has(day.iso);
               const starts = active && !scheduleSet.has(days[dayIndex - 1]?.iso);
               const ends = active && !scheduleSet.has(days[dayIndex + 1]?.iso);

@@ -5,6 +5,17 @@ import test from "node:test";
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const styleSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 
+test("필터는 탭 없이 모두 표시하고 간트는 업무별 상태를 문자와 색상으로 표시한다", () => {
+  const filters = appSource.slice(appSource.indexOf("function TaskScheduleFilters("), appSource.indexOf("function TaskWorkspaceTabs("));
+  assert.ok(filters.includes('className="schedule-filter-rows"'));
+  assert.ok(filters.includes('groups.map(group =>'));
+  assert.ok(!filters.includes('role="tab"'));
+  assert.ok(!filters.includes("activeId"));
+  assert.ok(appSource.includes("g-task-status is-"));
+  assert.ok(appSource.includes('ACTIVE: "진행중", HOLD: "보류", DONE: "완료", TODO: "미착수"'));
+  for (const group of ["active","hold","done"]) assert.ok(styleSource.includes(".g-task-status.is-"+group));
+});
+
 test("업무 화면은 중복 운영 보드 없이 일정표·간트·업무 로그로 구성한다", () => {
   assert.match(appSource, /initialSection = "schedule"/);
   assert.match(appSource, /function TaskWorkspaceTabs/);

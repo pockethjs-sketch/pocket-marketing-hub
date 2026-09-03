@@ -76,6 +76,7 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".pb-work-grid .pb-panel").length'),2);
   assert.ok(await evaluate('document.querySelector(".pb-heading h1").textContent.endsWith("진행상황")'));
   await wait('document.querySelectorAll(".pb-schedule .g-row").length===2');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".pb-schedule .g-task-status")].map(el=>el.textContent)'),["완료","미착수"],"progress summary shares Gantt status badges");
   assert.ok(await evaluate('document.querySelector(".pb-schedule").getBoundingClientRect().top >= document.querySelector(".pb-work-grid").getBoundingClientRect().bottom'));
   assert.equal(await evaluate('document.querySelectorAll(".pb-schedule .task-workspace-tabs,.pb-schedule .schedule-filter-panel,.pb-schedule .project-issue-panel,.pb-schedule .task-schedule-create,.pb-schedule .paint").length'),0);
   assert.equal(await evaluate('document.querySelectorAll(".pb-schedule .g-new-badge").length'),1,"only tasks after reset are new");
