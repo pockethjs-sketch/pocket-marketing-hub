@@ -420,9 +420,13 @@ function deriveDesignRows(rows) {
     const text = `${row.title} ${row.description || ""}`;
     let title = "";
     let detail = "";
-    if (/블로그/.test(text) && /(계정|세팅|셋업|구축)/.test(text)) { title = "디자인 제작"; detail = "블로그 대문·배너·프로필 디자인"; }
-    else if (/YOUTUBE|유튜브/i.test(row.category_code) && /(채널|계정)/.test(text) && /(세팅|셋업|구축|최적화)/.test(text)) { title = "디자인 제작"; detail = "채널아트·프로필·썸네일 템플릿 디자인"; }
-    else if (/YOUTUBE|유튜브/i.test(row.category_code) && /본편/.test(text) && /(업로드|SEO|운영|제작)/.test(text) && !/쇼츠|숏폼|SHORTS|릴스/i.test(text)) { title = "썸네일 제작"; detail = "본편 영상 썸네일 디자인"; }
+    const description = String(row.description || "");
+    const blogDesignIncluded = /대문|배너\s*(제작|디자인)|프로필\s*(제작|디자인)/.test(description);
+    const channelDesignIncluded = /채널\s*아트|프로필\s*(제작|디자인)|썸네일\s*템플릿/.test(description);
+    const thumbnailIncluded = /썸네일/.test(description);
+    if (/블로그/.test(text) && /(계정|세팅|셋업|구축)/.test(text) && !blogDesignIncluded) { title = "디자인 제작"; detail = "블로그 대문·배너·프로필 디자인"; }
+    else if (/YOUTUBE|유튜브/i.test(row.category_code) && /(채널|계정)/.test(text) && /(세팅|셋업|구축|최적화)/.test(text) && !channelDesignIncluded) { title = "디자인 제작"; detail = "채널아트·프로필·썸네일 템플릿 디자인"; }
+    else if (/YOUTUBE|유튜브/i.test(row.category_code) && /본편/.test(text) && /(업로드|SEO|운영|제작)/.test(text) && !/쇼츠|숏폼|SHORTS|릴스/i.test(text) && !thumbnailIncluded) { title = "썸네일 제작"; detail = "본편 영상 썸네일 디자인"; }
     if (!title) return;
     if (rows.some((candidate) => candidate.category_code === row.category_code && candidate.title === title && candidate.planned_start_date === row.planned_start_date && candidate.due_date === row.due_date)) return;
     additions.push({ ...row, title, description: detail, workstream_code: "DESIGN", responsible_org_code: "POCKET", remarks: "견적 항목에서 자동 생성", source_code: "QUOTE_IMPORT_DERIVED" });

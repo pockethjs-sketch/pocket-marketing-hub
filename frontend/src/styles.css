@@ -2176,9 +2176,15 @@ select:focus-visible {
   padding-block: 36px;
 }
 
-.quote-import-modal {
-  width: min(980px, 100%);
+.create-modal.quote-import-modal {
+  width: min(960px, calc(100vw - 28px));
+  max-height: calc(100vh - 40px);
   overflow: hidden;
+}
+
+.quote-import-modal > header {
+  padding: 16px 22px;
+  background: #f8fafc;
 }
 
 .quote-import-modal > header > div {
@@ -2254,8 +2260,8 @@ select:focus-visible {
 
 .quote-import-body {
   display: grid;
-  gap: 14px;
-  max-height: min(62vh, 640px);
+  gap: 12px;
+  max-height: min(66vh, 660px);
   overflow-y: auto;
   padding: 16px 22px;
 }
@@ -2306,35 +2312,99 @@ select:focus-visible {
   cursor: pointer;
 }
 
-.quote-project-fields {
+.quote-project-meta {
   display: grid;
-  grid-template-columns: 1.3fr 1.6fr 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: 1.2fr 1.25fr 1.2fr 1fr;
+  gap: 18px;
 }
 
-.quote-project-fields label,
+.quote-project-meta label,
+.quote-project-meta > div,
 .quote-mapping-grid label {
   display: grid;
-  gap: 5px;
+  gap: 3px;
 }
 
-.quote-project-fields label > span,
+.quote-project-meta span,
 .quote-mapping-grid label > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+
+.quote-project-meta input,
+.quote-mapping-grid select {
+  width: 100%;
+  min-height: 24px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quote-project-meta input:hover,
+.quote-project-meta input:focus {
+  border-color: var(--rule);
+  background: #fff;
+  outline: none;
+}
+
+.quote-project-meta strong {
+  min-height: 24px;
+  padding: 2px 4px;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.quote-mapping-grid select {
+  min-height: 36px;
+  padding: 0 9px;
+  border-color: var(--rule);
+  border-radius: 7px;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.quote-period-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.quote-period-row > span {
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 9px;
   font-weight: 800;
 }
 
-.quote-project-fields input,
-.quote-mapping-grid select {
-  width: 100%;
-  min-height: 36px;
-  padding: 0 9px;
+.quote-period-row input {
+  width: 128px;
+  min-height: 34px;
+  padding: 0 8px;
   border: 1px solid var(--rule);
   border-radius: 7px;
   background: #fff;
   color: var(--ink);
   font-size: 10px;
+}
+
+.quote-period-row > svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.quote-period-row small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
 }
 
 .quote-mapping-head {
@@ -2474,6 +2544,18 @@ select:focus-visible {
   cursor: pointer;
 }
 
+.quote-import-options label > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.quote-import-options small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .quote-import-options input { accent-color: var(--accent); }
 .quote-task-count { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .quote-task-count strong { color: var(--ink); }
@@ -2490,7 +2572,7 @@ select:focus-visible {
     color: transparent;
   }
   .topbar .topbar-project-import svg { flex: 0 0 auto; color: #314158; }
-  .quote-project-fields { grid-template-columns: 1fr 1fr; }
+  .quote-project-meta { grid-template-columns: 1fr 1fr; }
   .quote-mapping-grid { grid-template-columns: 1fr 1fr; }
   .quote-import-footer { flex-wrap: wrap; }
   .quote-import-options { flex: 1 0 100%; }
@@ -2498,9 +2580,11 @@ select:focus-visible {
 
 @media (max-width: 560px) {
   .quote-import-backdrop { padding: 0; }
-  .quote-import-modal { min-height: 100vh; max-height: 100vh; border-radius: 0; }
-  .quote-project-fields,
+  .create-modal.quote-import-modal { width: 100%; min-height: 100vh; max-height: 100vh; border-radius: 0; }
+  .quote-project-meta,
   .quote-mapping-grid { grid-template-columns: 1fr; }
+  .quote-period-row { flex-wrap: wrap; }
+  .quote-period-row small { flex-basis: 100%; }
   .quote-import-footer button { flex: 1; }
 }
 
