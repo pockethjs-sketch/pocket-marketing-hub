@@ -50,6 +50,7 @@ import {
   tasksViewModel,
 } from "./api/index.js";
 import { getNavigationPresentation } from "./navigationState.js";
+import { ProgressView } from "./ProgressView.jsx";
 import {
   DEFAULT_PLAN_VARIANT,
   PLAN_VARIANTS,
@@ -93,6 +94,7 @@ const navIcons = {
   plan: BookOpenText,
   tasks: ClipboardCheck,
   schedule: CalendarDays,
+  progress: CircleDot,
   daily: NotebookPen,
   performance: BarChart3,
   files: Activity,
@@ -232,7 +234,7 @@ function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, 
       <div className="sidebar-menu-header"><strong>메뉴</strong><button className="icon-button mobile-close" onClick={onClose} aria-label="메뉴 닫기"><X size={17} /></button></div>
       <nav className="project-nav">{visibleNavItems.map((item) => {
         const Icon = item.icon;
-        if (item.id !== "plan") return <button key={item.id} className={`${activeView === item.id || (item.id === "tasks" && activeView === "schedule") ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
+        if (item.id !== "plan") return <button key={item.id} className={`${activeView === item.id || (item.id === "tasks" && activeView === "schedule") || (item.id === "tasks" && activeView === "progress") ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
         return <div key={item.id} className={`project-nav-tree ${planExpanded ? "is-expanded" : ""}`}>
           <button type="button" className={activeView === "plan" ? "is-active" : ""} onClick={() => {
             if (activeView !== "plan") onView("plan", DEFAULT_PLAN_VARIANT);
@@ -600,7 +602,7 @@ function CampaignWorkspaceHeader({ clients, activeClient, onSelectClient, projec
           <div className="campaign-project-popover-head"><div><span>{project.clientName}</span><strong>{project.name}</strong></div><span className="project-status"><CircleDot size={12} />{project.status}</span></div>
           <div className="campaign-project-pages">{visibleNavItems.map((item) => {
             const Icon = item.icon;
-            const itemActive = activeView === item.id || (item.id === "tasks" && activeView === "schedule");
+            const itemActive = activeView === item.id || (item.id === "tasks" && activeView === "schedule") || (item.id === "tasks" && activeView === "progress");
             return <article key={item.id} className={`${itemActive ? "is-active" : ""} ${item.id === "plan" ? "is-plan" : ""}`}>
               <button type="button" role="menuitem" onClick={() => selectView(item.id, item.id === "plan" ? DEFAULT_PLAN_VARIANT : activePlanVariant)}><span className="campaign-page-icon"><Icon size={17} /></span><span><strong>{item.label}</strong><small>{item.description || (item.id === "schedule" ? "업무 일정과 간트 보기" : "프로젝트 운영 화면")}</small></span>{itemActive && <Check size={14} />}</button>
               {item.id === "plan" && <div className="campaign-plan-shortcuts">{visiblePlanChildren.map((child) => <button key={child.id} type="button" className={activeView === "plan" && activePlanVariant === child.id ? "is-active" : ""} onClick={() => selectView("plan", child.id)}>{child.label}</button>)}</div>}
@@ -2052,10 +2054,11 @@ function PlanView({ plan, project, planVariant }) {
   </div>;
 }
 
-function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onTaskArchive, onTaskBatchUpdate, onProjectUpdate, onIssueCreate, onIssueUpdate, onIssueArchive, onDailyMeetingSave, onKpiSave, onKpiArchive, onAccessSave, canWrite }) {
+function AppContent({ view, planVariant, project, role, search, setView, pageState, taskActivityState, onLoadTaskActivity, onRetry, onCreate, onTaskUpdate, onTaskArchive, onTaskBatchUpdate, onProjectUpdate, onIssueCreate, onIssueUpdate, onIssueArchive, onDailyMeetingSave, onKpiSave, onKpiArchive, onAccessSave, canWrite, source, actorName }) {
   if (pageState.status === "loading" && !pageState.data) return <LoadingState />;
   if (pageState.status === "error" && !pageState.data) return <ErrorState error={pageState.error} onRetry={onRetry} />;
   const data = pageState.data || {};
+  if (view === "progress") return <ProgressView key={project.id} project={project} role={role} taskPage={data} source={source} actorName={actorName} canWrite={canWrite} onIssueCreate={onIssueCreate} onIssueUpdate={onIssueUpdate} onNavigate={setView} />;
   if (view === "plan") return <PlanView plan={data} project={project} planVariant={planVariant} />;
   if (view === "tasks" || view === "schedule") return <TasksView role={role} query={search} taskPage={{ ...data, project: { id: project.id, clientId: project.clientId, clientName: project.clientName, name: project.name, permissionCode: project.permissionCode, allowedPages: project.allowedPages, phaseCode: project.phaseCode, phase: project.phase, startDate: project.startDate, endDate: project.endDate, rowVersion: project.rowVersion, ...(data.project || {}) } }} activityState={taskActivityState} onLoadActivity={onLoadTaskActivity} onCreate={onCreate} onUpdate={onTaskUpdate} onArchive={onTaskArchive} onBatchUpdate={onTaskBatchUpdate} onProjectUpdate={onProjectUpdate} onIssueCreate={onIssueCreate} onIssueUpdate={onIssueUpdate} onIssueArchive={onIssueArchive} canWrite={canWrite} initialSection="schedule" />;
   if (view === "daily") return <DailyMeetingsView role={role} meetings={data.items || []} canWrite={canWrite && role !== "client"} onSave={onDailyMeetingSave} />;
@@ -2075,7 +2078,7 @@ const PERSISTED_RESOURCES = new Set(["tasks", "plan-client", "plan-internal", "d
 let pendingBootstrapCacheWrite = null;
 
 function serverInitialView(view) {
-  return view === "schedule" ? "tasks" : view;
+  return view === "schedule" || view === "progress" ? "tasks" : view;
 }
 
 function readBootstrapSessionCache(session) {
@@ -2408,7 +2411,7 @@ export function App() {
     if (!request) {
       const fallback = () => {
         if (view === "plan") return source.plan({ ...params, planType: PLAN_VARIANTS[authorizedPlanVariant].apiValue }).then(planViewModel);
-        if (view === "tasks" || view === "schedule") return source.tasks(params).then(tasksViewModel);
+        if (view === "tasks" || view === "schedule" || view === "progress") return source.tasks(params).then(tasksViewModel);
         if (view === "daily") return source.dailyMeetings({ ...params, limit: 100 }).then(dailyMeetingsViewModel);
         if (view === "content") return source.contents(params).then(contentsViewModel);
         if (view === "tracking") return source.tracking(params).then(performanceTrackingViewModel);
@@ -2861,6 +2864,7 @@ export function App() {
       throw readOnlyError;
     }
     const projectId = activeProjectId;
+    resourceCacheEpochRef.current += 1;
     const result = await mutateWithSaveLock("새 이슈 행을 원장에 기록하고 있습니다.", {
       projectId,
       mutation: { entityType: "project_issue", operation: "CREATE", fields },
@@ -2878,6 +2882,7 @@ export function App() {
       throw readOnlyError;
     }
     const projectId = activeProjectId;
+    resourceCacheEpochRef.current += 1;
     try {
       const result = await mutateWithSaveLock("이슈 변경사항을 원장에 기록하고 있습니다.", {
         projectId,
@@ -3125,7 +3130,7 @@ export function App() {
     taskActivityRequestRef.current = null;
     const nextProject = bootstrapState.data.projects[client.projectId];
     const nextView = role !== "client" || isViewAllowed("schedule", nextProject?.allowedPages || []) ? "schedule" : firstAllowedView(nextProject?.allowedPages || []);
-    setView(nextView);
+    setView(view === "progress" && (role !== "client" || isViewAllowed("progress", nextProject?.allowedPages || [])) ? "progress" : nextView);
     setSearch("");
   };
 
@@ -3149,7 +3154,7 @@ export function App() {
     <div className={`app-shell ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""} ${sheetSaveLock.visible ? "is-sheet-saving" : ""}`} aria-busy={sheetSaveLock.visible}>
       <ProjectSidebar project={project} role={role} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" type="button" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelectClient={selectClient} onCreateProject={() => setProjectCreateOpen(true)} onImportQuote={() => setQuoteImportOpen(true)} canCreateProject={live && ["pocket", "ns"].includes(role) && typeof source.createProject === "function"} project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} notificationTasks={notificationTasks} notificationsLoaded={notificationsLoaded} onNotificationSelect={openNotificationTask} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={refreshCurrentPage} onCreate={setCreateEntity} onTaskUpdate={updateTask} onTaskArchive={archiveTask} onTaskBatchUpdate={updateTasksBatch} onProjectUpdate={updateProjectStartDate} onIssueCreate={createProjectIssue} onIssueUpdate={updateProjectIssue} onIssueArchive={archiveProjectIssue} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelectClient={selectClient} onCreateProject={() => setProjectCreateOpen(true)} onImportQuote={() => setQuoteImportOpen(true)} canCreateProject={live && ["pocket", "ns"].includes(role) && typeof source.createProject === "function"} project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} notificationTasks={notificationTasks} notificationsLoaded={notificationsLoaded} onNotificationSelect={openNotificationTask} /><main className="content-canvas"><AppContent source={source} actorName={actor?.displayName || actor?.name || (role === "ns" ? "NS" : "포켓컴퍼니")} view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={refreshCurrentPage} onCreate={setCreateEntity} onTaskUpdate={updateTask} onTaskArchive={archiveTask} onTaskBatchUpdate={updateTasksBatch} onProjectUpdate={updateProjectStartDate} onIssueCreate={createProjectIssue} onIssueUpdate={updateProjectIssue} onIssueArchive={archiveProjectIssue} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "progress" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} clientName={project.clientName} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {projectCreateOpen && <ProjectCreateModal onClose={() => setProjectCreateOpen(false)} onSubmit={createProject} />}
       {quoteImportOpen && <QuoteImportModal currentProject={project} onClose={() => setQuoteImportOpen(false)} onCreateProject={createProject} onAppendProject={appendQuoteToProject} />}

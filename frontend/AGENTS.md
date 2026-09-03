@@ -10,6 +10,8 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Pocket Marketing Hub design decisions
 
+- `업무 → 진행사항` is the live four-panel client-brief projection: completed/active work, this week's scheduled work, last permitted meeting, and shared review requests. No KPI/traffic/reach charts while metrics are unavailable. Reuse the task resource cache and existing issue ledger; never ship prototype fixtures. Client issue writes remain disabled until a dedicated server-side collaboration permission is implemented. A `tasks` permission includes progress; meeting data still requires `daily`.
+
 - The visual target is a PandaRank-inspired operational UI: Pretendard, warm white/mist canvas, white surfaces, Pocket dark-navy primary actions, near-black text, generous spacing, 12–24px radii, and broad soft shadows. Green is a success/status color, not the primary brand color. Reuse the visual system only; never copy PandaRank branding, content, or trademarks.
 - Do not reintroduce editorial serif or mono typography, cobalt/terracotta/olive primary palettes, decorative `01–04` numbers, giant watermark numerals, English uppercase kickers, glass effects, or presentation-style hero layouts.
 - The desktop shell has one persistent left navigation column containing page menus only. Never place the company/project selector, project summary, phase card, or connection footer in this column.

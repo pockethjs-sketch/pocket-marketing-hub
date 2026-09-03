@@ -120,7 +120,7 @@ test("프로젝트 선택과 기존 총괄 진입은 일정 권한이 있으면 
 });
 
 test("일정표 URL로 새로고침해도 서버 초기 업무 코드로 정규화한다", () => {
-  assert.match(appSource, /return view === "schedule" \? "tasks" : view/);
+  assert.match(appSource, /return view === "schedule" \|\| view === "progress" \? "tasks" : view/);
   assert.match(appSource, /source\.bootstrap\(\{ initialView: serverInitialView\(view\) \}\)/);
   assert.match(appSource, /source\.login\(\{ \.\.\.credentials, initialView: serverInitialView\(view\) \}\)/);
 });

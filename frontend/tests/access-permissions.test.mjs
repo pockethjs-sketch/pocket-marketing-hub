@@ -22,7 +22,7 @@ test("고객 권한은 알려진 페이지 코드만 중복 없이 보존한다"
 test("운영 메뉴와 고객 권한 선택지는 페이지 카탈로그에서 파생한다", () => {
   assert.deepEqual(ACCESS_PAGE_KEYS, ["overview", "plan", "tasks", "daily", "performance", "files"]);
   assert.deepEqual(ACCESS_PAGE_OPTIONS.map((page) => page.label), ["총괄 현황", "실행계획", "업무", "데일리 회의록", "성과", "세부 로그"]);
-  assert.deepEqual(NAVIGATION_PAGE_OPTIONS.map((page) => page.id), ["overview", "plan", "tasks", "daily", "performance", "files"]);
+  assert.deepEqual(NAVIGATION_PAGE_OPTIONS.map((page) => page.id), ["overview", "plan", "tasks", "progress", "daily", "performance", "files"]);
 });
 
 test("고객에게 허용된 첫 화면과 실행계획 하위 경로를 판정한다", () => {
@@ -32,6 +32,8 @@ test("고객에게 허용된 첫 화면과 실행계획 하위 경로를 판정�
   assert.equal(isViewAllowed("daily", ["tasks"]), false);
   assert.equal(isViewAllowed("daily", ["daily"]), true);
   assert.equal(isViewAllowed("schedule", ["tasks"]), true);
+  assert.equal(isViewAllowed("progress", ["tasks"]), true);
+  assert.equal(isViewAllowed("progress", ["daily"]), false);
   assert.equal(isViewAllowed("content", ["content"]), false);
   assert.equal(isViewAllowed("tracking", ["tracking"]), false);
   assert.equal(isViewAllowed("permissions", ACCESS_PAGE_KEYS), false);
