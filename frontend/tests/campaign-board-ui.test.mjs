@@ -153,12 +153,14 @@ test("업무표는 고정 헤더와 고정 업무명 열을 제공한다", () =>
   assert.match(styleSource, /\.task-schedule-matrix thead tr:first-child > th:first-child,[\s\S]*position:\s*sticky/);
 });
 
-test("간트는 앱 안에서 조밀한 260px 업무열과 26px 날짜 셀을 사용한다", () => {
-  assert.match(appSource, /const GANTT_LABEL_WIDTH = 260/);
-  assert.match(appSource, /const GANTT_DAY_WIDTH = 26/);
-  assert.match(styleSource, /\.g-lbl\s*\{[\s\S]*width:\s*260px/);
-  assert.match(styleSource, /\.g-c\s*\{[\s\S]*width:\s*26px/);
-  assert.match(styleSource, /\.g-row \.g-lbl\s*\{[\s\S]*height:\s*30px/);
+test("간트는 기준 HTML과 동일한 280px 업무열과 28px 날짜 셀을 고정한다", () => {
+  assert.match(appSource, /const GANTT_LABEL_WIDTH = 280/);
+  assert.match(appSource, /const GANTT_DAY_WIDTH = 28/);
+  assert.match(appSource, /"--gantt-label-width": `\$\{GANTT_LABEL_WIDTH\}px`/);
+  assert.match(appSource, /"--gantt-day-width": `\$\{GANTT_DAY_WIDTH\}px`/);
+  assert.match(styleSource, /\.g-lbl\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-label-width, 280px\)/);
+  assert.match(styleSource, /\.g-c\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-day-width, 28px\)/);
+  assert.match(styleSource, /\.g-row \.g-lbl\s*\{[\s\S]*height:\s*32px/);
 });
 
 test("프로젝트 회사는 상단에서 선택하고 왼쪽에는 화면 메뉴만 나열한다", () => {

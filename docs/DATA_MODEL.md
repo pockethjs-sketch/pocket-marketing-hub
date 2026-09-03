@@ -9,6 +9,11 @@
 5. 고객 화면은 `client_id`, `project_id`, `visibility_code`, 권한 정보를 서버에서 검사한 결과만 반환한다.
 6. 사용자·콘텐츠·성과·승인은 서로 독립된 원장으로 관리한다.
 
+## 간트 표시 계약
+
+- `캠페인 스케줄 관리.html`을 시각 기준으로 삼아 업무명 열 280px, 날짜 열 28px, 업무 행 32px를 고정한다. 화면이 좁으면 각 열을 축소하지 않고 간트 컨테이너에서 수평 스크롤한다.
+- 이 값은 화면 표시 전용이며 `planned_start_date`, `due_date`, `schedule_dates_json` 저장 계약에는 영향을 주지 않는다.
+
 ## 프로젝트 생성 계약
 
 - 현재 UI의 전역 선택 단위는 `clients` 한 행과 대표 `projects` 한 행의 1:1 운영 쌍이다. `프로젝트 추가`는 이 두 행과 생성자의 `project_memberships`를 `create_project` RPC 한 트랜잭션으로 생성한다.
