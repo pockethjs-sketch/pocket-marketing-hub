@@ -47,7 +47,22 @@ export function briefRequestFields(fields) {
   return {
     kind_text: fields.kind, related_task_text: fields.title.trim(), body_text: fields.body.trim(),
     owner_text: fields.owner, completion_url: link ? publicHttpLink(link) : "", status_code: "IN_PROGRESS",
+    due_date: requestDeadlineFields(fields.deadline).due_date,
   };
+}
+
+export function requestDeadlineFields(value) {
+  const day = String(value || "").trim();
+  if (day && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(`${day}T00:00:00Z`)) || new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) !== day)) {
+    throw new Error("올바른 마감일을 입력해 주세요.");
+  }
+  return { due_date: day || null };
+}
+
+export function requestDeadlineLabel(issue, today = seoulDate()) {
+  if (!issue.dueDate) return "마감일 미정";
+  if (issue.statusCode === "DONE") return `마감 ${issue.dueDate}`;
+  return `${issue.dueDate < today ? "기한 초과" : issue.dueDate === today ? "오늘 마감" : "마감"} · ${issue.dueDate}`;
 }
 
 export function appendBriefReply(issue, text, actorName, now = new Date()) {

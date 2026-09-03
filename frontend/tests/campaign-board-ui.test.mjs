@@ -93,7 +93,7 @@ test("일정표는 참고 HTML 열 구조를 유지하며 셀 직접 수정과 �
   assert.match(appSource, /function CompactTaskDateInput/);
   assert.match(appSource, /const columnWidths = \[88, 64, null, 200, 126, 44, 92, 54, 54, 105, 135\]/);
   assert.match(appSource, /reference-task-workstream[\s\S]*taskScheduleCategory\(task\)/);
-  assert.match(appSource, /fields = taskStatusMutationFields\(value\)/);
+  assert.match(appSource, /fields = taskStatusMutationFields\(value, baseTask\)/);
   assert.match(styleSource, /\.reference-task-detail \.task-inline-textarea[\s\S]*field-sizing:\s*content/);
   assert.match(styleSource, /\.reference-task-detail \.task-inline-textarea[\s\S]*max-height:\s*calc\(2 \* 1\.45em \+ 6px\)/);
   assert.match(styleSource, /tr\.is-media-group-start:not\(:first-child\) td/);

@@ -7,6 +7,7 @@ test("프로젝트 이슈 원장 응답은 화면 직접 편집 필드와 행 �
   const issue = projectIssueViewModel({
     issue_id: 42,
     issue_date: "2026-09-03T00:00:00Z",
+    due_date: "2026-09-08",
     kind_text: "추가업무",
     related_task_text: "채널 세팅",
     body_text: "프로필 문구 수정",
@@ -20,6 +21,7 @@ test("프로젝트 이슈 원장 응답은 화면 직접 편집 필드와 행 �
   assert.deepEqual(issue, {
     id: 42,
     date: "2026-09-03",
+    dueDate: "2026-09-08",
     kind: "추가업무",
     relatedTask: "채널 세팅",
     body: "프로필 문구 수정",

@@ -1080,10 +1080,15 @@ function compactTaskDateLabel(value) {
 }
 
 function CompactTaskDateInput({ label, value, min, max, readOnly, disabled, onChange }) {
+  const openPicker = (event) => {
+    const input = event.currentTarget;
+    if (readOnly || disabled || typeof input.showPicker !== "function") return;
+    try { input.showPicker(); event.preventDefault(); } catch { /* Keep the native picker fallback. */ }
+  };
   return <label className={`task-inline-date-compact${readOnly ? " is-readonly" : ""}`} title={value || label}>
     <span className="task-inline-date-display" aria-hidden="true">{compactTaskDateLabel(value)}</span>
     <CalendarDays size={11} aria-hidden="true" />
-    <input className="task-inline-date" type="date" aria-label={label} value={value} min={min} max={max} readOnly={readOnly} disabled={disabled} onChange={onChange} />
+    <input className="task-inline-date" type="date" aria-label={label} value={value} min={min} max={max} readOnly={readOnly} disabled={disabled} onClick={openPicker} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openPicker(event); }} onChange={onChange} />
   </label>;
 }
 
@@ -1168,8 +1173,12 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
     let nextDraft = dateRangeField ? { ...draft } : { ...draft, [field]: value };
     let fields = dateRangeField ? {} : { [field]: value };
     if (field === "status_code") {
-      fields = taskStatusMutationFields(value);
+      fields = taskStatusMutationFields(value, baseTask);
       nextDraft = { ...nextDraft, ...fields };
+    }
+    if (field === "progress_percent" && value < 100 && ["DONE", "COMPLETED"].includes(baseTask.statusCode)) {
+      fields.status_code = "IN_PROGRESS";
+      nextDraft.status_code = "IN_PROGRESS";
     }
     if (dateRangeField || field === "planned_start_date" || field === "due_date") {
       const start = String(nextDraft.planned_start_date || "");
@@ -1296,6 +1305,7 @@ const issueStatusLabels = { NOT_STARTED: "예정", IN_PROGRESS: "진행중", DON
 function ProjectIssueRow({ issue, index, canWrite, onUpdate, onArchive }) {
   const [draft, setDraft] = useState(() => ({
     issue_date: issue.date || localDateValue(),
+    due_date: issue.dueDate || "",
     kind_text: issue.kind || "",
     related_task_text: issue.relatedTask || "",
     body_text: issue.body || "",
@@ -1310,6 +1320,7 @@ function ProjectIssueRow({ issue, index, canWrite, onUpdate, onArchive }) {
   useEffect(() => {
     setDraft({
       issue_date: issue.date || localDateValue(),
+      due_date: issue.dueDate || "",
       kind_text: issue.kind || "",
       related_task_text: issue.relatedTask || "",
       body_text: issue.body || "",
@@ -1325,6 +1336,7 @@ function ProjectIssueRow({ issue, index, canWrite, onUpdate, onArchive }) {
   };
   const persistedValue = (field) => ({
     issue_date: issue.date || "",
+    due_date: issue.dueDate || "",
     kind_text: issue.kind || "",
     related_task_text: issue.relatedTask || "",
     body_text: issue.body || "",
@@ -1387,7 +1399,7 @@ function ProjectIssueRow({ issue, index, canWrite, onUpdate, onArchive }) {
   const disabled = !canWrite || Boolean(savingField);
   return <tr className={savingField ? "is-saving" : ""}>
     <td className="project-issue-number">{index + 1}</td>
-    <td><input type="date" aria-label={`${index + 1}번 이슈 등록일`} disabled={disabled} value={draft.issue_date} onChange={(event) => setField("issue_date", event.target.value)} onBlur={(event) => void commitField("issue_date", event.currentTarget.value)} /></td>
+    <td><input type="date" aria-label={`${index + 1}번 이슈 등록일`} disabled={disabled} value={draft.issue_date} onChange={(event) => setField("issue_date", event.target.value)} onBlur={(event) => void commitField("issue_date", event.currentTarget.value)} /><label className="project-issue-deadline">컨펌 마감<input type="date" aria-label={`${index + 1}번 이슈 컨펌 마감일`} disabled={disabled} value={draft.due_date} onChange={(event) => setField("due_date", event.target.value)} onBlur={(event) => void commitField("due_date", event.currentTarget.value)} /></label></td>
     <td><input type="text" aria-label={`${index + 1}번 이슈 구분`} maxLength={100} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.kind_text} placeholder={canWrite ? "추가업무" : ""} onChange={(event) => setField("kind_text", event.target.value)} onBlur={(event) => void commitField("kind_text", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "kind_text")} /></td>
     <td><input type="text" aria-label={`${index + 1}번 관련 업무`} maxLength={500} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.related_task_text} placeholder={canWrite ? "관련 업무" : ""} onChange={(event) => setField("related_task_text", event.target.value)} onBlur={(event) => void commitField("related_task_text", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "related_task_text")} /></td>
     <td><textarea rows="1" aria-label={`${index + 1}번 이슈 내용`} maxLength={20000} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.body_text} placeholder={canWrite ? "내용을 입력하세요" : ""} onChange={(event) => setField("body_text", event.target.value)} onBlur={(event) => void commitField("body_text", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "body_text")} /></td>

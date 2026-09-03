@@ -10,6 +10,10 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Pocket Marketing Hub design decisions
 
+- Schedule date numbers and icons must share the entire date-picker hit area, including touch and keyboard activation. Keep the compact MM.DD display without shrinking the native clickable area. Progress number fields must fit 0–100 without native spinner clipping.
+- Status/progress rules are enforced by the database as well as inline editing: DONE sets 100; reopening a completed 100% task resets to 0 unless a lower value was explicitly provided; moving to NOT_STARTED resets 0. Reducing a completed task below 100 reopens IN_PROGRESS. Other progress is manually entered, never inferred from time; keep Gantt date normalization intact.
+- Shared confirmation requests use nullable project_issues.due_date (date-only, Korea day). Support creation, later edit/clear, reload persistence, today/overdue labels and read-only client visibility. Reuse the authorized workspace/RPC/audit path, not browser-only state or task deadlines. Existing requests remain undated.
+
 - Task creation uses the dedicated TaskCreateModal: title/details → Korean workstream and assigned organization → date range → status/progress. Use click choices, not a wall of dropdowns. Keep phase, priority, completion link, remarks, and Pocket-only visibility under additional settings; completed-task entry opens these settings.
 - New tasks suggest today through today+6 (7 calendar days, Korea time); completed tasks suggest the last 7 days and DONE/100%. Offer today+7-day range, last 7 days, this/next Monday–Sunday week, and unscheduled presets. These are editable creation defaults only, never a rewrite of existing tasks or progress inferred from elapsed dates. Keep start/end and Gantt dates consistent on creation.
 - Creation dialogs must retain drafts on rejected saves, lock duplicate submits, confirm discarding a modified draft, and keep the footer visible while only the form body scrolls. Style the issue-row add button explicitly in its component scope; generic unscoped btn classes are insufficient.

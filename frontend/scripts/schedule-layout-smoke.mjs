@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
 
-const fixture = "\nimport React, {useState} from \"react\";\nimport {createRoot} from \"react-dom/client\";\nimport {TaskScheduleTimeline} from \"./src/App.jsx\";\nimport \"./src/styles.css\";\nconst tasks = [\n {id:\"qa-one\",title:\"채널 세팅 업무\",description:\"세부내용은 줄을 넘어서도 읽을 수 있어야 합니다. 실제 운영 업무 분류 표시.\",stream:\"MARKETING\",categoryCode:\"YOUTUBE\",statusCode:\"IN_PROGRESS\",progressPercent:25,responsibleOrgCode:\"NS\",plannedStartDate:\"2026-09-20\",dueDate:\"2026-09-30\",scheduleDates:null},\n {id:\"qa-two\",title:\"채널 디자인\",description:\"디자인 내용\",stream:\"DESIGN\",categoryCode:\"YOUTUBE\",statusCode:\"NOT_STARTED\",progressPercent:0,responsibleOrgCode:\"POCKET\",plannedStartDate:\"2026-09-20\",dueDate:\"2026-09-30\",scheduleDates:null},\n {id:\"qa-three\",title:\"인스타 영상\",description:\"영상 제작\",stream:\"VIDEO\",categoryCode:\"INSTAGRAM\",statusCode:\"DONE\",progressPercent:100,responsibleOrgCode:\"NS\",plannedStartDate:\"2026-09-21\",dueDate:\"2026-09-29\",scheduleDates:null}\n];\nconst project={id:\"qa\",name:\"QA 프로젝트\",clientName:\"UND\",startDate:\"2026-09-20\",endDate:\"2026-09-30\"};\nfunction Harness(){\n const [view,setView]=useState(\"table\"), [canWrite,setWrite]=useState(true), [items,setItems]=useState(tasks); window.qaTasks=setItems;\n window.qaView=setView; window.qaWrite=setWrite; window.qaWrites ||= [];\n return <main style={{padding:16,minWidth:0}}><TaskScheduleTimeline tasks={items} issues={[]} project={project} canWrite={canWrite} canWriteIssues={false} canEditProject={false} displayMode={view} onViewChange={setView} canViewActivity={false} onUpdate={async(task,fields)=>{window.qaWrites.push(fields);return task;}} onArchive={()=>{}} onCreate={()=>{}} /></main>;\n}\ncreateRoot(document.getElementById(\"root\")).render(<Harness/>);\n";
+const fixture = "\nimport React, {useState} from \"react\";\nimport {createRoot} from \"react-dom/client\";\nimport {TaskScheduleTimeline} from \"./src/App.jsx\";\nimport \"./src/styles.css\";\nconst tasks = [\n {id:\"qa-one\",title:\"채널 세팅 업무\",description:\"세부내용은 줄을 넘어서도 읽을 수 있어야 합니다. 실제 운영 업무 분류 표시.\",stream:\"MARKETING\",categoryCode:\"YOUTUBE\",statusCode:\"IN_PROGRESS\",progressPercent:25,responsibleOrgCode:\"NS\",plannedStartDate:\"2026-09-20\",dueDate:\"2026-09-30\",scheduleDates:null},\n {id:\"qa-two\",title:\"채널 디자인\",description:\"디자인 내용\",stream:\"DESIGN\",categoryCode:\"YOUTUBE\",statusCode:\"NOT_STARTED\",progressPercent:0,responsibleOrgCode:\"POCKET\",plannedStartDate:\"2026-09-20\",dueDate:\"2026-09-30\",scheduleDates:null},\n {id:\"qa-three\",title:\"인스타 영상\",description:\"영상 제작\",stream:\"VIDEO\",categoryCode:\"INSTAGRAM\",statusCode:\"DONE\",progressPercent:100,responsibleOrgCode:\"NS\",plannedStartDate:\"2026-09-21\",dueDate:\"2026-09-29\",scheduleDates:null}\n];\nconst project={id:\"qa\",name:\"QA 프로젝트\",clientName:\"UND\",startDate:\"2026-09-20\",endDate:\"2026-09-30\"};\nfunction Harness(){\n const [view,setView]=useState(\"table\"), [canWrite,setWrite]=useState(true), [items,setItems]=useState(tasks); window.qaTasks=setItems;\n window.qaView=setView; window.qaWrite=setWrite; window.qaWrites ||= [];\n return <main style={{padding:16,minWidth:0}}><TaskScheduleTimeline tasks={items} issues={[]} project={project} canWrite={canWrite} canWriteIssues={false} canEditProject={false} displayMode={view} onViewChange={setView} canViewActivity={false} onUpdate={async(task,fields)=>{window.qaWrites.push(fields);if(window.qaFail)throw Error(\"QA 저장 실패\");const map={status_code:\"statusCode\",progress_percent:\"progressPercent\",planned_start_date:\"plannedStartDate\",due_date:\"dueDate\"};const saved={...task,...Object.fromEntries(Object.entries(fields).map(([k,v])=>[map[k]||k,v]))};setItems(items=>items.map(item=>item.id===task.id?saved:item));return saved;}} onArchive={()=>{}} onCreate={()=>{}} /></main>;\n}\ncreateRoot(document.getElementById(\"root\")).render(<Harness/>);\n";
 const bundle=await build({stdin:{contents:fixture,resolveDir:process.cwd(),loader:"jsx"},bundle:true,write:false,outfile:"qa.js",jsx:"automatic",define:{"import.meta.env":"{}"}});
 const js=bundle.outputFiles.find(f=>f.path.endsWith(".js")).text, css=bundle.outputFiles.find(f=>f.path.endsWith(".css")).text;
 const server=createServer((req,res)=>{res.setHeader("Content-Type",req.url==="/qa.js"?"text/javascript":req.url==="/qa.css"?"text/css":"text/html");res.end(req.url==="/qa.js"?js:req.url==="/qa.css"?css:'<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/qa.css"><div id="root"></div><script src="/qa.js"></script></html>');});
@@ -59,6 +59,52 @@ try {
   await click(".schedule-filter-reset");
   assert.equal(await evaluate('document.querySelectorAll(".reference-task-row").length'),3);
   assert.deepEqual(await evaluate('[...document.querySelectorAll("#schedule-filter-period button")].map(b=>b.textContent)'),["전체","오늘","지난주","이번주","다음주","이번달"]);
+  const fill = async (selector,value) => {
+    await evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}));})()`);
+    await delay(60);
+    await evaluate(`document.querySelector(${JSON.stringify(selector)}).blur()`); await delay(100);
+  };
+  // Hit the visible number, not a programmatic click on the hidden icon.
+  await evaluate('window.qaPickerCalls=[];HTMLInputElement.prototype.showPicker=function(){qaPickerCalls.push(this.getAttribute("aria-label"))}');
+  for (const mobile of [false,true]) {
+    await send("Emulation.setDeviceMetricsOverride",{width:mobile?390:1440,height:1050,deviceScaleFactor:1,mobile});
+    await send("Emulation.setTouchEmulationEnabled",{enabled:mobile});
+    for (const index of [0,1]) {
+      const point=await evaluate(`(()=>{const el=document.querySelectorAll('.task-inline-date-display')[${index}];el.scrollIntoView({block:'center',inline:'center'});const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      if(mobile) { await send("Input.dispatchTouchEvent",{type:"touchStart",touchPoints:[{...point,radiusX:1,radiusY:1}]});await send("Input.dispatchTouchEvent",{type:"touchEnd",touchPoints:[]}); }
+      else {await send("Input.dispatchMouseEvent",{type:"mousePressed",...point,button:"left",clickCount:1});await send("Input.dispatchMouseEvent",{type:"mouseReleased",...point,button:"left",clickCount:1});}
+      await delay(70);
+    }
+  }
+  assert.deepEqual(await evaluate('qaPickerCalls'),["채널 세팅 업무 시작일","채널 세팅 업무 종료일","채널 세팅 업무 시작일","채널 세팅 업무 종료일"]);
+  await send("Emulation.setTouchEmulationEnabled",{enabled:false});
+  await send("Emulation.setDeviceMetricsOverride",{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
+  await fill('.task-inline-date',"2026-09-22");
+  assert.equal(await evaluate('qaWrites.length'),1,"date edit saves once");
+  assert.equal(await evaluate('qaWrites[0].planned_start_date'),"2026-09-22");
+  assert.ok(await evaluate('qaWrites[0].schedule_dates_json.includes("2026-09-22")'),"Gantt dates saved with date range");
+  await fill('.task-inline-progress input',"73");
+  assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"73");
+  await click('.task-inline-status');
+  assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"100");
+  const numberMetrics=await evaluate(`(()=>{const el=document.querySelector('.task-inline-progress input'),s=getComputedStyle(el),ctx=document.createElement('canvas').getContext('2d');ctx.font=s.font;return {width:el.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight),text:ctx.measureText('100').width,appearance:s.appearance,scroll:el.scrollWidth,client:el.clientWidth};})()`);
+  assert.ok(numberMetrics.width>=numberMetrics.text+2,JSON.stringify(numberMetrics));
+  assert.equal(numberMetrics.appearance,"textfield");
+  assert.equal(numberMetrics.scroll,numberMetrics.client);
+  if(process.env.QA_INPUT_SCREENSHOT){await evaluate('document.querySelector(".reference-task-table").scrollIntoView({block:"start"})');const shot=await send("Page.captureScreenshot",{format:"png"});await writeFile(process.env.QA_INPUT_SCREENSHOT,Buffer.from(shot.data,"base64"));}
+  await evaluate('qaView("gantt")');await wait('document.querySelector(".g-row")');
+  await evaluate('qaView("table")');await wait('document.querySelector(".task-inline-progress input")');
+  assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"100","saved completion survives remount");
+  await fill('.task-inline-progress input',"35");
+  assert.ok(await evaluate('document.querySelector(".task-inline-status").textContent.includes("진행")'));
+  assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"35");
+  await evaluate('window.qaFail=true');
+  await fill('.task-inline-progress input',"80");
+  assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"35","rejected progress rolls back");
+  await evaluate('window.qaFail=false');
+  await click('.task-inline-status');await click('.task-inline-status');
+  assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"0","reopened task is not stuck at 100");
+  await evaluate('qaTasks(items=>items.map((item,index)=>index===0?{...item,statusCode:"IN_PROGRESS"}:item));qaWrites=[];document.querySelector(".reference-task-table").parentElement.scrollLeft=0;window.scrollTo(0,0)');await delay(100);
   for(const viewport of [1440,1920,1100]){
     await send("Emulation.setDeviceMetricsOverride",{width:viewport,height:1000,deviceScaleFactor:1,mobile:false});
     await delay(150);

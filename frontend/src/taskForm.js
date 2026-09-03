@@ -30,13 +30,15 @@ export function nextTaskStatusCode(value) {
   return TASK_STATUS_CYCLE[(index + 1 + TASK_STATUS_CYCLE.length) % TASK_STATUS_CYCLE.length];
 }
 
-export function taskStatusMutationFields(value) {
+export function taskStatusMutationFields(value, task = {}) {
   const statusCode = String(value || "NOT_STARTED").toUpperCase() === "COMPLETED"
     ? "DONE"
     : String(value || "NOT_STARTED").toUpperCase();
   return statusCode === "DONE"
     ? { status_code: statusCode, progress_percent: 100 }
-    : { status_code: statusCode };
+    : statusCode === "NOT_STARTED" || (["DONE", "COMPLETED"].includes(task.statusCode) && Number(task.progressPercent) === 100)
+      ? { status_code: statusCode, progress_percent: 0 }
+      : { status_code: statusCode };
 }
 
 export function nextTaskResponsibleOrgCode(value) {

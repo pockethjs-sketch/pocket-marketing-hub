@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { appendBriefReply, briefRequestFields, briefWeek, latestBriefMeeting, progressBriefTasks, publicHttpLink } from "../src/progressBrief.js";
+import { appendBriefReply, briefRequestFields, briefWeek, latestBriefMeeting, progressBriefTasks, publicHttpLink, requestDeadlineFields, requestDeadlineLabel } from "../src/progressBrief.js";
 import { parseViewLocation, viewLocationHash, viewResourceKey } from "../src/planNavigation.js";
 import { isViewAllowed, NAVIGATION_PAGE_OPTIONS } from "../src/accessPermissions.js";
 
@@ -55,7 +55,7 @@ test("확인 요청은 기존 issue 필드만 저장하며 위험한 링크를 �
   assert.equal(publicHttpLink("javascript:alert(1)"), null);
   assert.equal(publicHttpLink("file:///secret"), null);
   const fields = briefRequestFields({kind:"내용 확인", title:" 요청 ", body:" 설명 ", owner:"UND", link:"https://example.com/item"});
-  assert.deepEqual(fields, { kind_text:"내용 확인", related_task_text:"요청", body_text:"설명", owner_text:"UND", completion_url:"https://example.com/item", status_code:"IN_PROGRESS" });
+  assert.deepEqual(fields, { kind_text:"내용 확인", related_task_text:"요청", body_text:"설명", owner_text:"UND", completion_url:"https://example.com/item", status_code:"IN_PROGRESS", due_date:null });
   assert.throws(() => briefRequestFields({title:"",body:"abc"}));
   assert.throws(() => briefRequestFields({title:"a",body:"b",link:"data:text/html,hi"}));
 });
@@ -66,6 +66,15 @@ test("답변은 기존 기록을 보존하고 원장 제한을 넘기지 않는�
   assert.ok(fields.remarks.includes("담당자"));
   assert.ok(fields.remarks.endsWith("추가 답변"));
   assert.throws(() => appendBriefReply({remarks:"x".repeat(10000)}, "new", "담당자"));
+});
+
+test("컨펌 마감일은 선택 입력·해제·한국시간 기한 상태를 지원한다", () => {
+  assert.deepEqual(requestDeadlineFields(""), {due_date:null});
+  assert.deepEqual(requestDeadlineFields("2026-09-08"), {due_date:"2026-09-08"});
+  for (const date of ["2026-02-30","2026-13-01","bad"]) assert.throws(()=>requestDeadlineFields(date));
+  assert.equal(requestDeadlineLabel({dueDate:"2026-09-04"},"2026-09-04"),"오늘 마감 · 2026-09-04");
+  assert.match(requestDeadlineLabel({dueDate:"2026-09-03"},"2026-09-04"),/기한 초과/);
+  assert.doesNotMatch(requestDeadlineLabel({dueDate:"2026-09-03",statusCode:"DONE"},"2026-09-04"),/기한 초과/);
 });
 
 test("실서비스 진행상황은 시안 대신 실제 원장을 읽고 쓰기를 공통 잠금에 연결한다", async () => {

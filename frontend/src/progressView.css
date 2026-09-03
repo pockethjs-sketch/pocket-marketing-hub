@@ -65,6 +65,11 @@
 .pb-request h3 { font-size:13px; margin:10px 0 5px; overflow-wrap:anywhere; }
 .pb-request p { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; line-height:1.75; color:#607087; margin:6px 0; }
 .pb-request-actions { display:flex; justify-content:flex-end; gap:6px; margin-top:12px; }
+.pb-deadline { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:11px; color:#53627a; font-weight:700; }
+.pb-deadline.is-overdue { color:#bc3434; }
+.pb-deadline-form { display:flex; align-items:flex-end; flex-wrap:wrap; gap:7px; margin-top:10px; padding:10px; border-radius:8px; background:#f6f8fc; }
+.pb-deadline-form label { display:grid; gap:5px; font-size:11px; }
+.pb-request-form label small { color:var(--pb-muted); font-size:10px; font-weight:400; }
 .pb-replies { background:#f6f8fb; margin-top:12px; border-radius:8px; padding:10px; }
 .pb-replies summary { color:#415477; cursor:pointer; font-size:11px; }
 .pb-replies p { padding-top:5px; font-size:11px; }

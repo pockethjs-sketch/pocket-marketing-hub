@@ -315,7 +315,51 @@ assert(await scalar(`select private.can_read_project(${sharedId}, 'POCKET_ONLY',
 assert(await scalar("select private.is_pocket_manager() as value", "value") === false, "NS gained admin role");
 await expectDenied(`insert into public.project_memberships(project_id,user_id,permission_code) values (${sharedId}, '${userIds.client}', 'ADMIN')`, "NS cannot grant memberships");
 await db.exec("reset role");
+// Deadline uses the same authorization, audit, row version and replay contract.
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
+const deadlineCreateSql = `select public.mutate_project_issue('qa_deadline_create_01','CREATE',1,null,null,'{"related_task_text":"컨펌 QA","due_date":"2026-09-08"}'::jsonb) as response`;
+const deadlineRow = (await db.query(deadlineCreateSql)).rows[0].response;
+assert(deadlineRow.ok && deadlineRow.data.item.due_date === '2026-09-08', 'deadline create persistence failed');
+assert(JSON.stringify((await db.query(deadlineCreateSql)).rows[0].response) === JSON.stringify(deadlineRow), 'deadline replay not idempotent');
+const deadlineId = deadlineRow.data.item.issue_id;
+assert((await db.query('select public.read_task_workspace(1,false) as response')).rows[0].response.issues.find(row=>row.issue_id===deadlineId).due_date === '2026-09-08', 'deadline missing from reload');
+let deadlineVersion = deadlineRow.data.item.row_version;
+for (const value of ['2026-02-30','not-a-date','infinity']) {
+  const result=(await db.query(`select public.mutate_project_issue('qa_bad_deadline_${value}','UPDATE',1,${deadlineId},${deadlineVersion},jsonb_build_object('due_date','${value}')) as response`)).rows[0].response;
+  assert(result.ok === false && result.error.code === 'invalid_input', 'invalid deadline accepted');
+}
+const changed=(await db.query(`select public.mutate_project_issue('qa_deadline_change_01','UPDATE',1,${deadlineId},${deadlineVersion},'{"due_date":"2026-09-10"}') as response`)).rows[0].response;
+assert(changed.ok && changed.data.item.due_date === '2026-09-10', 'deadline update failed');
+const stale=(await db.query(`select public.mutate_project_issue('qa_deadline_stale_01','UPDATE',1,${deadlineId},${deadlineVersion},'{"due_date":null}') as response`)).rows[0].response;
+assert(stale.ok === false && stale.error.code === 'stale_row_version', 'deadline version conflict bypassed');
+deadlineVersion=changed.data.item.row_version;
+const cleared=(await db.query(`select public.mutate_project_issue('qa_deadline_clear_01','UPDATE',1,${deadlineId},${deadlineVersion},'{"due_date":null}') as response`)).rows[0].response;
+assert(cleared.ok && cleared.data.item.due_date === null, 'deadline clear failed');
+const crossProject=(await db.query(`select public.mutate_project_issue('qa_deadline_wrong_project','UPDATE',${sharedId},${deadlineId},${cleared.data.item.row_version},'{"due_date":"2026-09-10"}') as response`)).rows[0].response;
+assert(crossProject.ok === false && crossProject.error.code === 'not_found', 'deadline cross-project write accepted');
+await db.exec(`select set_config('request.jwt.claim.sub', '${userIds.client}', false);`);
+await expectDenied(`select public.mutate_project_issue('qa_deadline_client_denied','UPDATE',1,${deadlineId},${cleared.data.item.row_version},'{"due_date":"2026-09-10"}')`, 'client deadline write');
+assert((await db.query('select public.read_task_workspace(1,false) as response')).rows[0].response.issues.some(row=>row.issue_id===deadlineId && row.due_date===null), 'client deadline read failed');
+await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
+assert(await scalar(`select count(*)::int as count from public.activity_events where entity_type='PROJECT_ISSUE' and entity_id=${deadlineId} and after_data->>'due_date'='2026-09-10'`) === 1, 'deadline audit missing');
+await db.exec('set role authenticated');
+let progressRow=(await db.query(`select public.mutate_task('qa_progress_create_01','CREATE',1,null,null,'{"title":"진행률 QA","status_code":"DONE","progress_percent":0}'::jsonb) as response`)).rows[0].response;
+assert(progressRow.ok && progressRow.data.item.progress_percent===100, 'new completed task did not become 100');
+let progressSequence=0;
+for (const [fields,status,percent] of [
+  [{status_code:'ON_HOLD'},'ON_HOLD',0], [{progress_percent:73,status_code:'IN_PROGRESS'},'IN_PROGRESS',73],
+  [{status_code:'DONE'},'DONE',100], [{progress_percent:35},'IN_PROGRESS',35],
+  [{status_code:'NOT_STARTED'},'NOT_STARTED',0], [{progress_percent:50,status_code:'IN_PROGRESS'},'IN_PROGRESS',50],
+  [{status_code:'ON_HOLD'},'ON_HOLD',50],
+]) {
+  const row=progressRow.data.item;
+  progressRow=(await db.query(`select public.mutate_task('qa_progress_update_${++progressSequence}','UPDATE',1,${row.id},${row.row_version},'${JSON.stringify(fields)}'::jsonb) as response`)).rows[0].response;
+  assert(progressRow.ok && progressRow.data.item.status_code===status && progressRow.data.item.progress_percent===percent, `status/progress mismatch ${JSON.stringify(progressRow)}`);
+}
+await db.exec('reset role');
 console.log(JSON.stringify({
+  confirmationDeadlineAndAudit: "pass",
+  taskStatusProgressInvariant: "pass",
   nsAllProjectsAndFutureMemberships: "pass",
   migrations: readdirSync(migrationsDir).filter((name) => name.endsWith('.sql')).length,
   tables: 23,

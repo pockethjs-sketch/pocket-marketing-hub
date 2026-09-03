@@ -455,6 +455,7 @@ export function projectIssueViewModel(row = {}) {
   return {
     id: row.issue_id,
     date: row.issue_date ? String(row.issue_date).slice(0, 10) : null,
+    dueDate: row.due_date ? String(row.due_date).slice(0, 10) : null,
     kind: row.kind_text || "",
     relatedTask: row.related_task_text || "",
     body: row.body_text || "",

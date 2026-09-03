@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, MessageSquare, Plus, RefreshCw, X } from "lucide-react";
 import { dailyMeetingsViewModel } from "./api/viewModel.js";
 import { isViewAllowed } from "./accessPermissions.js";
-import { appendBriefReply, briefRequestFields, latestBriefMeeting, progressBriefTasks, publicHttpLink } from "./progressBrief.js";
+import { appendBriefReply, briefRequestFields, latestBriefMeeting, progressBriefTasks, publicHttpLink, requestDeadlineFields, requestDeadlineLabel } from "./progressBrief.js";
 import "./progressView.css";
 
 const shortDate = value => value ? String(value).slice(5, 10).replace("-", ".") : "미정";
@@ -27,7 +27,7 @@ function TaskColumn({ title, subtitle, items, planned, client, onTasks }) {
   </section>;
 }
 function RequestForm({ owners, onCreate, onClose }) {
-  const [fields, setFields] = useState({ title: "", body: "", owner: owners[0], kind: "콘텐츠 검토", link: "" });
+  const [fields, setFields] = useState({ title: "", body: "", owner: owners[0], kind: "콘텐츠 검토", link: "", deadline: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const field = (name, value) => setFields(current => ({ ...current, [name]: value }));
@@ -42,15 +42,18 @@ function RequestForm({ owners, onCreate, onClose }) {
     <label>제목<input autoFocus required maxLength={500} value={fields.title} onChange={e => field("title", e.target.value)} placeholder="확인이 필요한 내용을 적어 주세요" /></label>
     <label>내용<textarea required maxLength={20000} rows={3} value={fields.body} onChange={e => field("body", e.target.value)} /></label>
     <label>콘텐츠·자료 링크<input type="url" maxLength={2048} value={fields.link} onChange={e => field("link", e.target.value)} placeholder="https://…" /></label>
+    <label>컨펌 마감일 (선택)<input type="date" value={fields.deadline} onChange={e => field("deadline", e.target.value)} /><small>한국시간 해당 날짜까지 · 비워두면 기한 미정</small></label>
     {error && <p className="pb-error" role="alert">{error}</p>}
     <footer><small>고객에게 공유되는 요청입니다. 작성 이력은 로그인 계정으로 기록됩니다.</small><button type="button" onClick={onClose} disabled={saving}>취소</button><button className="pb-primary" disabled={saving}>{saving ? "저장 중…" : "요청 등록"}</button></footer>
   </form>;
 }
-function RequestCard({ issue, canWrite, actorName, onUpdate }) {
+function RequestCard({ issue, canWrite, actorName, onUpdate, today }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [reply, setReply] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [editingDeadline, setEditingDeadline] = useState(false);
+  const [deadline, setDeadline] = useState(issue.dueDate || "");
   const done = issue.statusCode === "DONE";
   const save = async fields => {
     setSaving(true); setError("");
@@ -66,6 +69,10 @@ function RequestCard({ issue, canWrite, actorName, onUpdate }) {
   };
   return <article className="pb-request"><div className="pb-request-meta"><span>{issue.kind || "확인 요청"} · 확인 담당 {issue.owner || "미지정"} · {shortDate(issue.date)}</span><Tag code={done ? "DONE" : "ON_HOLD"}>{done ? "확인 완료" : "확인 필요"}</Tag></div>
     <h3>{issue.relatedTask || "확인 요청"}</h3><p>{issue.body || "등록된 내용이 없습니다."}</p><Link value={issue.completionUrl} />
+    <div className={`pb-deadline${!done && issue.dueDate && issue.dueDate < today ? " is-overdue" : ""}`}><span>{requestDeadlineLabel(issue, today)}</span>{canWrite && !editingDeadline && <button disabled={saving} onClick={() => { setDeadline(issue.dueDate || ""); setEditingDeadline(true); }}>{issue.dueDate ? "마감일 변경" : "마감일 설정"}</button>}</div>
+    {editingDeadline && canWrite && <form className="pb-deadline-form" onSubmit={async event => { event.preventDefault(); if (saving) return; try { if (await save(requestDeadlineFields(deadline))) setEditingDeadline(false); } catch (err) { setError(err.message); } }}>
+      <label>컨펌 마감일<input type="date" value={deadline} disabled={saving} onChange={e => setDeadline(e.target.value)} /></label><button type="button" disabled={saving} onClick={() => setDeadline("")}>기한 해제</button><button disabled={saving}>{saving ? "저장 중…" : "마감일 저장"}</button><button type="button" disabled={saving} onClick={() => setEditingDeadline(false)}>취소</button>
+    </form>}
     {issue.remarks && <details className="pb-replies"><summary>답변·추가 메모 보기</summary><p>{issue.remarks}</p></details>}
     {canWrite && <div className="pb-request-actions"><button disabled={saving} onClick={() => setReplyOpen(!replyOpen)}><MessageSquare size={13} />답변 작성</button><button disabled={saving} onClick={() => save({ status_code: done ? "IN_PROGRESS" : "DONE" })}><Check size={13} />{done ? "다시 확인 요청" : "확인 완료"}</button></div>}
     {replyOpen && <form className="pb-reply-form" onSubmit={submitReply}><label>답변<textarea required maxLength={4000} rows={3} value={reply} onChange={e => setReply(e.target.value)} /></label><button disabled={saving}>{saving ? "저장 중…" : "답변 저장"}</button></form>}
@@ -115,7 +122,7 @@ export function ProgressView({ project, role, taskPage, source, actorName, canWr
       <section className="pb-panel"><header><div><h2>서로 확인할 콘텐츠·내용</h2><small>확인 필요 {issues.filter(issue => issue.statusCode !== "DONE").length}건</small></div>{canWriteIssues && <button onClick={() => setAdding(!adding)}>{adding ? <X size={14} /> : <Plus size={14} />}{adding ? "닫기" : "확인 요청 올리기"}</button>}</header>
         <div className="pb-review-toolbar"><span>{canWriteIssues ? "업무의 이슈·추가요청과 같은 기록을 사용합니다." : "공유된 요청을 조회합니다. 등록·답변은 운영 담당자가 처리합니다."}</span><select aria-label="확인 요청 상태" value={filter} onChange={e => { setFilter(e.target.value); setAllRequests(false); }}><option value="open">확인 필요</option><option value="done">확인 완료</option><option value="all">전체</option></select></div>
         {adding && canWriteIssues && <RequestForm owners={owners} onCreate={async fields => { await onIssueCreate(fields); setFilter("open"); }} onClose={() => setAdding(false)} />}
-        {requests.length ? (allRequests ? requests : requests.slice(0, 5)).map(issue => <RequestCard key={issue.id} issue={issue} canWrite={canWriteIssues} actorName={actorName} onUpdate={onIssueUpdate} />) : <Empty>해당 상태의 확인 요청이 없습니다.</Empty>}
+        {requests.length ? (allRequests ? requests : requests.slice(0, 5)).map(issue => <RequestCard key={issue.id} issue={issue} canWrite={canWriteIssues} actorName={actorName} onUpdate={onIssueUpdate} today={week.today} />) : <Empty>해당 상태의 확인 요청이 없습니다.</Empty>}
         {requests.length > 5 && <button className="pb-more" onClick={() => setAllRequests(value => !value)}>{allRequests ? "간단히 보기" : `전체 ${requests.length}건 펼치기`}</button>}
       </section>
     </div></details>

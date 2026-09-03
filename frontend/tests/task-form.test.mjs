@@ -177,4 +177,7 @@ test("일정표에서 완료로 바꾸면 상태와 진행률 100을 한 번에 
   assert.deepEqual(taskForm.taskStatusMutationFields("ON_HOLD"), {
     status_code: "ON_HOLD",
   });
+  assert.deepEqual(taskForm.taskStatusMutationFields("IN_PROGRESS", {statusCode:"DONE",progressPercent:100}), {status_code:"IN_PROGRESS",progress_percent:0});
+  assert.deepEqual(taskForm.taskStatusMutationFields("NOT_STARTED", {statusCode:"IN_PROGRESS",progressPercent:40}), {status_code:"NOT_STARTED",progress_percent:0});
+  assert.deepEqual(taskForm.taskStatusMutationFields("ON_HOLD", {statusCode:"IN_PROGRESS",progressPercent:40}), {status_code:"ON_HOLD"});
 });

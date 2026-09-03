@@ -33,11 +33,11 @@ function Harness() {
   ]);
   const create = async fields => {
     if(window.failWrite)throw Error("QA 저장 실패");
-    setIssues(current => [{id:"99",rowVersion:1,kind:fields.kind_text,relatedTask:fields.related_task_text,body:fields.body_text,owner:fields.owner_text,statusCode:fields.status_code,completionUrl:fields.completion_url,remarks:""},...current]);
+    setIssues(current => [{id:"99",rowVersion:1,dueDate:fields.due_date,kind:fields.kind_text,relatedTask:fields.related_task_text,body:fields.body_text,owner:fields.owner_text,statusCode:fields.status_code,completionUrl:fields.completion_url,remarks:""},...current]);
   };
   const update = async (issue,fields) => {
     if(window.failWrite)throw Error("QA 저장 실패");
-    setIssues(current => current.map(row => row.id === issue.id ? {...row, statusCode:fields.status_code || row.statusCode,remarks:fields.remarks ?? row.remarks,rowVersion:row.rowVersion+1} : row));
+    setIssues(current => current.map(row => row.id === issue.id ? {...row, dueDate: 'due_date' in fields ? fields.due_date : row.dueDate, statusCode:fields.status_code || row.statusCode,remarks:fields.remarks ?? row.remarks,rowVersion:row.rowVersion+1} : row));
   };
   return <main style={{padding:24}}><ProjectProgressView key={role+projectId} project={{id:projectId,name:"QA 프로젝트",clientName:"고객사",allowedPages:role === "client" ? ["tasks"] : ["tasks","daily"]}} role={role} actorName="QA 담당자" source={source} taskPage={{items:projectId==="1"?tasks:[],issues:projectId==="1"?issues:[],issueCanWrite:role!=="client"}} canWrite={role!=="client"} onIssueCreate={create} onIssueUpdate={update} onNavigate={view=>window.navigated=view} /></main>;
 }
@@ -89,13 +89,28 @@ try {
   await click("확인 요청 올리기");
   await fill(".pb-request-form input","검토 요청");
   await fill(".pb-request-form textarea","내용 확인해주세요");
+  await fill('.pb-request-form input[type="date"]',"2026-09-01");
   await evaluate("window.failWrite=true");
   await click("요청 등록");
   await wait('document.querySelector(".pb-error")');
   assert.equal(await evaluate('document.querySelector(".pb-request-form input").value'),"검토 요청");
+  assert.equal(await evaluate('document.querySelector(".pb-request-form input[type=date]").value'),"2026-09-01");
   await evaluate("window.failWrite=false");
   await click("요청 등록");
   await wait('document.querySelector(".pb-request") && !document.querySelector(".pb-request-form")');
+  assert.ok(await evaluate('document.querySelector(".pb-deadline").textContent.includes("기한 초과")'));
+  await click("마감일 변경");
+  await fill('.pb-deadline-form input',"2026-09-08");
+  await evaluate('window.failWrite=true');
+  await click("마감일 저장");
+  await wait('document.querySelector(".pb-error")');
+  assert.equal(await evaluate('document.querySelector(".pb-deadline-form input").value'),"2026-09-08");
+  await evaluate('window.failWrite=false');
+  await click("마감일 저장");
+  await wait('!document.querySelector(".pb-deadline-form")');
+  assert.ok(await evaluate('document.querySelector(".pb-deadline").textContent.includes("2026-09-08")'));
+  await click("마감일 변경"); await click("기한 해제"); await click("마감일 저장");
+  await wait('document.querySelector(".pb-deadline").textContent.includes("마감일 미정")');
   await click("답변 작성");
   await fill(".pb-reply-form textarea","검토 완료했습니다");
   await click("답변 저장");
@@ -115,6 +130,7 @@ try {
   await wait('document.querySelector(".pb-empty")?.textContent.includes("회의록 조회 권한")');
   assert.equal(await evaluate("window.meetingCalls"),calls);
   assert.equal(await evaluate('document.querySelectorAll(".pb-request-actions, .pb-request-form").length'),0);
+  assert.equal(await evaluate('document.querySelectorAll(".pb-deadline button,.pb-deadline-form").length'),0);
   assert.equal(await evaluate('document.querySelectorAll(".pb-schedule .otag").length'),0,"client Gantt hides executor identity");
   assert.ok(!await evaluate('document.querySelector(".progress-brief").textContent.includes("내부 논의")'));
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(150);
