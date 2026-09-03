@@ -18,10 +18,12 @@ const clients = [{id:"one",name:"UND"},{id:"two",name:"무극"},{id:"three",name
 function Harness() {
   const [collapsed,setCollapsed]=useState(true), [drawer,setDrawer]=useState(false), [width,setWidth]=useState(innerWidth);
   const [active,setActive]=useState("one"), [view,setView]=useState("tasks"), [role,setRole]=useState("pocket");
+  const [pages,setPages]=useState(["tasks","daily","performance","plan"]);
   window.setTestRole=setRole;
+  window.setTestPages=setPages;
   useEffect(()=>{ const resize=()=>setWidth(innerWidth); addEventListener("resize",resize); return ()=>removeEventListener("resize",resize); },[]);
   const nav=getNavigationPresentation({role,compactViewport:width<=900,desktopCollapsed:collapsed,drawerOpen:drawer});
-  const project={id:active,clientName:clients.find(c=>c.id===active).name,name:clients.find(c=>c.id===active).name+" 통합 마케팅 운영",allowedPages:["tasks","daily","performance","plan"]};
+  const project={id:active,clientName:clients.find(c=>c.id===active).name,name:clients.find(c=>c.id===active).name+" 통합 마케팅 운영",allowedPages:pages};
   const toggle=()=>nav.usesDrawer?setDrawer(v=>!v):setCollapsed(v=>!v);
   return <div className={"app-shell has-sidebar-workspace "+(nav.projectSidebarCollapsed?"is-sidebar-collapsed ":"")+(nav.isDrawerOpen?"is-navigation-drawer-open":"")}>
     <ProjectSidebar project={project} role={role} clients={clients} activeClient={active} onSelectClient={setActive} activeView={view} activePlanVariant="client" onView={setView} open={nav.isDrawerOpen} onClose={()=>setDrawer(false)} taskCount={0} visible={nav.projectSidebarVisible} navigation={nav} onToggleNavigation={toggle} canCreateProject={role!=="client"} onCreateProject={()=>window.created=(window.created||0)+1} onImportQuote={()=>window.imported=(window.imported||0)+1}/>
@@ -63,12 +65,19 @@ try {
   assert.equal(await width(".project-sidebar"),264);
   assert.equal(await evaluate('document.querySelector(".app-main").getBoundingClientRect().left'),264);
   assert.equal(await evaluate('document.querySelectorAll(".sidebar-company-list button").length'),3);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll("#project-page-links button")].map(b=>b.textContent)'),["업무","진행사항","데일리 회의록"]);
+  await click(".project-group-toggle");
+  assert.equal(await evaluate('document.querySelector("#project-page-links")'),null);
+  assert.equal(await evaluate('document.querySelector("main h1").textContent'),"업무","project folder must not navigate");
+  await click(".project-group-toggle");
   assert.equal(await evaluate('document.querySelector(".topbar").textContent.includes("프로젝트 생성")'),false);
   await click(".sidebar-company-list button:nth-child(2)");
   assert.equal(await evaluate('document.querySelector(".topbar-project-context small").textContent'),"무극");
   assert.equal(await width(".project-sidebar"),264,"desktop selection stays expanded");
   await evaluate('[...document.querySelectorAll(".project-nav button")].find(b=>b.textContent==="진행사항").click()');
   await wait('document.querySelector("main h1").textContent==="진행사항"');
+  assert.equal(await evaluate('document.querySelectorAll("#project-page-links .is-active").length'),1);
+  assert.equal(await evaluate('document.querySelector(".project-group-toggle").classList.contains("is-active")'),false,"folder is not a selected page");
   await click(".sidebar-project-create");await click(".sidebar-project-import");
   assert.equal(await evaluate("window.created"),1);assert.equal(await evaluate("window.imported"),1);
   assert.ok(await evaluate('Math.abs(document.querySelector(".sidebar-project-tools").getBoundingClientRect().bottom-innerHeight)<2'),"actions pinned to viewport bottom");
@@ -81,6 +90,11 @@ try {
   assert.equal(await evaluate('document.querySelector("main h1").textContent'),"진행사항","collapse does not navigate");
   await evaluate('window.setTestRole("client")');await click(".sidebar-toggle");
   assert.equal(await evaluate('document.querySelectorAll(".sidebar-project-tools").length'),0,"client creation stays forbidden");
+  await evaluate('window.setTestPages(["daily"])');await delay(80);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll("#project-page-links button")].map(b=>b.textContent)'),["데일리 회의록"],"daily-only account retains the folder");
+  await evaluate('window.setTestPages(["performance"])');await delay(80);
+  assert.equal(await evaluate('document.querySelector(".project-group-toggle")'),null,"no empty unauthorized folder");
+  await evaluate('window.setTestPages(["tasks","daily"])');await delay(80);
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await delay(180);assert.equal(await width(".project-sidebar"),56);
   await click(".sidebar-toggle");assert.equal(await width(".project-sidebar"),280);

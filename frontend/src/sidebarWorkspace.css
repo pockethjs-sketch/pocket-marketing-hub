@@ -79,6 +79,10 @@
 .sidebar-current-project { margin: 12px 8px 0; color: #7a879a; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .sidebar-pages-label { margin: 18px 14px 0; }
 .has-sidebar-workspace .project-sidebar .project-nav { flex: 0 0 auto; padding: 8px 12px 20px; }
+.has-sidebar-workspace .project-workspace-tree > .project-group-toggle { color: #34445f; background: transparent; }
+.has-sidebar-workspace .project-workspace-tree > .project-group-toggle:hover { background: #edf1f8; }
+.has-sidebar-workspace .project-workspace-tree .project-nav-children button { gap: 9px; }
+.has-sidebar-workspace .project-workspace-tree .project-nav-children button > svg { flex: 0 0 16px; }
 .sidebar-project-tools { display: grid; flex: 0 0 auto; gap: 7px; padding: 13px 14px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid #dce3ed; background: #fff; }
 .sidebar-project-tools button { display: flex; min-height: 36px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #dce3ed; border-radius: 8px; background: #fff; color: #34445f; font-size: 11px; font-weight: 750; cursor: pointer; box-shadow: none; }
 .sidebar-project-tools button:hover { background: #edf1fa; }

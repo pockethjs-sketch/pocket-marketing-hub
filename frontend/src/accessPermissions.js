@@ -13,6 +13,10 @@ export const PAGE_CATALOG = Object.freeze([
 
 export const ACCESS_PAGE_OPTIONS = Object.freeze(PAGE_CATALOG.filter((page) => page.customerSelectable));
 export const NAVIGATION_PAGE_OPTIONS = Object.freeze(PAGE_CATALOG.filter((page) => page.navigation));
+// Navigation folder only: never create a route or grant from this group ID.
+export const PROJECT_NAVIGATION_GROUP = Object.freeze({
+  id: "project-pages", label: "프로젝트", pageIds: Object.freeze(["tasks", "progress", "daily"]),
+});
 
 export const ACCESS_PAGE_KEYS = Object.freeze(ACCESS_PAGE_OPTIONS.map((page) => page.id));
 

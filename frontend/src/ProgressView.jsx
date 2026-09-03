@@ -98,7 +98,7 @@ export function ProgressView({ project, role, taskPage, source, actorName, canWr
   const requests = issues.filter(issue => filter === "all" || (filter === "done" ? issue.statusCode === "DONE" : issue.statusCode !== "DONE"));
   const owners = [...new Set([project.clientName || "고객사", "포켓컴퍼니", "NS"])];
   return <div className="progress-brief">
-    <div className="pb-heading"><div><small>업무 / 진행사항</small><h1>{project.name} · 진행사항</h1><p>진행된 업무와 이번 주 계획, 지난 회의와 확인할 내용을 공유합니다.</p></div><span>{shortDate(week.start)} — {shortDate(week.end)} · 이번 주</span></div>
+    <div className="pb-heading"><div><small>프로젝트 / 진행사항</small><h1>{project.name} · 진행사항</h1><p>진행된 업무와 이번 주 계획, 지난 회의와 확인할 내용을 공유합니다.</p></div><span>{shortDate(week.start)} — {shortDate(week.end)} · 이번 주</span></div>
     <div className="pb-work-grid">
       <TaskColumn title="진행된 업무" subtitle="실제 상태 기준 · 최근 갱신순" items={progressed} client={client} onTasks={() => onNavigate("tasks")} />
       <TaskColumn title="이번 주 진행 예정 업무" subtitle="월요일–일요일 · 등록 일정 기준" items={planned} planned client={client} onTasks={() => onNavigate("tasks")} />

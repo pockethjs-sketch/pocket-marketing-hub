@@ -67,7 +67,7 @@ import { groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleD
 import { readableTaskActivities, taskActivitySentence } from "./taskActivity.js";
 import { isNewTask, unacknowledgedNewTasks } from "./taskFreshness.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
-import { ACCESS_PAGE_OPTIONS, NAVIGATION_PAGE_OPTIONS, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
+import { ACCESS_PAGE_OPTIONS, NAVIGATION_PAGE_OPTIONS, PROJECT_NAVIGATION_GROUP, accountSubmission, firstAllowedView, isViewAllowed, normalizeAllowedPages, removeAccessSubmission } from "./accessPermissions.js";
 import { dailyMetricSeries, trackingFunnel, trackingSignals, TRACKING_METRICS } from "./performanceTracking.js";
 import {
   clearResourceSessionCache,
@@ -219,9 +219,11 @@ function LoginScreen({ onLogin, error, loading, configured }) {
 
 export function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, open, onClose, taskCount, visible, clients = [], activeClient, onSelectClient, onCreateProject, onImportQuote, canCreateProject, navigation, onToggleNavigation }) {
   const [planExpanded, setPlanExpanded] = useState(activeView === "plan");
+  const [projectExpanded, setProjectExpanded] = useState(true);
 
   useEffect(() => {
     if (activeView === "plan") setPlanExpanded(true);
+    if (PROJECT_NAVIGATION_GROUP.pageIds.includes(activeView) || activeView === "schedule") setProjectExpanded(true);
   }, [activeView]);
 
   const visiblePlanChildren = role === "client" ? [PLAN_VARIANTS.client] : Object.values(PLAN_VARIANTS);
@@ -230,6 +232,7 @@ export function ProjectSidebar({ project, role, activeView, activePlanVariant, o
     if (role !== "client") return true;
     return isViewAllowed(item.permissionId || item.id, project.allowedPages);
   });
+  const projectNavChildren = visibleNavItems.filter(item => PROJECT_NAVIGATION_GROUP.pageIds.includes(item.id));
 
   return (
     <aside id="project-navigation" className={`project-sidebar ${open ? "is-open" : ""}`} aria-label="프로젝트 탐색">
@@ -240,6 +243,17 @@ export function ProjectSidebar({ project, role, activeView, activePlanVariant, o
       <span className="sidebar-section-label sidebar-pages-label">메뉴</span>
       <nav className="project-nav">{visibleNavItems.map((item) => {
         const Icon = item.icon;
+        if (PROJECT_NAVIGATION_GROUP.pageIds.includes(item.id)) {
+          if (item.id !== projectNavChildren[0]?.id) return null;
+          return <div key={PROJECT_NAVIGATION_GROUP.id} className={`project-nav-tree project-workspace-tree ${projectExpanded ? "is-expanded" : ""}`}>
+            <button type="button" className="project-group-toggle" onClick={() => setProjectExpanded(current => !current)} aria-expanded={projectExpanded} aria-controls="project-page-links"><FolderOpen size={17} strokeWidth={1.8} /><span>{PROJECT_NAVIGATION_GROUP.label}</span><ChevronDown className="nav-tree-chevron" size={14} /></button>
+            {projectExpanded && <div id="project-page-links" className="project-nav-children">{projectNavChildren.map(child => {
+              const ChildIcon = child.icon;
+              const active = activeView === child.id || (child.id === "tasks" && activeView === "schedule");
+              return <button key={child.id} type="button" className={active ? "is-active" : ""} aria-current={active ? "page" : undefined} onClick={() => { onView(child.id); onClose(); }}><ChildIcon size={16} strokeWidth={1.8} /><span>{child.label}</span>{child.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
+            })}</div>}
+          </div>;
+        }
         if (item.id !== "plan") return <button key={item.id} className={`${activeView === item.id || (item.id === "tasks" && activeView === "schedule") || (item.id === "tasks" && activeView === "progress") ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
         return <div key={item.id} className={`project-nav-tree ${planExpanded ? "is-expanded" : ""}`}>
           <button type="button" className={activeView === "plan" ? "is-active" : ""} onClick={() => {
