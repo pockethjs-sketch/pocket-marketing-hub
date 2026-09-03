@@ -1262,12 +1262,37 @@ function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, onEdit, o
   })}</tbody></table></div>;
 }
 
-const scheduleStatusFilters = [["ALL", "전체"], ["DONE", "완료"], ["ACTIVE", "진행"], ["HOLD", "보류"]];
+const scheduleStatusFilters = [["ALL", "전체"], ["TODO", "미착수"], ["ACTIVE", "진행"], ["DONE", "완료"], ["HOLD", "보류"]];
 const scheduleCategoryFilters = [["ALL", "전체"], ["마케팅", "마케팅"], ["디자인", "디자인"], ["영상", "영상"]];
-const scheduleWeekFilters = [["ALL", "전체"], ["LAST_WEEK", "지난주"], ["THIS_WEEK", "이번주"], ["NEXT_WEEK", "다음주"]];
+const scheduleWeekFilters = [["ALL", "전체"], ["TODAY", "오늘"], ["LAST_WEEK", "지난주"], ["THIS_WEEK", "이번주"], ["NEXT_WEEK", "다음주"], ["THIS_MONTH", "이번달"]];
 
 function ScheduleFilterButtons({ label, value, options, onChange }) {
   return <div className="task-schedule-filter-group"><span>{label}</span><div role="group" aria-label={label}>{options.map(([id, text]) => <button type="button" key={id} className={value === id ? "is-active" : ""} aria-pressed={value === id} onClick={() => onChange(id)}>{text}</button>)}</div></div>;
+}
+
+function TaskScheduleFilters({ groups, count, total, onReset }) {
+  const [activeId, setActiveId] = useState("status");
+  const active = groups.find(group => group.id === activeId) || groups[0];
+  const applied = groups.filter(group => group.value !== "ALL");
+  const selectTab = (event, index) => {
+    const target = event.key === "ArrowRight" ? (index + 1) % groups.length
+      : event.key === "ArrowLeft" ? (index + groups.length - 1) % groups.length
+        : event.key === "Home" ? 0 : event.key === "End" ? groups.length - 1 : null;
+    if (target === null) return;
+    event.preventDefault();
+    setActiveId(groups[target].id);
+    document.getElementById(`schedule-filter-tab-${groups[target].id}`)?.focus();
+  };
+  return <section className="schedule-filter-panel" aria-label="일정표 업무 필터">
+    <header className="schedule-filter-heading">
+      <div className="schedule-filter-tabs" role="tablist" aria-label="필터 종류">{groups.map((group, index) => <button type="button" role="tab" key={group.id} id={`schedule-filter-tab-${group.id}`} aria-controls="schedule-filter-options" aria-selected={active.id === group.id} tabIndex={active.id === group.id ? 0 : -1} onKeyDown={event => selectTab(event, index)} onClick={() => setActiveId(group.id)}>{group.label}{group.value !== "ALL" && <i aria-label="적용 중" />}</button>)}</div>
+      <span className="schedule-filter-count" aria-live="polite"><strong>{count}</strong> / {total}건</span>
+    </header>
+    <div id="schedule-filter-options" role="tabpanel" aria-labelledby={`schedule-filter-tab-${active.id}`}>
+      <ScheduleFilterButtons label={active.label} value={active.value} options={active.options} onChange={active.onChange} />
+    </div>
+    {applied.length > 0 && <div className="schedule-applied-filters"><span>적용 조건</span>{applied.map(group => <button type="button" key={group.id} aria-label={`${group.label} 필터 해제`} onClick={() => group.onChange("ALL")}>{group.options.find(([id]) => id === group.value)?.[1] || group.value}<X size={11} /></button>)}<button type="button" className="schedule-filter-reset" onClick={onReset}>전체 해제</button></div>}
+  </section>;
 }
 
 function TaskWorkspaceTabs({ activeView, onChange, canViewActivity }) {
@@ -1415,6 +1440,8 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [scheduleFilter, setScheduleFilter] = useState("ALL");
+  const [mediaFilter, setMediaFilter] = useState("ALL");
+  const [ownerFilter, setOwnerFilter] = useState("ALL");
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [startDateDraft, setStartDateDraft] = useState(project.startDate || "");
   const [startDateSaving, setStartDateSaving] = useState(false);
@@ -1442,6 +1469,8 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     setStatusFilter("ALL");
     setCategoryFilter("ALL");
     setScheduleFilter("ALL");
+    setMediaFilter("ALL");
+    setOwnerFilter("ALL");
     setEditingTaskId(null);
     setGanttSave({ status: "idle", saved: 0, total: 0, error: "" });
     setGanttDrafts(null);
@@ -1457,18 +1486,26 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     setStartDateError("");
   }, [project.id, project.startDate]);
   const searchNeedle = String(query || "").trim().toLowerCase();
+  const mediaOptions = useMemo(() => [["ALL", "전체"], ...[...new Set(tasks.map(taskScheduleMedia))].map(media => [media, media])], [tasks]);
+  const ownerOptions = [["ALL", "전체"], ["POCKET", "포켓 업무"], ["NS", "NS 업무"]];
+  const resetScheduleFilters = () => {
+    setStatusFilter("ALL"); setCategoryFilter("ALL"); setScheduleFilter("ALL"); setMediaFilter("ALL"); setOwnerFilter("ALL");
+  };
   const ganttVisibleTasks = useMemo(() => filterTaskSchedule(tasks, {
     status: statusFilter,
     category: categoryFilter,
     schedule: scheduleFilter,
-  }).filter((task) => !searchNeedle || `${task.title} ${task.description || ""} ${task.parent || ""} ${task.stream || ""}`.toLowerCase().includes(searchNeedle)), [tasks, statusFilter, categoryFilter, scheduleFilter, searchNeedle]);
+    media: mediaFilter,
+    owner: canWrite ? ownerFilter : "ALL",
+  }).filter((task) => !searchNeedle || `${task.title} ${task.description || ""} ${task.parent || ""} ${taskScheduleCategory(task)}`.toLowerCase().includes(searchNeedle)), [tasks, statusFilter, categoryFilter, scheduleFilter, mediaFilter, ownerFilter, canWrite, searchNeedle]);
   const filteredTasks = useMemo(() => groupTaskScheduleByMedia(ganttVisibleTasks), [ganttVisibleTasks]);
   const statusSummaryTasks = useMemo(() => filterTaskSchedule(tasks, {
     status: "ALL",
     category: categoryFilter,
     schedule: scheduleFilter,
-  }), [tasks, categoryFilter, scheduleFilter]);
-  const filtersActive = statusFilter !== "ALL" || categoryFilter !== "ALL" || scheduleFilter !== "ALL";
+    media: mediaFilter,
+    owner: canWrite ? ownerFilter : "ALL",
+  }), [tasks, categoryFilter, scheduleFilter, mediaFilter, ownerFilter, canWrite]);
   const timeline = useMemo(
     () => buildTaskTimeline(filteredTasks, project),
     [filteredTasks, project.startDate, project.endDate],
@@ -1691,7 +1728,17 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
   return <div className="campaign-schedule-board" aria-label="캠페인 운영 일정">
     <QuoteSummary quote={project.quoteData} />
     <section className="campaign-board-progress" aria-label="전체 진행률"><div><span>전체 진행률</span><strong>{completionRate}<em>%</em></strong><small>완료 {completed}건 · 전체 {countable.length}건</small><div><i style={{ width: `${completionRate}%` }} /></div></div><div className="campaign-board-statuses"><button type="button" className={statusFilter === "ALL" ? "is-active" : ""} onClick={() => setStatusFilter("ALL")}><span>전체</span><strong>{countable.length}</strong></button><button type="button" className={statusFilter === "ACTIVE" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "ACTIVE"))}><span>진행중</span><strong>{inProgress}</strong></button><button type="button" className={statusFilter === "DONE" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "DONE"))}><span>완료</span><strong>{done}</strong></button><button type="button" className={statusFilter === "HOLD" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "HOLD"))}><span>보류</span><strong>{onHold}</strong></button></div></section>
-    <div className="campaign-schedule-toolbar reference-toolbar toolbar"><TaskWorkspaceTabs activeView={displayMode} onChange={onViewChange} canViewActivity={canViewActivity} />{activityMode ? <div className="task-activity-toolbar-copy">사용자가 생성·완료·변경한 업무만 표시합니다.</div> : <><div className="task-schedule-filters" aria-label="일정표 업무 필터"><ScheduleFilterButtons label="업무 상태" value={statusFilter} options={scheduleStatusFilters} onChange={setStatusFilter} /><ScheduleFilterButtons label="업무 카테고리" value={categoryFilter} options={scheduleCategoryFilters} onChange={setCategoryFilter} /><ScheduleFilterButtons label="업무 일정" value={scheduleFilter} options={scheduleWeekFilters} onChange={setScheduleFilter} /><div className="task-schedule-filter-result"><strong>{filteredTasks.length}</strong><span>/ {tasks.length}건</span>{filtersActive && <button type="button" onClick={() => { setStatusFilter("ALL"); setCategoryFilter("ALL"); setScheduleFilter("ALL"); }}>초기화</button>}</div></div>{canEditProject && <div className="schedule-start-date refbox"><label><span>착수일</span><input type="date" value={startDateDraft} disabled={startDateSaving} onChange={(event) => { setStartDateDraft(event.target.value); setStartDateError(""); }} /></label><button type="button" className="btn" disabled={startDateSaving || !startDateDraft || startDateDraft === (project.startDate || "")} onClick={saveProjectStartDate}>{startDateSaving ? "저장 중" : "저장"}</button>{startDateError && <small role="alert">{startDateError}</small>}</div>}</>}</div>
+    <div className="campaign-schedule-toolbar reference-toolbar toolbar">
+      <TaskWorkspaceTabs activeView={displayMode} onChange={onViewChange} canViewActivity={canViewActivity} />
+      {activityMode ? <div className="task-activity-toolbar-copy">사용자가 생성·완료·변경한 업무만 표시합니다.</div> : canEditProject && <div className="schedule-start-date refbox"><label><span>착수일</span><input type="date" value={startDateDraft} disabled={startDateSaving} onChange={(event) => { setStartDateDraft(event.target.value); setStartDateError(""); }} /></label><button type="button" className="btn" disabled={startDateSaving || !startDateDraft || startDateDraft === (project.startDate || "")} onClick={saveProjectStartDate}>{startDateSaving ? "저장 중" : "저장"}</button>{startDateError && <small role="alert">{startDateError}</small>}</div>}
+    </div>
+    {!activityMode && <TaskScheduleFilters key={project.id} count={filteredTasks.length} total={tasks.length} onReset={resetScheduleFilters} groups={[
+      { id: "status", label: "업무 상태별", value: statusFilter, options: scheduleStatusFilters, onChange: setStatusFilter },
+      { id: "category", label: "업무 분야별", value: categoryFilter, options: scheduleCategoryFilters, onChange: setCategoryFilter },
+      { id: "media", label: "매체별", value: mediaFilter, options: mediaOptions, onChange: setMediaFilter },
+      { id: "period", label: "기간별", value: scheduleFilter, options: scheduleWeekFilters, onChange: setScheduleFilter },
+      ...(canWrite ? [{ id: "owner", label: "담당 업무별", value: ownerFilter, options: ownerOptions, onChange: setOwnerFilter }] : []),
+    ]} />}
     <section ref={schedulePanelRef} className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
       <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : " · 업무명을 누르면 수정"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={onLoadActivity} disabled={activityState?.status === "loading"}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
       {displayMode === "gantt" && canWrite && <div className="g-hint"><span>✎</span><span>칸을 클릭하면 칠해지고, 다시 누르면 지워집니다. 옆으로 끌면 여러 칸을 한 번에 — 시작일·종료일·기간은 칠한 범위에 맞춰 자동으로 바뀝니다.</span></div>}

@@ -1,4 +1,5 @@
 import { normalizeScheduleDates } from "../taskGantt.js";
+import { WORKSTREAM_LABELS } from "../taskWorkstreams.js";
 
 const PHASE_LABELS = {
   P0: "구축",
@@ -27,16 +28,6 @@ const STATUS_LABELS = {
   PRODUCTION: "제작",
   READY: "게시예약",
   PUBLISHED: "완료",
-};
-
-const WORKSTREAM_LABELS = {
-  MKT: "마케팅",
-  DSN: "디자인",
-  VID: "영상",
-  COMMON: "공통",
-  YOUTUBE: "유튜브",
-  INSTAGRAM: "인스타그램",
-  SEO: "SEO",
 };
 
 const CHANNEL_LABELS = {

@@ -1,4 +1,5 @@
 import { scheduleDateBounds, taskScheduleDates } from "./taskGantt.js";
+import { taskWorkstreamLabel } from "./taskWorkstreams.js";
 
 const DAY_MS = 86_400_000;
 
@@ -22,7 +23,7 @@ function dayDiff(left, right) {
 }
 
 export function taskScheduleCategory(task = {}) {
-  return String(task.stream || task.category || task.parent || "미분류").trim() || "미분류";
+  return taskWorkstreamLabel(task);
 }
 
 const TASK_MEDIA_LABELS = {
@@ -65,6 +66,7 @@ export function taskScheduleStatusGroup(task = {}) {
   if (["DONE", "COMPLETED"].includes(status)) return "DONE";
   if (["ON_HOLD", "BLOCKED"].includes(status)) return "HOLD";
   if (["IN_PROGRESS", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION"].includes(status)) return "ACTIVE";
+  if (["NOT_STARTED", "TODO", "PLANNED"].includes(status)) return "TODO";
   return "OTHER";
 }
 
@@ -82,15 +84,21 @@ export function filterTaskSchedule(tasks = [], filters = {}, todayValue = new Da
   const status = String(filters.status || "ALL");
   const category = String(filters.category || "ALL");
   const schedule = String(filters.schedule || "ALL").toUpperCase();
+  const media = String(filters.media || "ALL").replace(/\s+/g, " ").trim().toLocaleUpperCase("ko");
+  const owner = String(filters.owner || "ALL").toUpperCase();
   const today = dateOnly(todayValue);
 
   return tasks.filter((task) => {
     if (status !== "ALL" && taskScheduleStatusGroup(task) !== status) return false;
     if (category !== "ALL" && taskScheduleCategory(task) !== category) return false;
+    if (media !== "ALL" && taskScheduleMediaKey(task) !== media) return false;
+    if (owner !== "ALL" && String(task.responsibleOrgCode || task.responsible_org_code || "").toUpperCase() !== owner) return false;
     if (schedule === "ALL") return true;
 
     const selectedDates = taskScheduleDates(task);
     if (!today || !selectedDates.length) return false;
+    if (schedule === "TODAY") return selectedDates.includes(isoDate(today));
+    if (schedule === "THIS_MONTH") return selectedDates.some(date => date.slice(0, 7) === isoDate(today).slice(0, 7));
     const offset = schedule === "LAST_WEEK" ? -1 : schedule === "THIS_WEEK" ? 0 : schedule === "NEXT_WEEK" ? 1 : null;
     if (offset !== null) {
       const week = taskWeekRange(today, offset);

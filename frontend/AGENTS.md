@@ -10,6 +10,10 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Pocket Marketing Hub design decisions
 
+- Use taskWorkstreams.js for Korean workstream labels across new MARKETING/DESIGN/VIDEO and legacy MKT/DSN/VID codes. Never show raw English workstream enums in the schedule table or let equivalent codes fail a Korean filter.
+- Put a dedicated filter panel below the table/Gantt switch: 업무 상태별 / 업무 분야별 / 매체별 / 기간별 / 담당 업무별. Filter types are tabs, values are click buttons, and selected conditions remain visible as removable chips. Combine groups with AND, preserve selections when switching table/Gantt or filter tabs, reset on project change, and keep controls usable at zero results.
+- Pocket/NS task filters use the assigned responsible organization, not creator identity. Hide the company filter for clients to preserve executor privacy. Apply all filters locally to the existing task resource; never fetch or save just because a filter was clicked.
+
 - NS execution accounts share the full active project list, including Pocket Company, through EDIT memberships. Project creation must attach NS membership in the same transaction, with no duplicate creator membership. Keep Pocket-only administration and POCKET_ONLY content blocked for NS; never implement sharing by making NS a Pocket manager.
 - The schedule table order is now 매체 / 업무분야 / 업무 / 세부내용 / 일정 / 기간 / 진행률 / 상태 / 담당 / 완료링크 / 비고 (+ internal row actions). 업무분야 uses the canonical workstream value, not a separate field. Fill the available panel width; preserve compact date/status/owner columns and give extra width to task names.
 - The Gantt display axis must fill its available width with consecutive dates into following months, without modifying saved task dates or triggering a write on resize. Keep 28px day columns and 280px task labels; use alternating month backgrounds and vertical month boundaries across headers and task rows.

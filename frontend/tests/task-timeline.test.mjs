@@ -1,8 +1,39 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { tasksViewModel } from "../src/api/viewModel.js";
 
 import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
+
+test("신규 DB 업무분야와 구형 코드는 한글로 표시하고 같은 필터에 포함한다", () => {
+  const codes = ["MARKETING", "DESIGN", "VIDEO", "MKT", "DSN", "VID"];
+  const rows = tasksViewModel({data:{items:codes.map((code, index) => ({task_id:String(index),workstream_code:code}))}}).items;
+  assert.deepEqual(rows.map(row => row.stream), ["마케팅","디자인","영상","마케팅","디자인","영상"]);
+  assert.deepEqual(rows.map(taskScheduleCategory), ["마케팅","디자인","영상","마케팅","디자인","영상"]);
+  assert.equal(taskScheduleCategory({streamCode:"VIDEO",stream:"VIDEO"}), "영상");
+  assert.equal(taskScheduleCategory({stream:"UNKNOWN"}), "미분류");
+  assert.equal(filterTaskSchedule(rows,{category:"마케팅"}).length,2);
+});
+
+test("상태·분야·매체·기간·담당 회사 필터는 생성자와 무관하게 교집합으로 적용한다", () => {
+  const tasks = [
+    {id:"A",streamCode:"MARKETING",categoryCode:"YOUTUBE",statusCode:"IN_PROGRESS",responsibleOrgCode:"NS",createdByOrgCode:"POCKET",scheduleDates:["2026-09-03"]},
+    {id:"B",streamCode:"MARKETING",categoryCode:"YOUTUBE",statusCode:"IN_PROGRESS",responsibleOrgCode:"POCKET",createdByOrgCode:"NS",scheduleDates:["2026-09-03"]},
+    {id:"C",streamCode:"DESIGN",categoryCode:"INSTAGRAM",statusCode:"NOT_STARTED",responsibleOrgCode:"NS",scheduleDates:["2026-09-09"]},
+  ];
+  const filter={status:"ACTIVE",category:"마케팅",media:"YouTube",schedule:"THIS_WEEK",owner:"NS"};
+  assert.deepEqual(filterTaskSchedule(tasks,filter,"2026-09-03").map(t=>t.id),["A"]);
+  assert.deepEqual(filterTaskSchedule(tasks,{...filter,owner:"POCKET"},"2026-09-03").map(t=>t.id),["B"]);
+  assert.deepEqual(filterTaskSchedule(tasks,{...filter,media:"Instagram"},"2026-09-03"),[]);
+  assert.deepEqual(filterTaskSchedule(tasks,{status:"TODO"}).map(t=>t.id),["C"]);
+  assert.equal(filterTaskSchedule(tasks,{}).length,3);
+});
+
+test("오늘·이번달 필터는 실제 선택 날짜만 보고 비운 간트와 미등록 일정을 제외한다", () => {
+  const tasks=[{id:"A",scheduleDates:["2026-08-31","2026-09-03"]},{id:"B",scheduleDates:["2026-09-30"]},{id:"C",scheduleDates:["2026-10-01"]},{id:"D",scheduleDates:[]}];
+  assert.deepEqual(filterTaskSchedule(tasks,{schedule:"TODAY"},"2026-09-03").map(t=>t.id),["A"]);
+  assert.deepEqual(filterTaskSchedule(tasks,{schedule:"THIS_MONTH"},"2026-09-03").map(t=>t.id),["A","B"]);
+});
 
 test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한다", () => {
   const timeline = buildTaskTimeline([
