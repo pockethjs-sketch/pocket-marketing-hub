@@ -123,7 +123,7 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 ### 업무 응답
 
-`tasks`는 업무 목록 외에 프로젝트 일정 기준과 콘텐츠 발행 집계를 함께 반환합니다.
+`read_task_workspace`는 업무 목록 외에 프로젝트 일정 기준, 프로젝트 멤버, 프로젝트 이슈·추가요청 목록을 함께 반환합니다. 이슈 표 때문에 별도 읽기 요청을 추가하지 않습니다.
 
 프로젝트와 업무의 날짜 필드는 `yyyy-MM-dd` 날짜 전용 문자열입니다. 프런트의 `일정표` 보기는 같은 `tasks` 응답의 `title`, `description`, `planned_start_date`, `due_date`, `schedule_dates_json`, `progress_percent`, `status_code`, `completion_url`, `remarks`를 사용합니다. 업무의 `created_at`은 서버 생성 시각이며, 생성 후 24시간 신규 표시의 유일한 기준입니다. `updated_at`은 신규 판정에 사용하지 않습니다. `schedule_dates_json`은 정렬·중복 제거된 ISO 날짜 배열 문자열이며 간트 드래그의 비연속 선택을 보존합니다. 값이 없는 구버전 행은 시작일~종료일 전체를 선택한 것으로 해석하고, `[]`는 일정이 없음을 의미합니다. 별도 일정 API나 복제 테이블은 사용하지 않습니다.
 
@@ -167,6 +167,21 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
       "row_version": 1
     }
   ],
+  "issues": [
+    {
+      "issue_id": 42,
+      "issue_date": "2026-09-03",
+      "kind_text": "추가업무",
+      "related_task_text": "채널 세팅",
+      "body_text": "프로필 문구 수정",
+      "owner_text": "NS",
+      "status_code": "IN_PROGRESS",
+      "completion_url": "https://example.com/result",
+      "remarks": "고객 요청",
+      "row_version": 1
+    }
+  ],
+  "issueCanWrite": true,
   "nextCursor": null,
   "totalMatching": 144
 }

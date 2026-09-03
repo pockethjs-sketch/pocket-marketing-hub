@@ -283,6 +283,7 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     const projectId = await resolveProjectId(input.projectId ?? input.mutation?.projectId);
     const type = entityType(input);
     if (type === "TASK") return mutateTask({ ...input, projectId, mutation: { ...input.mutation, projectId } });
+    if (type === "PROJECT_ISSUE") return core.mutateIssue({ ...input, projectId, mutation: { ...input.mutation, projectId } });
     if (type === "DAILY_MEETING") return core.mutateMeeting({ ...input, projectId, mutation: { ...input.mutation, projectId } });
     if (type === "KPI_DEFINITION") return core.mutateKpi({ ...input, projectId, mutation: { ...input.mutation, projectId } });
     await requireLegacySession();

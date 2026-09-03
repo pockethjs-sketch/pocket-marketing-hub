@@ -98,7 +98,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=
 
 프런트는 `supabase`를 선택했는데 URL이나 publishable key가 빠진 경우 즉시 실패합니다. 설정을 무시하고 Sheets로 조용히 되돌아가는 동작은 금지했습니다. GitHub Actions는 세 운영 변수가 하나라도 없으면 빌드 전에 실패합니다.
 
-업무 읽기는 `read_tasks()`의 최대 1,000건 역할별 마스킹 계약과 프런트 어댑터까지 작성했습니다. 업무 쓰기는 `mutate_task()` 한 트랜잭션이 권한, 허용 페이지, mutation 중복, `row_version`, 일정 배열 정규화, 감사 연결을 처리합니다. 브라우저의 업무 테이블 직접 SELECT/INSERT/UPDATE는 금지했습니다. 알 수 없는 필드명은 성공처럼 무시하지 않고 거부합니다.
+업무 읽기는 `read_task_workspace()`의 최대 1,000건 역할별 마스킹 계약과 프런트 어댑터까지 작성했습니다. 이 RPC는 프로젝트 이슈 원장도 같은 응답에 포함해 추가 네트워크 요청 없이 일정표 하단을 채웁니다. 업무 쓰기는 `mutate_task()`, 이슈 쓰기는 `mutate_project_issue()` 한 트랜잭션이 권한, 허용 페이지, mutation 중복, `row_version`, 입력 검증과 감사 연결을 처리합니다. 브라우저의 업무·이슈 테이블 직접 SELECT/INSERT/UPDATE는 금지했습니다. 알 수 없는 필드명은 성공처럼 무시하지 않고 거부합니다.
 
 ## 전환 게이트
 

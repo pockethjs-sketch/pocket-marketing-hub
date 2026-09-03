@@ -73,8 +73,8 @@ await db.exec(`
     (1, 'P0', 'MARKETING', '팀 전용 업무', null, null, null, 'NS', 'POCKET', 'PROJECT_TEAM', '${userIds.manager}', '${userIds.manager}');
 `);
 
-assert(await scalar("select count(*)::int as count from pg_tables where schemaname = 'public'") === 22, "table count mismatch");
-assert(await scalar("select count(*)::int as count from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relrowsecurity") === 22, "RLS coverage mismatch");
+assert(await scalar("select count(*)::int as count from pg_tables where schemaname = 'public'") === 23, "table count mismatch");
+assert(await scalar("select count(*)::int as count from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relrowsecurity") === 23, "RLS coverage mismatch");
 assert(await scalar("select count(*)::int as count from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='email'") === 0, "public profile still exposes email");
 assert(await scalar("select count(*)::int as count from information_schema.role_table_grants where grantee='anon' and table_schema='public'") === 0, "anon grants found");
 assert(await scalar("select count(*)::int as count from information_schema.routine_privileges where grantee='PUBLIC' and specific_schema in ('public','private')") === 0, "PUBLIC function execute grants found");
@@ -93,6 +93,9 @@ assert(clientTask.title === "고객 공개 업무", "client received the wrong t
 assert(clientTask.responsible_org_code === "POCKET", "client can infer the executor organization");
 assert(!("plan_note" in clientTask) && !("blocker_reason" in clientTask) && !("remarks" in clientTask), "client task payload leaked internal notes");
 assert(clientRead.response.members.length === 0, "client task payload leaked project members");
+const { rows: [clientWorkspace] } = await db.query("select public.read_task_workspace(1, false) as response");
+assert(Array.isArray(clientWorkspace.response?.issues) && clientWorkspace.response.issues.length === 0, "client issue workspace contract mismatch");
+assert(clientWorkspace.response.issueCanWrite === false, "client received issue write permission");
 await expectDenied("select before_data from public.activity_events", "raw audit payload");
 
 await db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
@@ -100,6 +103,46 @@ await expectDenied("select * from public.tasks", "NS raw task table");
 const { rows: [nsRead] } = await db.query("select public.read_tasks(1, false) as response");
 assert(nsRead.response?.items?.length === 2, "NS task access mismatch");
 assert(nsRead.response.members.length === 2, "NS project member projection mismatch");
+await expectDenied("select * from public.project_issues", "NS raw issue table");
+const { rows: [issueCreate] } = await db.query(`
+  select public.mutate_project_issue(
+    'mut_issue_create_0001', 'CREATE', 1, null, null,
+    jsonb_build_object(
+      'issue_date', '2026-09-03', 'kind_text', '추가업무',
+      'related_task_text', '검증 업무', 'body_text', '검증 요청',
+      'owner_text', 'NS', 'status_code', 'IN_PROGRESS',
+      'completion_url', 'https://example.com/result', 'remarks', 'QA'
+    )
+  ) as response
+`);
+assert(issueCreate.response?.ok === true, `valid issue RPC failed: ${JSON.stringify(issueCreate.response)}`);
+const issueId = issueCreate.response.data.item.issue_id;
+const issueVersion = issueCreate.response.data.item.row_version;
+const { rows: [nsWorkspace] } = await db.query("select public.read_task_workspace(1, false) as response");
+assert(nsWorkspace.response?.issues?.length === 1, "saved issue did not appear in task workspace");
+assert(nsWorkspace.response.issueCanWrite === true, "NS issue write permission missing");
+const { rows: [issueUpdate] } = await db.query(`
+  select public.mutate_project_issue(
+    'mut_issue_update_0001', 'UPDATE', 1, ${issueId}, ${issueVersion},
+    jsonb_build_object('status_code', 'DONE', 'remarks', '완료 검증')
+  ) as response
+`);
+assert(issueUpdate.response?.ok === true && issueUpdate.response.data.item.status_code === 'DONE', "issue optimistic update failed");
+const { rows: [issueInvalid] } = await db.query(`
+  select public.mutate_project_issue(
+    'mut_issue_invalid_001', 'UPDATE', 1, ${issueId}, ${issueVersion + 1},
+    jsonb_build_object('completion_url', 'javascript:alert(1)')
+  ) as response
+`);
+assert(issueInvalid.response?.ok === false && issueInvalid.response.error.code === 'invalid_input', "unsafe issue URL was accepted");
+const { rows: [issueArchive] } = await db.query(`
+  select public.mutate_project_issue(
+    'mut_issue_archive_001', 'ARCHIVE', 1, ${issueId}, ${issueVersion + 1}, '{}'::jsonb
+  ) as response
+`);
+assert(issueArchive.response?.ok === true && issueArchive.response.data.item.archived_at, "issue archive failed");
+const { rows: [workspaceAfterIssueArchive] } = await db.query("select public.read_task_workspace(1, false) as response");
+assert(workspaceAfterIssueArchive.response.issues.length === 0, "archived issue remained visible");
 const { rows: [createResult] } = await db.query(`
   select public.mutate_task(
     'mut_qa_create_0001', 'CREATE', 1, null, null,
@@ -169,8 +212,8 @@ await expectDenied(`update public.tasks set project_id=2 where id=${taskId}`, "c
 await db.exec("reset role");
 console.log(JSON.stringify({
   migrations: readdirSync(migrationsDir).filter((name) => name.endsWith('.sql')).length,
-  tables: 22,
-  rlsTables: 22,
+  tables: 23,
+  rlsTables: 23,
   pageBoundary: "pass",
   visibilityBoundary: "pass",
   tenantWriteBoundary: "pass",
@@ -182,5 +225,6 @@ console.log(JSON.stringify({
   clientInternalFields: "masked",
   clientExecutorProfiles: "blocked",
   unknownMutationFields: "rejected",
+  projectIssueLedger: "pass",
 }));
 await db.close();

@@ -21,14 +21,14 @@ test("task reader returns the current view-model envelope contract", async () =>
     rpc(name, args) {
       calls.push({ name, args });
       return Promise.resolve({
-        data: { items: [{ task_id: 31, title: "검증 업무" }], members: [], totalMatching: 1, truncated: false },
+        data: { items: [{ task_id: 31, title: "검증 업무" }], members: [], issues: [], issueCanWrite: true, totalMatching: 1, truncated: false },
         error: null,
       });
     },
   }, { now: () => "2026-09-03T03:00:00Z" });
 
   const result = await readTasks({ projectId: 17 });
-  assert.equal(calls[0].name, "read_tasks");
+  assert.equal(calls[0].name, "read_task_workspace");
   assert.equal(result.generatedAt, "2026-09-03T03:00:00Z");
   assert.equal(result.data.items[0].task_id, 31);
 });

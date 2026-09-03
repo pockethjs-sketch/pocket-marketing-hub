@@ -106,5 +106,6 @@ export function createSupabaseCoreDomainApi(client) {
     },
     mutateMeeting: (input) => mutate(client, "mutate_daily_meeting", mutationArgs(input, "p_meeting_id"), "회의록을 저장하지 못했습니다."),
     mutateKpi: (input) => mutate(client, "mutate_kpi_definition", mutationArgs(input, "p_kpi_id"), "KPI를 저장하지 못했습니다."),
+    mutateIssue: (input) => mutate(client, "mutate_project_issue", mutationArgs(input, "p_issue_id"), "이슈사항을 저장하지 못했습니다."),
   });
 }

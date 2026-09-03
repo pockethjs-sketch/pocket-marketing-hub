@@ -63,7 +63,7 @@
 
 `91_업무템플릿`에는 과거 UND 승인 계획 144개가 별도 보존되어 있고, 현재 `06_업무`의 UND 78개는 이 템플릿이 아니라 기준 캠페인 HTML의 9월 일정입니다. 두 원천을 자동 병합하지 않으며 `sync_und_task_structure`를 실행하면 현재 78건 외에 과거 승인 업무가 다시 추가될 수 있으므로 운영 중 실행하지 않습니다.
 
-캠페인 HTML 이관 행은 `source_code = CAMPAIGN_SCHEDULE_HTML`, `source_task_id = CAMPAIGN_SCHEDULE_V1_{캠페인}_{원본행ID}`로 식별합니다. 원본 매체는 `category_code`, 업무 분야는 내용 기준 `MKT / DSN / VID`, 담당은 `POCKET / NS`, 고객 공개 일정은 `visibility_code = CLIENT`로 저장합니다. 원본의 날짜 경과율은 실제 진행률이 아니므로 `progress_percent = 0`을 유지합니다. HTTPS 링크만 `completion_url`에 넣고 `디자인완료` 같은 비 URL 값은 `remarks`의 `완료링크 원문:`으로 보존합니다. 독립 이슈 1건은 동일한 무극 업무의 비고에 합쳐 정보 유실 없이 23개 일정 행 수를 유지합니다.
+캠페인 HTML 이관 행은 `source_code = CAMPAIGN_SCHEDULE_HTML`, `source_task_id = CAMPAIGN_SCHEDULE_V1_{캠페인}_{원본행ID}`로 식별합니다. 원본 매체는 `category_code`, 업무 분야는 내용 기준 `MKT / DSN / VID`, 담당은 `POCKET / NS`, 고객 공개 일정은 `visibility_code = CLIENT`로 저장합니다. 원본의 날짜 경과율은 실제 진행률이 아니므로 `progress_percent = 0`을 유지합니다. HTTPS 링크만 `completion_url`에 넣고 `디자인완료` 같은 비 URL 값은 `remarks`의 `완료링크 원문:`으로 보존합니다. 기준 파일의 예시 이슈 행은 운영 데이터로 이관하지 않으며, 새 이슈·추가요청은 업무 비고가 아닌 Supabase `project_issues`에 독립 저장합니다.
 
 팀 트래커 전용 필드는 다음과 같습니다.
 
@@ -92,6 +92,26 @@ UND 운영 업무는 P0/M1/M2/M3 단계와 `plan_week`를 기준으로 `planned_
 간트는 참고 HTML의 전체 계층과 스타일 코드(`toolbar`, `panel-head`, `g-hint`, `scroll`, `g-hrow`, `g-months`, `g-days`, `g-grow`, `g-row`, `g-track`, `g-c`, `g-legend`)를 기준으로 사용합니다. 왼쪽 280px 업무명 열과 상단 월·일 머리글을 고정하고, 날짜 셀은 28px, 업무 행은 32px로 표시합니다. 빈 셀에서 드래그를 시작하면 가로 날짜 × 세로 업무 범위를 추가하고, 이미 채워진 셀에서 시작하면 같은 범위를 삭제합니다. 중간 날짜만 삭제해도 구멍을 보존하며 드래그 종료 시 변경된 업무를 기존 UPDATE API로 순차 저장합니다. 업무명 클릭은 기존 수정 모달을 열고, 읽기 전용 고객 계정에는 페인팅을 허용하지 않습니다. 저장된 `schedule_dates_json`, 파생 경계일과 사용자·변경 시각은 `06_업무`와 `15_활동로그`에 함께 반영합니다. 드래그의 행 번호와 저장 대상 배열은 분야별로 묶여 실제 렌더링된 간트 행 순서를 단일 기준으로 사용하며, 날짜순 원본 배열과 화면 순서가 달라져 다른 업무까지 함께 변경되는 것을 허용하지 않습니다. 기준 HTML에 없던 프로젝트별 필터와 생성·수정 컨트롤은 데이터 운영 기능으로만 유지하고 간트 프레임의 치수·색상·간격을 덮어쓰지 않습니다.
 
 일정표 헤더의 `업무 추가`는 업무 목록의 생성 폼과 동일한 CREATE API를 사용합니다. 생성 UI 위치만 일정표 안으로 옮기며 신규 업무의 저장 구조와 권한 검사는 변경하지 않습니다.
+
+## 프로젝트 이슈·추가요청
+
+`project_issues`는 일정표 하단의 이슈·추가요청 한 행을 프로젝트별로 저장합니다.
+
+| 필드 | 의미 |
+|---|---|
+| `issue_date` | 사용자가 지정한 등록일 |
+| `kind_text` | 이슈·추가업무 등 자유 구분 |
+| `related_task_text` | 관련 업무 표시명. 업무 FK가 아니라 원문을 보존하는 자유 입력 |
+| `body_text` | 요청·이슈 본문 |
+| `owner_text` | 담당자·담당 조직 자유 입력 |
+| `status_code` | `NOT_STARTED / IN_PROGRESS / DONE / ON_HOLD` |
+| `completion_url` | 비어 있거나 HTTP(S) 완료 링크 |
+| `remarks` | 비고 |
+| `visibility_code` | 기본 `CLIENT`; 고객은 읽기만 가능 |
+| `created_by_user_id`, `updated_by_user_id` | 생성·마지막 수정 사용자 |
+| `row_version`, `archived_at`, `last_mutation_id` | 동시 수정·보관·중복 요청 제어 |
+
+화면의 삭제는 행을 물리 삭제하지 않고 `archived_at`을 기록합니다. 업무 목록과 이슈 목록은 `read_task_workspace` 한 응답으로 읽되 서로 다른 원장을 유지합니다.
 
 ## 프로젝트 공통 화면 원칙
 

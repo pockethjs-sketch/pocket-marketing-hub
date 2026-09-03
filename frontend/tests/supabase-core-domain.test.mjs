@@ -29,20 +29,25 @@ test("Supabase bootstrap, 회의록, KPI는 화면별 RPC 계약을 사용한다
   assert.equal(client.calls[1].args.p_limit, 200);
   assert.equal(client.calls[2].args.p_start_date, "2026-09-01");
 });
-test("회의록과 KPI 저장은 mutation id, row version, 프로젝트를 RPC에 고정한다", async () => {
+test("회의록, KPI, 이슈 저장은 mutation id, row version, 프로젝트를 RPC에 고정한다", async () => {
   const client = clientReturning({
     mutate_daily_meeting: { data: { ok: true, data: { item: { meeting_id: 3 } } }, error: null },
     mutate_kpi_definition: { data: { ok: true, data: { item: { kpi_id: 4 } } }, error: null },
+    mutate_project_issue: { data: { ok: true, data: { item: { issue_id: 5 } } }, error: null },
   });
   const api = createSupabaseCoreDomainApi(client);
   await api.mutateMeeting({ projectId: "9", mutationId: "meeting_12345678", mutation: { entityType: "daily_meeting", operation: "CREATE", fields: { title: "회의" } } });
   await api.mutateKpi({ projectId: "9", mutationId: "kpi_12345678", expectedRowVersion: 7, mutation: { entityType: "kpi_definition", operation: "UPDATE", id: 4, fields: { target_value: 10 } } });
+  await api.mutateIssue({ projectId: "9", mutationId: "issue_12345678", expectedRowVersion: 2, mutation: { entityType: "project_issue", operation: "UPDATE", id: 5, fields: { status_code: "DONE" } } });
   assert.deepEqual(client.calls[0].args, {
     p_mutation_id: "meeting_12345678", p_operation: "CREATE", p_project_id: "9",
     p_meeting_id: null, p_expected_row_version: null, p_fields: { title: "회의" },
   });
   assert.equal(client.calls[1].args.p_kpi_id, "4");
   assert.equal(client.calls[1].args.p_expected_row_version, "7");
+  assert.equal(client.calls[2].name, "mutate_project_issue");
+  assert.equal(client.calls[2].args.p_issue_id, "5");
+  assert.equal(client.calls[2].args.p_expected_row_version, "2");
 });
 
 test("도메인 RPC의 애플리케이션 오류는 저장 성공으로 처리하지 않는다", async () => {

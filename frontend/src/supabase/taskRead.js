@@ -42,13 +42,13 @@ export function createSupabaseTaskReader(client, options = {}) {
   const now = options.now || (() => new Date().toISOString());
 
   return async function readTasks(params = {}) {
-    let request = client.rpc("read_tasks", taskReadRpcArguments(params));
+    let request = client.rpc("read_task_workspace", taskReadRpcArguments(params));
     if (params.signal && typeof request?.abortSignal === "function") {
       request = request.abortSignal(params.signal);
     }
     const { data, error } = await request;
     if (error) throw readError(error);
-    if (!data || !Array.isArray(data.items) || !Array.isArray(data.members)) {
+    if (!data || !Array.isArray(data.items) || !Array.isArray(data.members) || !Array.isArray(data.issues)) {
       throw new HubApiError("Supabase 업무 응답 계약이 올바르지 않습니다.", {
         code: "invalid_contract",
         action: "read_tasks",

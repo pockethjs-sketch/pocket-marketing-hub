@@ -74,6 +74,18 @@ test("일정표는 참고 HTML 열 구조를 유지하며 셀 직접 수정과 �
   assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*min-width:\s*1450px/);
 });
 
+test("일정표 아래 이슈사항·추가요청 원장은 기준 HTML의 열과 직접 저장 동작을 유지한다", () => {
+  assert.match(appSource, /function ProjectIssuePanel/);
+  assert.match(appSource, /이슈사항 · 추가요청 기록/);
+  assert.match(appSource, /<th>No<\/th><th>등록일<\/th><th>구분<\/th><th>관련 업무<\/th><th>내용<\/th><th>담당자<\/th><th>상태<\/th><th>완료링크<\/th><th>비고<\/th>/);
+  assert.match(appSource, /issueStatusOrder = \["NOT_STARTED", "IN_PROGRESS", "DONE", "ON_HOLD"\]/);
+  assert.match(appSource, /deleteArmed \? "삭제\?" : "×"/);
+  assert.match(appSource, /onBlur=\{\(event\) => void commitField\("body_text"/);
+  assert.match(appSource, /entityType: "project_issue", operation: "CREATE"/);
+  assert.match(appSource, /entityType: "project_issue",[\s\S]*operation: "ARCHIVE"/);
+  assert.match(styleSource, /#issueTable[\s\S]*min-width:\s*1080px/);
+});
+
 test("업무 로그에서도 일정표·간트·업무 로그 탭을 유지하고 양방향으로 전환한다", () => {
   assert.match(appSource, /<TaskWorkspaceTabs activeView=\{displayMode\}/);
   assert.match(appSource, /nextView === "gantt" \|\| nextView === "activity"/);

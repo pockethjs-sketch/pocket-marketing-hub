@@ -441,6 +441,8 @@ export function tasksViewModel(envelope) {
       roleCode: String(row.role_code || "").toUpperCase(),
       permissionCode: String(row.permission_code || "").toUpperCase(),
     })).filter((member) => member.userId),
+    issues: (data.issues || []).map(projectIssueViewModel),
+    issueCanWrite: data.issueCanWrite === true,
     total: Number(data.totalMatching || 0),
     nextCursor: data.nextCursor || null,
     project: data.project ? {
@@ -453,6 +455,24 @@ export function tasksViewModel(envelope) {
     } : null,
     publishing: publishingViewModel(data.publishing || data.publicationSummary || {}),
     generatedAt: envelope?.generatedAt || null,
+  };
+}
+
+export function projectIssueViewModel(row = {}) {
+  return {
+    id: row.issue_id,
+    date: row.issue_date ? String(row.issue_date).slice(0, 10) : null,
+    kind: row.kind_text || "",
+    relatedTask: row.related_task_text || "",
+    body: row.body_text || "",
+    owner: row.owner_text || "",
+    statusCode: String(row.status_code || "IN_PROGRESS").toUpperCase(),
+    completionUrl: row.completion_url || "",
+    remarks: row.remarks || "",
+    visibilityCode: String(row.visibility_code || "CLIENT").toUpperCase(),
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+    rowVersion: Number(row.row_version || 0),
   };
 }
 

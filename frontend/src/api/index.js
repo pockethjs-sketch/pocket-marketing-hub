@@ -15,6 +15,7 @@ export {
   planViewModel,
   performanceTrackingViewModel,
   performanceViewModel,
+  projectIssueViewModel,
   taskResponsibleOrganization,
   tasksViewModel,
   workspaceViewModel,
