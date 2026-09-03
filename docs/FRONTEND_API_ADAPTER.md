@@ -1,8 +1,8 @@
-# 프런트엔드 Google Sheets API 어댑터
+# 프런트엔드 단계적 데이터 어댑터
 
 ## 구현 상태
 
-`frontend/src/api/`의 API 계층을 `App.jsx`에 연결했습니다. 운영 빌드는 Apps Script를 통해 Google Sheets 원장을 읽고 쓰며, API 주소가 없거나 요청이 실패하면 임시 데이터로 대체하지 않고 명시적인 오류를 표시합니다.
+`frontend/src/api/`와 `frontend/src/supabase/`의 API 계층을 `App.jsx`에 연결했습니다. 운영 빌드는 인증·업무·회의록·KPI·권한·실행계획을 Supabase에서 처리하고, 아직 이관하지 않은 화면만 Apps Script를 통해 Google Sheets를 사용합니다. 연결이 실패해도 임시 데이터로 대체하지 않고 명시적인 오류를 표시합니다.
 
 어댑터가 지원하는 화면 단위는 다음과 같습니다.
 
@@ -12,7 +12,7 @@
 | `previewOverview` | `preview_overview` | 공개 첫 총괄을 bootstrap과 병렬 조회 |
 | `bootstrap` | `bootstrap` | 인증 사용자의 고객사·프로젝트·채널 탐색 정보 |
 | `overview` | `project_overview` | 선택 프로젝트 총괄 현황 |
-| `plan` | `project_plan` | `planType=CLIENT_SHARE|INTERNAL` 계획; 내부 계획은 프로젝트팀 이상만 허용 |
+| `plan` | Supabase `plans` + `plan_sections` | `planType=CLIENT_SHARE|INTERNAL` 계획; RLS가 내부 계획과 섹션 가시성을 제한 |
 | `tasks` | `tasks` | 업무 목록 |
 | `contents` | `contents` | 콘텐츠 목록 |
 | `tracking` *(숨김)* | `performance_tracking` | 실행·발행·퍼널·채널 기여 성과 추적 |
