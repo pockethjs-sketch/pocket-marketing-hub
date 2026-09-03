@@ -4,14 +4,13 @@ import test from "node:test";
 import { getNavigationPresentation } from "../src/navigationState.js";
 import { parseViewLocation, viewLocationHash, viewResourceKey } from "../src/planNavigation.js";
 
-test("데스크톱에서는 고객사와 프로젝트 메뉴를 접기 버튼 없이 항상 표시한다", () => {
+test("데스크톱에서는 왼쪽 프로젝트 메뉴만 접기 버튼 없이 항상 표시한다", () => {
   const initial = getNavigationPresentation({ role: "pocket", desktopLevel: 0 });
   assert.equal(initial.usesDrawer, false);
   assert.equal(initial.controlVisible, false);
-  assert.equal(initial.clientRailVisible, true);
   assert.equal(initial.projectSidebarVisible, true);
-  assert.equal(initial.clientRailCollapsed, false);
   assert.equal(initial.projectSidebarCollapsed, false);
+  assert.equal(initial.controlledIds, "project-navigation");
 });
 
 test("작은 화면에서는 포켓·NS 계정도 임시 탐색 서랍을 사용한다", () => {
@@ -19,8 +18,8 @@ test("작은 화면에서는 포켓·NS 계정도 임시 탐색 서랍을 사용
 
   assert.equal(navigation.usesDrawer, true);
   assert.equal(navigation.isDrawerOpen, true);
-  assert.equal(navigation.clientRailVisible, true);
   assert.equal(navigation.projectSidebarVisible, true);
+  assert.equal(navigation.controlledIds, "project-navigation");
 });
 
 test("실행계획 하위 화면은 URL과 캐시 키에서 서로 분리된다", () => {

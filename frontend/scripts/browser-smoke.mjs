@@ -178,23 +178,12 @@ try {
   await delay(100);
   assert(countApiAction(client.events, "project_snapshot") === 0, "Project workspace snapshot must not block the first screen");
   await capture(client, "01-main-only.png");
-  const clientLabels = await evaluate(client, "Array.from(document.querySelectorAll('.client-button')).map((button) => button.textContent.trim())");
-  assert(clientLabels.length > 0 && clientLabels.every((label) => label.length >= 2), "Client rail must show full client names");
-
-  assert(await evaluate(client, "Boolean(document.querySelector('.navigation-toggle'))") === true, "Main navigation reveal did not render");
-  assert(await evaluate(client, "document.querySelectorAll('.navigation-toggle, .client-list-toggle, .project-sidebar-toggle').length") === 1, "Desktop navigation must expose exactly one toggle");
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") === "none", "Project menu must start collapsed");
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "All-project rail must start collapsed");
-  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
-  await delay(100);
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") !== "none", "First reveal did not open the current project menu");
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "First reveal opened the all-project rail too early");
-  assert(await evaluate(client, "document.querySelector('.navigation-toggle').getAttribute('aria-label')") === "전체 프로젝트 열기", "Single navigation toggle did not expose the next-stage action");
-  await capture(client, "02-project-menu.png");
-  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
-  await delay(100);
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") !== "none", "Second reveal did not open the all-project rail");
-  await capture(client, "03-all-projects.png");
+  const clientLabels = await evaluate(client, "Array.from(document.querySelectorAll('.topbar-company-tabs button')).map((button) => button.textContent.trim())");
+  assert(clientLabels.length > 0 && clientLabels.every((label) => label.length >= 2), "Top bar must show full company names");
+  assert(await evaluate(client, "document.querySelector('.client-rail') === null") === true, "Removed company rail returned");
+  assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") !== "none", "Desktop page menu must stay visible");
+  assert(await evaluate(client, "document.querySelectorAll('.navigation-toggle').length") === 0, "Desktop must not show a drawer toggle");
+  await capture(client, "02-company-tabs-and-menu.png");
 
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('실행계획')).click()")
   assert(await waitFor(client, "document.querySelectorAll('.plan-section-nav button').length === 10 && document.querySelector('.plan-document-body')?.innerText.trim().length > 0", readyTimeout), "Client execution plan did not render");
@@ -243,15 +232,6 @@ try {
   assert(await evaluate(client, "document.querySelector('.role-trigger') === null") === true, "Demo role switcher must not render");
   assert(await evaluate(client, "document.querySelector('.brand-mark') === null") === true, "Removed Pocket P logo returned");
   assert(await evaluate(client, "document.querySelector('.sidebar-footer .icon-button') === null") === true, "Removed sidebar footer icon returned");
-  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
-  await delay(100);
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.project-sidebar')).display") === "none", "Single navigation toggle did not return to the main-only screen");
-  assert(await evaluate(client, "getComputedStyle(document.querySelector('.client-rail')).display") === "none", "Single navigation toggle left the all-project rail visible");
-  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
-  await delay(100);
-  await evaluate(client, "document.querySelector('.navigation-toggle').click()");
-  await delay(100);
-
   await evaluate(client, "Array.from(document.querySelectorAll('.project-nav button')).find((button) => button.textContent.includes('콘텐츠')).click()")
   assert(await waitFor(client, "Boolean(document.querySelector('.content-summary')) && !document.querySelector('.state-panel.is-loading')", readyTimeout), "Content view did not render");
 
@@ -272,9 +252,9 @@ try {
   assert(countApiAction(client.events, "project_snapshot") === 0, "Tab navigation issued an obsolete workspace snapshot request");
 
   if (clientLabels.length > 1) {
-    await evaluate(client, "document.querySelectorAll('.client-button')[1].click()")
+    await evaluate(client, "document.querySelectorAll('.topbar-company-tabs button')[1].click()")
     await delay(100);
-    assert((await evaluate(client, "document.querySelector('.sidebar-header h1').textContent")).length > 0, "Client switching failed");
+    assert(await evaluate(client, "document.querySelector('.topbar-company-tabs button[aria-current=true]')?.textContent.trim() === document.querySelectorAll('.topbar-company-tabs button')[1]?.textContent.trim()"), "Company switching failed");
   }
 
   await client.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });

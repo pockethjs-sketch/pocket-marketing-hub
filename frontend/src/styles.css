@@ -4818,6 +4818,211 @@ table tbody tr:hover {
   }
 }
 
+/* Company selection lives in the global header; the left rail is navigation only. */
+.app-shell {
+  grid-template-columns: 224px minmax(0, 1fr);
+}
+
+.project-sidebar {
+  grid-column: 1;
+}
+
+.app-main {
+  grid-column: 2;
+}
+
+.sidebar-menu-header {
+  display: flex;
+  min-height: 64px;
+  flex: 0 0 64px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid #e0e5ec;
+}
+
+.sidebar-menu-header strong {
+  color: #17233b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.project-sidebar .project-nav {
+  flex: 1;
+  padding: 14px 10px 24px;
+}
+
+.project-sidebar .project-nav::after {
+  display: none;
+}
+
+.topbar {
+  gap: 16px;
+  padding-inline: 20px;
+}
+
+.topbar-leading {
+  min-width: 0;
+  flex: 1;
+  gap: 14px;
+}
+
+.topbar-company-switcher {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-company-switcher > span {
+  flex: 0 0 auto;
+  color: #7b879b;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.topbar-company-tabs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.topbar-company-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.topbar .topbar-company-tabs button {
+  display: inline-flex;
+  min-width: max-content;
+  height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #dce2ea;
+  border-radius: 9px;
+  background: #fff;
+  color: #657188;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.topbar .topbar-company-tabs button:hover {
+  border-color: #aebddd;
+  background: #f5f7fc;
+  color: #172f68;
+  box-shadow: none;
+}
+
+.topbar .topbar-company-tabs button.is-active {
+  border-color: #172f68;
+  background: #172f68;
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(23, 47, 104, 0.18);
+}
+
+.topbar-company-tabs .presence {
+  position: static;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  background: #c5ceda;
+  box-shadow: none;
+}
+
+.topbar-company-tabs .presence.active {
+  background: #24b47e;
+}
+
+.topbar-company-tabs button.is-active .presence {
+  background: #f2b94b;
+  box-shadow: 0 0 0 3px rgba(242, 185, 75, .13);
+}
+
+.topbar-project-name {
+  overflow: hidden;
+  max-width: 220px;
+  padding-left: 14px;
+  border-left: 1px solid #e1e6ed;
+  color: #36435a;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 901px) {
+  .app-shell,
+  .app-shell.is-navigation-collapsed:not(.is-navigation-drawer-open),
+  .app-shell.is-client-rail-collapsed:not(.is-navigation-drawer-open),
+  .app-shell.is-project-sidebar-collapsed:not(.is-navigation-drawer-open) {
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+
+  .app-shell:not(.is-navigation-drawer-open) > .project-sidebar {
+    display: flex;
+    grid-column: 1;
+  }
+
+  .app-shell:not(.is-navigation-drawer-open) > .app-main,
+  .app-shell.is-navigation-collapsed > .app-main {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 1180px) {
+  .topbar-project-name {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell,
+  .app-shell.is-navigation-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell > .app-main,
+  .app-shell.is-navigation-collapsed > .app-main {
+    grid-column: 1;
+  }
+
+  .app-shell:not(.is-navigation-drawer-open) > .project-sidebar {
+    display: none;
+  }
+
+  .app-shell.is-navigation-drawer-open > .project-sidebar {
+    inset: 0 auto 0 0;
+    width: min(248px, calc(100vw - 42px));
+  }
+
+  .topbar {
+    padding-inline: 12px;
+  }
+
+  .topbar-company-switcher > span {
+    display: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .topbar-leading {
+    gap: 8px;
+  }
+
+  .topbar .topbar-company-tabs button {
+    height: 32px;
+    padding-inline: 9px;
+    font-size: 11px;
+  }
+}
+
 /* The reference campaign HTML keeps issues as a second compact ledger below
    the schedule. Preserve that information hierarchy while using the hub skin. */
 .project-issue-panel {
@@ -10032,5 +10237,46 @@ table tbody tr:hover {
   .campaign-schedule-surface .reference-task-table tbody td:nth-child(2) {
     position: static;
     box-shadow: none;
+  }
+}
+
+/* Final shell contract: company switching is global, the left side is menu-only. */
+@media (min-width: 901px) {
+  .app-shell,
+  .app-shell.is-navigation-collapsed:not(.is-navigation-drawer-open),
+  .app-shell.is-client-rail-collapsed:not(.is-navigation-drawer-open),
+  .app-shell.is-project-sidebar-collapsed:not(.is-navigation-drawer-open) {
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+
+  .app-shell:not(.is-navigation-drawer-open) > .project-sidebar {
+    display: flex;
+    grid-column: 1;
+  }
+
+  .app-shell:not(.is-navigation-drawer-open) > .app-main,
+  .app-shell.is-navigation-collapsed > .app-main {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell,
+  .app-shell.is-navigation-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell > .app-main,
+  .app-shell.is-navigation-collapsed > .app-main {
+    grid-column: 1;
+  }
+
+  .app-shell:not(.is-navigation-drawer-open) > .project-sidebar {
+    display: none;
+  }
+
+  .app-shell.is-navigation-drawer-open > .project-sidebar {
+    inset: 0 auto 0 0;
+    width: min(248px, calc(100vw - 42px));
   }
 }

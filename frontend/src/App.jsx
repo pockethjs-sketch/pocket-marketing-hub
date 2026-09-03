@@ -200,15 +200,7 @@ function LoginScreen({ onLogin, error, loading, configured }) {
   );
 }
 
-function ClientRail({ clients, activeClient, onSelect, visible }) {
-  return (
-    <aside id="client-navigation" className="client-rail" aria-label="고객사 선택" aria-hidden={!visible}>
-      <div className="rail-top">{clients.map((client) => <button key={client.id} className={`client-button ${activeClient === client.id ? "is-active" : ""}`} onClick={() => onSelect(client.id)} title={`${client.name} · ${client.descriptor}`}><span className="client-name">{client.name}</span><i className={`presence ${client.status}`} /></button>)}</div>
-    </aside>
-  );
-}
-
-function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, open, onClose, taskCount, sourceState, connectionReady, visible }) {
+function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, open, onClose, taskCount, visible }) {
   const [planExpanded, setPlanExpanded] = useState(activeView === "plan");
 
   useEffect(() => {
@@ -224,9 +216,8 @@ function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, 
 
   return (
     <aside id="project-navigation" className={`project-sidebar ${open ? "is-open" : ""}`} aria-label="프로젝트 탐색" aria-hidden={!visible}>
-      <div className="sidebar-header"><div><p className="eyebrow">{project.clientName}</p><h1>{project.name}</h1></div><div className="sidebar-header-actions"><button className="icon-button mobile-close" onClick={onClose} aria-label="메뉴 닫기"><X size={17} /></button></div></div>
-      <div className="project-switcher"><div><span className="project-dot" /><strong>{project.status}</strong></div><ChevronDown size={15} /></div>
-      <nav className="project-nav"><p className="nav-label">프로젝트</p>{visibleNavItems.map((item) => {
+      <div className="sidebar-menu-header"><strong>메뉴</strong><button className="icon-button mobile-close" onClick={onClose} aria-label="메뉴 닫기"><X size={17} /></button></div>
+      <nav className="project-nav">{visibleNavItems.map((item) => {
         const Icon = item.icon;
         if (item.id !== "plan") return <button key={item.id} className={`${activeView === item.id || (item.id === "tasks" && activeView === "schedule") ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} onClick={() => { onView(item.id); onClose(); }}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === "tasks" && taskCount > 0 && <em>{taskCount}</em>}</button>;
         return <div key={item.id} className={`project-nav-tree ${planExpanded ? "is-expanded" : ""}`}>
@@ -243,8 +234,6 @@ function ProjectSidebar({ project, role, activeView, activePlanVariant, onView, 
           </div>}
         </div>;
       })}</nav>
-      <div className="sidebar-section"><p className="nav-label">현재 단계</p><div className="phase-brief"><div className="phase-number">{project.phase?.slice(0, 2) || "-"}</div><div><strong>{project.phase}</strong><span>{project.period}</span></div></div></div>
-      <div className="sidebar-footer"><div><strong>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</strong><span>{formatSyncTime(sourceState.lastSuccessfulAt)}</span></div></div>
     </aside>
   );
 }
@@ -348,8 +337,8 @@ function TaskNotificationCenter({ projectId, tasks, loaded, onSelect }) {
   </div>;
 }
 
-function Topbar({ project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation, notificationTasks, notificationsLoaded, onNotificationSelect }) {
-  return <header className="topbar"><div className="topbar-leading">{navigation.usesDrawer && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.isDrawerOpen} aria-controls={navigation.controlledIds}><Menu size={18} strokeWidth={2} /></button>}<div className="breadcrumb"><span>{project.clientName}</span><ArrowRight size={13} /><strong>{project.name}</strong></div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무 검색" /></label><TaskNotificationCenter projectId={project.id} tasks={notificationTasks} loaded={notificationsLoaded} onSelect={onNotificationSelect} /><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
+function Topbar({ clients, activeClient, onSelectClient, project, actor, onLogout, live, search, setSearch, navigation, onToggleNavigation, notificationTasks, notificationsLoaded, onNotificationSelect }) {
+  return <header className="topbar"><div className="topbar-leading">{navigation.usesDrawer && <button className="navigation-toggle" type="button" onClick={onToggleNavigation} aria-label={navigation.actionLabel} title={navigation.actionLabel} aria-expanded={navigation.isDrawerOpen} aria-controls={navigation.controlledIds}><Menu size={18} strokeWidth={2} /></button>}<div className="topbar-company-switcher"><span>프로젝트 회사</span><nav className="topbar-company-tabs" aria-label="프로젝트 회사 선택">{clients.map((client) => <button key={client.id} type="button" className={client.id === activeClient ? "is-active" : ""} aria-current={client.id === activeClient ? "true" : undefined} onClick={() => onSelectClient(client.id)}><i className={`presence ${client.status}`} />{client.name}</button>)}</nav></div><div className="topbar-project-name" title={project.name}>{project.name}</div></div><div className="topbar-actions"><label className="global-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="업무 검색" /></label><TaskNotificationCenter projectId={project.id} tasks={notificationTasks} loaded={notificationsLoaded} onSelect={onNotificationSelect} /><ActorBadge actor={actor} onLogout={onLogout} live={live} /></div></header>;
 }
 
 function CampaignWorkspaceHeader({ clients, activeClient, onSelectClient, project, role, activeView, activePlanVariant, onView, actor, onLogout, live, search, setSearch, connectionReady, sourceState }) {
@@ -2769,10 +2758,9 @@ export function App() {
 
   return (
     <div className={`app-shell ${navigation.isDrawerOpen ? "is-navigation-drawer-open" : ""} ${role === "client" ? "is-client-view" : ""} ${sheetSaveLock.visible ? "is-sheet-saving" : ""}`} aria-busy={sheetSaveLock.visible}>
-      <ClientRail clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelect={selectClient} visible={navigation.clientRailVisible} />
-      <ProjectSidebar project={project} role={role} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} sourceState={sourceState} connectionReady={connectionReady} visible={navigation.projectSidebarVisible} />
+      <ProjectSidebar project={project} role={role} activeView={view} activePlanVariant={authorizedPlanVariant} onView={navigateToView} open={navigation.isDrawerOpen} onClose={() => setSidebarOpen(false)} taskCount={taskCount} visible={navigation.projectSidebarVisible} />
       {navigation.isDrawerOpen && <button className="mobile-overlay" type="button" onClick={() => setSidebarOpen(false)} aria-label="메뉴 닫기" />}
-      <div className="app-main"><Topbar project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} notificationTasks={notificationTasks} notificationsLoaded={notificationsLoaded} onNotificationSelect={openNotificationTask} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={refreshCurrentPage} onCreate={setCreateEntity} onTaskUpdate={updateTask} onTaskBatchUpdate={updateTasksBatch} onProjectUpdate={updateProjectStartDate} onIssueCreate={createProjectIssue} onIssueUpdate={updateProjectIssue} onIssueArchive={archiveProjectIssue} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
+      <div className="app-main"><Topbar clients={bootstrapState.data.clients} activeClient={selectedClient.id} onSelectClient={selectClient} project={project} actor={actor} onLogout={logout} live={live && source.config.loginEnabled} search={search} setSearch={setSearch} navigation={navigation} onToggleNavigation={toggleNavigation} notificationTasks={notificationTasks} notificationsLoaded={notificationsLoaded} onNotificationSelect={openNotificationTask} /><main className="content-canvas"><AppContent view={view} planVariant={authorizedPlanVariant} project={project} role={role} search={search} setView={navigateToView} pageState={currentPage} taskActivityState={taskActivityState} onLoadTaskActivity={loadTaskActivity} onRetry={refreshCurrentPage} onCreate={setCreateEntity} onTaskUpdate={updateTask} onTaskBatchUpdate={updateTasksBatch} onProjectUpdate={updateProjectStartDate} onIssueCreate={createProjectIssue} onIssueUpdate={updateProjectIssue} onIssueArchive={archiveProjectIssue} onDailyMeetingSave={saveDailyMeeting} onKpiSave={saveKpiDefinition} onKpiArchive={archiveKpiDefinition} onAccessSave={saveAccessAccount} canWrite={(view === "tasks" || view === "schedule" || view === "daily") ? canWriteTasks : canWrite} /></main><footer className="app-footer"><span>{connectionReady ? "데이터 연결됨" : "연결 확인 중"}</span><span>마지막 동기화 {formatSyncTime(sourceState.lastSuccessfulAt)}</span></footer></div>
       {createEntity && <CreateRecordModal entityType={createEntity} role={role} clientName={project.clientName} onClose={() => setCreateEntity(null)} onSubmit={createRecord} />}
       {saveNotice && <div className="save-toast" role="status"><Check size={16} />{saveNotice}</div>}
       {sheetSaveLock.visible && <GlobalSaveOverlay label={sheetSaveLock.label} />}

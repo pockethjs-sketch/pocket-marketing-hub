@@ -141,11 +141,16 @@ test("업무표는 고정 헤더와 고정 업무명 열을 제공한다", () =>
   assert.match(styleSource, /\.task-schedule-matrix thead tr:first-child > th:first-child,[\s\S]*position:\s*sticky/);
 });
 
-test("고객사와 프로젝트 메뉴는 데스크톱 왼쪽에 항상 나열한다", () => {
-  assert.match(appSource, /<ClientRail clients=\{bootstrapState\.data\.clients\}/);
+test("프로젝트 회사는 상단에서 선택하고 왼쪽에는 화면 메뉴만 나열한다", () => {
+  assert.doesNotMatch(appSource, /function ClientRail/);
+  assert.match(appSource, /className="topbar-company-tabs" aria-label="프로젝트 회사 선택"/);
+  assert.match(appSource, /clients=\{bootstrapState\.data\.clients\} activeClient=\{selectedClient\.id\} onSelectClient=\{selectClient\}/);
   assert.match(appSource, /<ProjectSidebar project=\{project\}/);
+  assert.doesNotMatch(appSource, /className="project-switcher"/);
+  assert.doesNotMatch(appSource, /className="phase-brief"/);
   assert.match(appSource, /navigation\.usesDrawer && <button className="navigation-toggle"/);
   assert.doesNotMatch(appSource, /setDesktopNavigationLevel/);
+  assert.match(styleSource, /\.app-shell[\s\S]*grid-template-columns:\s*224px minmax\(0, 1fr\)/);
 });
 
 test("왼쪽 프로젝트 메뉴는 기존 화면과 실행계획 하위 화면을 연결한다", () => {

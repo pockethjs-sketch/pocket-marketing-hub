@@ -53,6 +53,7 @@ for (const file of readdirSync(migrationsDir).filter((name) => name.endsWith(".s
 }
 
 await db.exec(`
+  truncate table public.clients restart identity cascade;
   insert into auth.users(id) values
     ('${userIds.manager}'), ('${userIds.ns}'), ('${userIds.client}');
   insert into public.clients(slug, display_name) values ('und', 'UND'), ('muguk', '무극');

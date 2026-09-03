@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -10,33 +10,6 @@ const profileDir = await mkdtemp(path.join(tmpdir(), "pocket-task-nav-"));
 const timeoutMs = Number(process.env.SMOKE_READY_TIMEOUT || 30000);
 const expectActivity = process.env.SMOKE_EXPECT_ACTIVITY !== "false";
 const expectedTasksMin = Number(process.env.SMOKE_EXPECT_TASKS_MIN || 0);
-
-async function smokeSession() {
-  const account = process.env.SMOKE_ACCOUNT || "";
-  const accessCode = process.env.SMOKE_ACCESS_CODE || "";
-  if (!account || !accessCode) return null;
-  const envText = await readFile(new URL("../.env.production.local", import.meta.url), "utf8");
-  const endpoint = process.env.SMOKE_API_URL || envText.match(/^VITE_POCKET_API_URL=(.+)$/m)?.[1]?.trim();
-  assert(endpoint, "Smoke API endpoint is required");
-  const url = new URL(endpoint);
-  url.searchParams.set("_mh", `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
-  const response = await fetch(url, {
-    method: "POST",
-    redirect: "follow",
-    cache: "no-store",
-    headers: { "Content-Type": "text/plain;charset=UTF-8" },
-    body: JSON.stringify({ action: "login", account, accessCode, includeBootstrap: false }),
-  });
-  const payload = JSON.parse(await response.text());
-  if (!response.ok || !payload?.ok) throw new Error(`Smoke login failed: ${payload?.error?.code || response.status}`);
-  const session = payload.data?.session || payload.data;
-  assert(session?.token && Number(session.expiresIn) > 0, "Smoke login did not return a valid session");
-  return {
-    token: String(session.token),
-    expiresAt: Date.now() + Number(session.expiresIn) * 1000,
-    user: session.user || null,
-  };
-}
 
 const chrome = spawn(chromePath, [
   "--headless=new",
@@ -121,7 +94,6 @@ const clickTab = (label) => `(() => {
 })()`;
 
 try {
-  const session = await smokeSession();
   await waitForDebugger();
   const response = await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(baseUrl)}`, { method: "PUT" });
   const target = await response.json();
@@ -133,10 +105,7 @@ try {
 
   await waitFor(client, "Boolean(document.querySelector('.login-shell, .campaign-schedule-board, .state-panel'))", 5000);
 
-  if (session && await evaluate(client, "Boolean(document.querySelector('.login-shell'))")) {
-    await evaluate(client, `sessionStorage.setItem('pocket_marketing_hub_session_v1', ${JSON.stringify(JSON.stringify(session))}); location.reload(); true`);
-    await waitFor(client, "document.readyState === 'complete'");
-  } else if (await evaluate(client, "Boolean(document.querySelector('.login-shell'))")) {
+  if (await evaluate(client, "Boolean(document.querySelector('.login-shell'))")) {
     const account = process.env.SMOKE_ACCOUNT || "";
     const accessCode = process.env.SMOKE_ACCESS_CODE || "";
     assert(account && accessCode, "Authenticated smoke test credentials are required");
@@ -193,11 +162,13 @@ try {
     assert(renderedTasks >= expectedTasksMin, `Expected at least ${expectedTasksMin} task rows, received ${renderedTasks}`);
   }
   const desktopNavigation = await evaluate(client, `({
-    clientRail: getComputedStyle(document.querySelector('.client-rail')).display,
+    companyTabs: document.querySelectorAll('.topbar-company-tabs button').length,
+    clientRailPresent: Boolean(document.querySelector('.client-rail')),
     projectSidebar: getComputedStyle(document.querySelector('.project-sidebar')).display,
     toggleCount: document.querySelectorAll('.navigation-toggle').length,
   })`);
-  assert(desktopNavigation.clientRail !== "none" && desktopNavigation.projectSidebar !== "none", "Desktop left navigation is not persistently visible");
+  assert(desktopNavigation.companyTabs > 0 && !desktopNavigation.clientRailPresent, "Company selection did not move exclusively to the top bar");
+  assert(desktopNavigation.projectSidebar !== "none", "Desktop left menu is not persistently visible");
   assert(desktopNavigation.toggleCount === 0, "Desktop still exposes a chevron navigation toggle");
 
   assert(await evaluate(client, clickTab("간트")), "Gantt tab was not clickable");
@@ -242,9 +213,9 @@ try {
     assert(await waitFor(client, "document.querySelector('.task-workspace-tabs button[aria-selected=\"true\"]')?.textContent.trim() === '일정표'"), "Client Gantt-to-schedule return failed");
   }
 
-  const clientCount = await evaluate(client, "document.querySelectorAll('.client-rail .client-button').length");
+  const clientCount = await evaluate(client, "document.querySelectorAll('.topbar-company-tabs button').length");
   if (clientCount > 1) {
-    await evaluate(client, "document.querySelectorAll('.client-rail .client-button')[1].click()");
+    await evaluate(client, "document.querySelectorAll('.topbar-company-tabs button')[1].click()");
     assert(await waitFor(client, "Boolean(document.querySelector('.campaign-schedule-board')) && document.querySelector('.task-workspace-tabs button[aria-selected=\"true\"]')?.textContent.trim() === '일정표'"), "Project switch did not restore the task schedule navigation");
     if (expectedTasksMin > 0) {
       const switchedTasks = await evaluate(client, "document.querySelectorAll('.task-schedule-row').length");

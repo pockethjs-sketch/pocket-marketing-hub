@@ -11,9 +11,7 @@ export function getNavigationPresentation({
     return {
       actionLabel: isDrawerOpen ? "탐색 메뉴 닫기" : "탐색 메뉴 열기",
       controlVisible: true,
-      controlledIds: "client-navigation project-navigation",
-      clientRailCollapsed: !isDrawerOpen,
-      clientRailVisible: isDrawerOpen,
+      controlledIds: "project-navigation",
       iconDirection: isDrawerOpen ? "left" : "right",
       isDrawerOpen,
       projectSidebarCollapsed: !isDrawerOpen,
@@ -26,9 +24,7 @@ export function getNavigationPresentation({
   return {
     actionLabel: "",
     controlVisible: false,
-    controlledIds: "client-navigation project-navigation",
-    clientRailCollapsed: false,
-    clientRailVisible: true,
+    controlledIds: "project-navigation",
     desktopLevel: 2,
     iconDirection: null,
     isDrawerOpen: false,
