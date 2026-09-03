@@ -49,6 +49,9 @@ assert.throws(
   }),
   /supabase_snapshot_count_mismatch/,
 );
+assert.equal(context.mhShouldSkipDailyBackup_(false, '2026-09-03T05:00:00+09:00', '2026-09-03', 'same', 'same'), true);
+assert.equal(context.mhShouldSkipDailyBackup_(false, '2026-09-03T05:00:00+09:00', '2026-09-03', 'new', 'old'), false);
+assert.equal(context.mhShouldSkipDailyBackup_(true, '2026-09-03T05:00:00+09:00', '2026-09-03', 'same', 'same'), false);
 
 const manifest = { sheets: { A: { rows: 2, columns: 2, digest: 'same' } } };
 assert.deepEqual(

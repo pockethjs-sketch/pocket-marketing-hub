@@ -372,6 +372,7 @@ function mhWriteSupabaseTaskBackup_(request) {
       console.warn('[marketing-hub] supabase backup protection fallback: ' + protectionError);
     }
     SpreadsheetApp.flush();
+    PropertiesService.getScriptProperties().setProperty(MH_PROPERTY_KEYS.SUPABASE_SNAPSHOT_CURRENT, snapshotId);
     mhInvalidateTableCache_(MH_SHEETS.SUPABASE_TASK_BACKUP);
     return {
       ok: true,
@@ -386,13 +387,21 @@ function mhWriteSupabaseTaskBackup_(request) {
   }
 }
 
+function mhShouldSkipDailyBackup_(force, lastSuccessAt, today, currentSnapshot, backedUpSnapshot) {
+  return !force
+    && mhAsText_(lastSuccessAt).slice(0, 10) === today
+    && (!mhAsText_(currentSnapshot) || mhAsText_(currentSnapshot) === mhAsText_(backedUpSnapshot));
+}
+
 function mhRunDailyBackup(force) {
   mhSetupEnsureOperationsSheets();
   var properties = PropertiesService.getScriptProperties();
   var now = new Date();
   var today = Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd');
   var lastSuccessAt = mhAsText_(properties.getProperty(MH_PROPERTY_KEYS.BACKUP_LAST_SUCCESS_AT));
-  if (!force && lastSuccessAt.slice(0, 10) === today) {
+  var currentSupabaseSnapshot = mhAsText_(properties.getProperty(MH_PROPERTY_KEYS.SUPABASE_SNAPSHOT_CURRENT));
+  var backedUpSupabaseSnapshot = mhAsText_(properties.getProperty(MH_PROPERTY_KEYS.SUPABASE_SNAPSHOT_BACKED_UP));
+  if (mhShouldSkipDailyBackup_(force, lastSuccessAt, today, currentSupabaseSnapshot, backedUpSupabaseSnapshot)) {
     return { ok: true, skipped: true, reason: 'already_backed_up_today', lastBackupAt: lastSuccessAt };
   }
   var lock = LockService.getScriptLock();
@@ -415,6 +424,9 @@ function mhRunDailyBackup(force) {
     });
     if (!comparison.ok) throw mhApiError_('internal_error', 'backup_manifest_mismatch', 500);
     properties.setProperty(MH_PROPERTY_KEYS.BACKUP_LAST_SUCCESS_AT, createdAt);
+    if (currentSupabaseSnapshot) {
+      properties.setProperty(MH_PROPERTY_KEYS.SUPABASE_SNAPSHOT_BACKED_UP, currentSupabaseSnapshot);
+    }
     MH_SETTINGS_MEMORY_CACHE = null;
     return {
       ok: true, skipped: false, fileId: copy.getId(), fileName: copy.getName(),

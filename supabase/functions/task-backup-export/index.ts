@@ -55,11 +55,12 @@ Deno.serve(async (req: Request) => {
     };
   });
   const exportedAt = new Date().toISOString();
+  const snapshotId = await sha256(JSON.stringify(tasks));
   return json(200, {
     ok: true,
     data: {
       source: "SUPABASE",
-      snapshotId: crypto.randomUUID(),
+      snapshotId,
       exportedAt,
       taskCount: tasks.length,
       tasks,
