@@ -122,7 +122,7 @@ test("간트는 날짜별 선택 셀과 연속 구간 모서리를 표시한다"
   assert.match(appSource, /className="g-rail-dot"/);
   assert.match(appSource, /<div className="g-months">/);
   assert.match(appSource, /taskResponsibleOrgLabel\(task\.responsibleOrgCode, project\.clientName\)/);
-  assert.match(appSource, /className="task-schedule-date"/);
+  assert.match(appSource, /className="task-inline-date"/);
   assert.match(styles, /\.g-row/);
   assert.match(styles, /\.g-d\.ref/);
   assert.match(styles, /\.g-c\.on\.rs::before/);

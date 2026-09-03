@@ -55,10 +55,10 @@ import {
   viewLocationHash,
   viewResourceKey,
 } from "./planNavigation.js";
-import { canOperateProjectTasks, taskCreateInitialFields, taskCreateSubmissionFields, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
+import { canOperateProjectTasks, nextTaskResponsibleOrgCode, nextTaskStatusCode, taskCreateInitialFields, taskCreateSubmissionFields, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
 import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
-import { groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
+import { groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
 import { readableTaskActivities, taskActivitySentence } from "./taskActivity.js";
 import { isNewTask, unacknowledgedNewTasks } from "./taskFreshness.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
@@ -830,6 +830,155 @@ function taskDurationDays(startValue, endValue) {
   return Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
 }
 
+function taskInlineDraft(task = {}, displayedStart, displayedEnd) {
+  return {
+    title: task.title || "",
+    description: task.description || "",
+    planned_start_date: displayedStart || task.plannedStartDate || "",
+    due_date: displayedEnd || task.dueDate || "",
+    progress_percent: task.progressPercent ?? 0,
+    status_code: task.statusCode === "COMPLETED" ? "DONE" : task.statusCode || "NOT_STARTED",
+    responsible_org_code: task.responsibleOrgCode || "POCKET",
+    completion_url: task.completionUrl || "",
+    remarks: task.remarks || "",
+  };
+}
+
+function validInlineTaskUrl(value) {
+  return !String(value || "").trim() || /^https?:\/\/[^\s]+$/i.test(String(value).trim());
+}
+
+function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, displayedStart, displayedEnd, newTask, rowClass, mediaColor }) {
+  const [draft, setDraft] = useState(() => taskInlineDraft(task, displayedStart, displayedEnd));
+  const [savingField, setSavingField] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const taskRef = useRef(task);
+
+  useEffect(() => {
+    taskRef.current = task;
+    if (!savingField) setDraft(taskInlineDraft(task, displayedStart, displayedEnd));
+  }, [task, displayedStart, displayedEnd, savingField]);
+
+  const setField = (field, value) => {
+    setSaveError("");
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const commitField = async (field, rawValue) => {
+    if (!canWrite || !onUpdate || savingField) return;
+    const baseTask = taskRef.current;
+    const baseDraft = taskInlineDraft(baseTask, baseTask.plannedStartDate, baseTask.dueDate);
+    let value = rawValue;
+    if (["title", "completion_url"].includes(field)) value = String(rawValue || "").trim();
+    if (field === "progress_percent") {
+      value = Number(rawValue);
+      if (!Number.isFinite(value) || value < 0 || value > 100) {
+        setSaveError("진행률은 0~100 사이로 입력해 주세요.");
+        setDraft((current) => ({ ...current, progress_percent: baseDraft.progress_percent }));
+        return;
+      }
+    }
+    if (field === "title" && !value) {
+      setSaveError("업무명은 비워둘 수 없습니다.");
+      setDraft((current) => ({ ...current, title: baseDraft.title }));
+      return;
+    }
+    if (field === "completion_url" && !validInlineTaskUrl(value)) {
+      setSaveError("완료링크는 http:// 또는 https:// 주소로 입력해 주세요.");
+      return;
+    }
+
+    const nextDraft = { ...draft, [field]: value };
+    let fields = { [field]: value };
+    if (field === "planned_start_date" || field === "due_date") {
+      const start = String(nextDraft.planned_start_date || "");
+      const end = String(nextDraft.due_date || "");
+      if (start && end && end < start) {
+        setSaveError("종료일은 시작일보다 빠를 수 없습니다.");
+        return;
+      }
+      fields = {
+        planned_start_date: start,
+        due_date: end,
+        schedule_dates_json: start && end ? serializeScheduleDates(scheduleDateRange(start, end)) : null,
+      };
+    }
+    const unchanged = Object.entries(fields).every(([key, fieldValue]) => {
+      if (key === "schedule_dates_json") return true;
+      return String(baseDraft[key] ?? "") === String(fieldValue ?? "");
+    });
+    if (unchanged) return;
+
+    setDraft(nextDraft);
+    setSavingField(field);
+    setSaveError("");
+    try {
+      const savedTask = await onUpdate(baseTask, fields);
+      if (savedTask) {
+        taskRef.current = savedTask;
+        setDraft(taskInlineDraft(savedTask, savedTask.plannedStartDate, savedTask.dueDate));
+      }
+    } catch (error) {
+      setDraft(taskInlineDraft(baseTask, baseTask.plannedStartDate, baseTask.dueDate));
+      setSaveError(error?.code === "conflict" ? "다른 사용자의 변경사항을 먼저 다시 불러와 주세요." : error?.message || "저장하지 못했습니다.");
+    } finally {
+      setSavingField("");
+    }
+  };
+
+  const commitOnEnter = (event, field) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.blur();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setDraft(taskInlineDraft(taskRef.current, taskRef.current.plannedStartDate, taskRef.current.dueDate));
+      event.currentTarget.blur();
+    }
+  };
+
+  const cycleStatus = () => {
+    const next = nextTaskStatusCode(draft.status_code);
+    setField("status_code", next);
+    void commitField("status_code", next);
+  };
+  const cycleOwner = () => {
+    const next = nextTaskResponsibleOrgCode(draft.responsible_org_code);
+    setField("responsible_org_code", next);
+    void commitField("responsible_org_code", next);
+  };
+  const duration = taskDurationDays(draft.planned_start_date, draft.due_date);
+  const statusLabel = trackerStatusLabels[draft.status_code] || draft.status_code;
+  const ownerLabel = taskResponsibleOrgLabel(draft.responsible_org_code, project.clientName);
+  const media = taskScheduleMedia(task);
+  const progress = Math.max(0, Math.min(100, Number(draft.progress_percent) || 0));
+  const disabled = !canWrite || Boolean(savingField);
+
+  return <tr className={`task-schedule-row reference-task-row ${rowClass}${newTask ? " is-new-task" : ""}${savingField ? " is-saving" : ""}${saveError ? " has-save-error" : ""}`} style={{ "--media-color": mediaColor }}>
+    <td className="reference-task-media"><div className="reference-task-cell"><span><i aria-hidden="true" />{media}</span></div></td>
+    <td className="reference-task-name"><div className="reference-task-cell"><input className="task-inline-input task-name" aria-label={`${task.title} 업무명`} maxLength={500} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.title} onChange={(event) => setField("title", event.target.value)} onBlur={(event) => void commitField("title", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "title")} />{newTask && <em className="task-new-badge">신규</em>}{saveError && <small className="task-inline-error" role="alert">{saveError}</small>}</div></td>
+    <td className="reference-task-detail"><div className="reference-task-cell"><textarea className="task-inline-textarea" aria-label={`${task.title} 세부내용`} rows="1" maxLength={20000} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.description} placeholder={canWrite ? "세부내용" : ""} onChange={(event) => setField("description", event.target.value)} onBlur={(event) => void commitField("description", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "description")} /></div></td>
+    <td className="reference-task-date"><div className="reference-task-cell"><input className="task-inline-date" type="date" aria-label={`${task.title} 시작일`} readOnly={!canWrite} disabled={disabled} value={draft.planned_start_date} max={draft.due_date || undefined} onChange={(event) => setField("planned_start_date", event.target.value)} onBlur={(event) => void commitField("planned_start_date", event.currentTarget.value)} /></div></td>
+    <td className="reference-task-date"><div className="reference-task-cell"><input className="task-inline-date" type="date" aria-label={`${task.title} 종료일`} readOnly={!canWrite} disabled={disabled} value={draft.due_date} min={draft.planned_start_date || undefined} onChange={(event) => setField("due_date", event.target.value)} onBlur={(event) => void commitField("due_date", event.currentTarget.value)} /></div></td>
+    <td className="reference-task-duration"><div className="reference-task-cell">{duration === null ? "–" : `${duration}일`}</div></td>
+    <td className="reference-task-progress"><div className="reference-task-cell"><span className="task-inline-progress"><span><i style={{ width: `${progress}%` }} /></span><input type="number" min="0" max="100" aria-label={`${task.title} 진행률`} readOnly={!canWrite} disabled={disabled} value={draft.progress_percent} onChange={(event) => setField("progress_percent", event.target.value)} onBlur={(event) => void commitField("progress_percent", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "progress_percent")} /><em>%</em></span></div></td>
+    <td className="reference-task-status"><div className="reference-task-cell"><button type="button" className={`task-inline-status ${statusClass[statusLabel] || "status status-muted"}`} disabled={disabled} data-status-code={draft.status_code} title="눌러서 미착수 → 진행 → 완료 → 보류 순으로 변경" onClick={cycleStatus}>{savingField === "status_code" ? <LoaderCircle size={12} className="spin" /> : statusLabel}</button></div></td>
+    <td className="reference-task-owner"><div className="reference-task-cell"><button type="button" className={`task-inline-owner is-${String(draft.responsible_org_code || "POCKET").toLowerCase()}`} disabled={disabled} title={`눌러서 포켓 → NS → ${project.clientName || "고객사"} 순으로 변경`} onClick={cycleOwner}>{savingField === "responsible_org_code" ? <LoaderCircle size={12} className="spin" /> : ownerLabel}</button></div></td>
+    <td className="reference-task-link"><div className="reference-task-cell"><span className="task-inline-link">{validInlineTaskUrl(draft.completion_url) && draft.completion_url && <a href={draft.completion_url} target="_blank" rel="noreferrer" aria-label={`${task.title} 완료링크 열기`}>열기 ↗</a>}<input className="task-inline-input" type="text" inputMode="url" aria-label={`${task.title} 완료링크`} maxLength={2048} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.completion_url} placeholder={canWrite ? "https://" : ""} onChange={(event) => setField("completion_url", event.target.value)} onBlur={(event) => void commitField("completion_url", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "completion_url")} /></span></div></td>
+    <td className="reference-task-note"><div className="reference-task-cell"><textarea className="task-inline-textarea" aria-label={`${task.title} 비고`} rows="1" maxLength={10000} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.remarks} placeholder={canWrite ? "비고" : ""} onChange={(event) => setField("remarks", event.target.value)} onBlur={(event) => void commitField("remarks", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "remarks")} /></div></td>
+  </tr>;
+}
+
+function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, ganttDrafts, freshnessNow, scheduleClass, mediaColor }) {
+  return <div className="task-schedule-matrix-scroll reference-task-scroll"><table className="task-schedule-matrix is-table-view is-detailed reference-task-table"><thead><tr><th>매체</th><th>업무</th><th>세부내용</th><th>시작일</th><th>종료일</th><th>기간</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th></tr></thead><tbody>{tasks.map((task) => {
+    const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
+    const bounds = scheduleDateBounds(scheduleDates);
+    const displayedStart = bounds.start || task.plannedStartDate || "";
+    const displayedEnd = bounds.end || task.dueDate || "";
+    return <TaskScheduleInlineRow key={task.id} task={task} project={project} canWrite={canWrite} onUpdate={onUpdate} displayedStart={displayedStart} displayedEnd={displayedEnd} newTask={isNewTask(task, freshnessNow)} rowClass={scheduleClass(task)} mediaColor={mediaColor(taskScheduleMedia(task))} />;
+  })}</tbody></table></div>;
+}
+
 const scheduleStatusFilters = [["ALL", "전체"], ["DONE", "완료"], ["ACTIVE", "진행"], ["HOLD", "보류"]];
 const scheduleCategoryFilters = [["ALL", "전체"], ["마케팅", "마케팅"], ["디자인", "디자인"], ["영상", "영상"]];
 const scheduleWeekFilters = [["ALL", "전체"], ["LAST_WEEK", "지난주"], ["THIS_WEEK", "이번주"], ["NEXT_WEEK", "다음주"]];
@@ -1129,16 +1278,7 @@ function TaskScheduleTimeline({ tasks, project, query, canWrite, canEditProject,
     <section className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
       <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : " · 업무명을 누르면 수정"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={onLoadActivity} disabled={activityState?.status === "loading"}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
       {displayMode === "gantt" && canWrite && <div className="g-hint"><span>✎</span><span>칸을 클릭하면 칠해지고, 다시 누르면 지워집니다. 옆으로 끌면 여러 칸을 한 번에 — 시작일·종료일·기간은 칠한 범위에 맞춰 자동으로 바뀝니다.</span></div>}
-      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} onRefresh={onLoadActivity} /> : filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <div className="task-schedule-matrix-scroll"><table className="task-schedule-matrix is-table-view is-detailed"><thead><tr><th>업무</th><th>세부내용</th><th>시작일</th><th>종료일</th><th>기간(일)</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th></tr></thead><tbody>{filteredTasks.map((task) => {
-        const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
-        const bounds = scheduleDateBounds(scheduleDates);
-        const displayedStart = bounds.start || task.plannedStartDate;
-        const displayedEnd = bounds.end || task.dueDate;
-        const duration = taskDurationDays(displayedStart, displayedEnd);
-        const progress = task.progressPercent ?? 0;
-        const newTask = isNewTask(task, freshnessNow);
-        return <tr className={`task-schedule-row ${scheduleClass(task)}${newTask ? " is-new-task" : ""}`} key={task.id}><td><button type="button" className="task-schedule-title-button" disabled={!canWrite} onClick={() => canWrite && setEditingTaskId(task.id)} aria-label={`${task.title} 수정`}><span className="task-schedule-identity"><span className="task-schedule-color" aria-hidden="true" /><span><strong><span>{task.title}</span>{newTask && <em className="task-new-badge">신규</em>}</strong><small>{task.phase} · {task.parent || task.stream}</small></span></span></button></td><td>{task.description || "-"}</td><td><time className="task-schedule-date" title={displayedStart || ""}>{displayedStart ? trackerDateLabel(displayedStart) : "-"}</time></td><td><time className="task-schedule-date" title={displayedEnd || ""}>{displayedEnd ? trackerDateLabel(displayedEnd) : "-"}</time></td><td>{duration ?? "-"}</td><td><span className="task-sheet-progress"><i><b style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} /></i><em>{progress}%</em></span></td><td><span className={statusClass[task.status] || "status status-muted"}>{task.status}</span></td><td><span className="task-schedule-owner">{taskResponsibleOrgLabel(task.responsibleOrgCode, project.clientName)}</span></td><td>{task.completionUrl ? <a className="task-schedule-link" href={task.completionUrl} target="_blank" rel="noreferrer">결과물</a> : "-"}</td><td>{task.remarks || "-"}</td></tr>;
-      })}</tbody></table></div> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ minWidth: `${280 + ganttTrackWidth}px` }}>
+      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} onRefresh={onLoadActivity} /> : filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ minWidth: `${280 + ganttTrackWidth}px` }}>
         <div className="g-hrow"><div className="g-lbl g-corner"><span className="nm">매체 · 업무</span></div><div className="g-hstack" style={{ width: `${ganttTrackWidth}px` }}><div className="g-months">{months.map((month) => <div className="g-m" key={month.key} style={{ width: `${month.count * 28}px` }}>{month.label}</div>)}</div><div className="g-days">{days.map((day) => <div key={day.iso} className={`g-d${day.weekend ? " we" : ""}${day.weekday === "일" ? " sun" : ""}${day.iso === today ? " ref" : ""}`}><span>{day.day}</span><span className="dw">{day.weekday}</span></div>)}</div></div></div>
         {ganttGroups.map((group) => {
           const color = ganttCategoryColor(group.label);
@@ -2054,7 +2194,7 @@ export function App() {
     });
     // The canonical mutation response is the save acknowledgement. Activity
     // refresh is secondary and must not keep the create modal blocked.
-    setSaveNotice("Google Sheets 원장에 저장했습니다.");
+    setSaveNotice(entityType === "task" ? "Supabase 업무 원장에 저장했습니다." : "Google Sheets 원장에 저장했습니다.");
     if (entityType === "task") {
       const canonicalRecord = result?.data?.record;
       const canonicalTask = canonicalRecord

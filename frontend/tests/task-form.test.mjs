@@ -98,4 +98,29 @@ test("일정표 수정 요청은 목록 수정과 같은 업무 필드를 숫자
   assert.equal(fields.progress_percent, 35);
   assert.equal(fields.priority_code, "HIGH");
   assert.equal(fields.responsible_org_code, "NS");
+  assert.equal(fields.schedule_dates_json, JSON.stringify([
+    "2026-09-02",
+    "2026-09-03",
+    "2026-09-04",
+    "2026-09-05",
+  ]));
+});
+
+test("일정표 날짜 수정은 간트 일정 배열도 함께 갱신한다", () => {
+  const withoutCompleteRange = taskForm.taskUpdateSubmissionFields({
+    title: "날짜 미정 업무",
+    planned_start_date: "2026-09-02",
+    due_date: "",
+  });
+  assert.equal(withoutCompleteRange.schedule_dates_json, null);
+});
+
+test("일정표 상태와 담당 클릭은 제품에서 정한 순서로 순환한다", () => {
+  assert.equal(taskForm.nextTaskStatusCode("NOT_STARTED"), "IN_PROGRESS");
+  assert.equal(taskForm.nextTaskStatusCode("IN_PROGRESS"), "DONE");
+  assert.equal(taskForm.nextTaskStatusCode("COMPLETED"), "ON_HOLD");
+  assert.equal(taskForm.nextTaskStatusCode("BLOCKED"), "NOT_STARTED");
+  assert.equal(taskForm.nextTaskResponsibleOrgCode("POCKET"), "NS");
+  assert.equal(taskForm.nextTaskResponsibleOrgCode("NS"), "CLIENT");
+  assert.equal(taskForm.nextTaskResponsibleOrgCode("CLIENT"), "POCKET");
 });
