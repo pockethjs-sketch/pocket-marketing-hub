@@ -10,6 +10,29 @@ function isoDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+// Extend the display axis only; never change any task's saved schedule.
+export function buildGanttAxis(startValue, endValue, minimumDays = 0) {
+  const start = dateAtNoon(startValue);
+  const end = dateAtNoon(endValue);
+  if (!start || !end || start > end) return [];
+  const fillEnd = new Date(start);
+  fillEnd.setDate(fillEnd.getDate() + Math.max(0, Math.ceil(minimumDays) - 1));
+  const last = end > fillEnd ? end : fillEnd;
+  const days = [];
+  for (const cursor = new Date(start); cursor <= last; cursor.setDate(cursor.getDate() + 1)) {
+    const iso = isoDate(cursor);
+    const monthIndex = cursor.getFullYear() * 12 + cursor.getMonth();
+    days.push({ iso, day: cursor.getDate(), weekday: ["일", "월", "화", "수", "목", "금", "토"][cursor.getDay()],
+      monthKey: iso.slice(0, 7), monthTone: monthIndex % 2,
+      monthStart: cursor.getDate() === 1, weekend: [0, 6].includes(cursor.getDay()) });
+  }
+  return days;
+}
+
+export function ganttMonthClass(day) {
+  return ` month-tone-${day.monthTone}${day.monthStart ? " month-start" : ""}`;
+}
+
 export function normalizeScheduleDates(value) {
   let dates = value;
   if (typeof dates === "string") {

@@ -174,6 +174,7 @@ try {
       visibleLabels: labels.filter(Boolean),
       repeatedAdjacentLabels: labels.some((label, index) => label && labels[index - 1] === label),
       tableWidth: getComputedStyle(document.querySelector('.reference-task-table')).width,
+      tableViewportWidth: document.querySelector('.reference-task-scroll').clientWidth,
       tableLayout: getComputedStyle(document.querySelector('.reference-task-table')).tableLayout,
       firstRowHeight: rows[0] ? getComputedStyle(rows[0]).height : '',
       dateRangeCells: document.querySelectorAll('.task-inline-date-range').length,
@@ -184,10 +185,11 @@ try {
   })()`);
   assert(scheduleGrouping.visibleLabels.length === scheduleGrouping.rowCount && scheduleGrouping.repeatedAdjacentLabels, `Every schedule row must repeat its media label: ${JSON.stringify(scheduleGrouping)}`);
   assert(scheduleGrouping.dateRangeCells === scheduleGrouping.rowCount, `Schedule dates are not grouped into one compact cell: ${JSON.stringify(scheduleGrouping)}`);
-  assert(scheduleGrouping.tableWidth === "1244px" && parseFloat(scheduleGrouping.firstRowHeight) <= 36, `Schedule density drifted: ${JSON.stringify(scheduleGrouping)}`);
-  assert(Math.abs(scheduleGrouping.firstCellHeights[1].width - 290) < 0.1, `Task title column is not 290px: ${JSON.stringify(scheduleGrouping.firstCellHeights)}`);
-  assert(Math.abs(scheduleGrouping.firstCellHeights[2].width - 200) < 0.1, `Task detail column is not 200px: ${JSON.stringify(scheduleGrouping.firstCellHeights)}`);
-  assert(Math.abs(scheduleGrouping.firstCellHeights[3].width - 126) < 0.1, `Task date column is not 126px: ${JSON.stringify(scheduleGrouping.firstCellHeights)}`);
+  assert(Math.abs(parseFloat(scheduleGrouping.tableWidth) - Math.max(1308, scheduleGrouping.tableViewportWidth)) < 1, `Schedule must fill its viewport: ${JSON.stringify(scheduleGrouping)}`);
+  assert(Math.abs(scheduleGrouping.firstCellHeights[1].width - 64) < 0.1, "Workstream column must stay compact");
+  assert(scheduleGrouping.firstCellHeights[2].width >= 289, "Task title column must use remaining width");
+  assert(Math.abs(scheduleGrouping.firstCellHeights[3].width - 200) < 0.1, "Task detail column must stay compact");
+  assert(Math.abs(scheduleGrouping.firstCellHeights[4].width - 126) < 0.1, "Task date column must stay compact");
   assert(scheduleGrouping.compactDateLabels.length > 0 && scheduleGrouping.compactDateLabels.every((label) => label === "–" || /^\d{1,2}\.\d{1,2}$/.test(label)), `Schedule still exposes four-digit years: ${scheduleGrouping.compactDateLabels.join(",")}`);
   const completionCandidate = await evaluate(client, `(() => {
     const row = Array.from(document.querySelectorAll('.reference-task-row')).find((item) => item.querySelector('.task-inline-status')?.dataset.statusCode === 'IN_PROGRESS');

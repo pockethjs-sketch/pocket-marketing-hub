@@ -299,7 +299,24 @@ await db.exec("reset role");
 await expectDenied(`update public.tasks set project_id=2 where id=${taskId}`, "cross-project row move");
 
 await db.exec("reset role");
+// Existing task/page isolation checks above deliberately use restricted NS
+// fixtures. Now verify the requested all-project NS policy and backfill.
+await db.exec(readFileSync(`${migrationsDir}/20260903052713_ns_all_project_memberships.sql`, "utf8"));
+assert(await scalar(`select count(*)::int as count from public.projects p where p.archived_at is null and p.status_code <> 'DISABLED' and not exists (select 1 from public.project_memberships m where m.project_id=p.id and m.user_id='${userIds.ns}' and m.permission_code='EDIT' and m.status_code='ACTIVE' and m.archived_at is null)`) === 0, "NS backfill missed a project");
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.manager}', false);`);
+const { rows: [sharedProject] } = await db.query(`select public.create_project('project_shared_ns_0001', '포켓 공유 QA', '포켓 생성 프로젝트', null, null, null) as response`);
+assert(sharedProject.response?.ok === true, "Pocket project creation failed with NS auto-membership");
+await db.exec("reset role");
+const sharedId = await scalar(`select id::int as value from public.projects where legacy_id='${sharedProject.response.data.project.project_id}'`, "value");
+assert(await scalar(`select count(*)::int as count from public.project_memberships where project_id=${sharedId} and user_id='${userIds.ns}' and permission_code='EDIT'`) === 1, "new Pocket project missing automatic NS membership");
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
+assert(await scalar(`select private.can_read_project(${sharedId}, 'PROJECT_TEAM', 'tasks') as value`, "value") === true, "NS cannot read shared project");
+assert(await scalar(`select private.can_read_project(${sharedId}, 'POCKET_ONLY', 'tasks') as value`, "value") === false, "NS gained Pocket-only access");
+assert(await scalar("select private.is_pocket_manager() as value", "value") === false, "NS gained admin role");
+await expectDenied(`insert into public.project_memberships(project_id,user_id,permission_code) values (${sharedId}, '${userIds.client}', 'ADMIN')`, "NS cannot grant memberships");
+await db.exec("reset role");
 console.log(JSON.stringify({
+  nsAllProjectsAndFutureMemberships: "pass",
   migrations: readdirSync(migrationsDir).filter((name) => name.endsWith('.sql')).length,
   tables: 23,
   rlsTables: 23,

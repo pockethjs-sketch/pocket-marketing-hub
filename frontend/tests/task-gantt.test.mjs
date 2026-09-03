@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildGanttAxis,
+  ganttMonthClass,
   groupGanttTasks,
   normalizeScheduleDates,
   paintGanttRectangle,
@@ -10,6 +12,19 @@ import {
   serializeScheduleDates,
   taskScheduleDates,
 } from "../src/taskGantt.js";
+
+test("간트는 빈 화면 폭만 다음 달 날짜로 채우고 업무 일정은 바꾸지 않는다", () => {
+  const axis = buildGanttAxis("2026-09-20", "2026-09-30", 35);
+  assert.equal(axis.length, 35);
+  assert.equal(axis.at(-1).iso, "2026-10-24");
+  assert.equal(axis[11].iso, "2026-10-01");
+  assert.match(ganttMonthClass(axis[11]), /month-start/);
+  assert.notEqual(axis[0].monthTone, axis[11].monthTone);
+  assert.equal(buildGanttAxis("2026-09-01", "2026-10-31", 10).length, 61);
+  assert.deepEqual(buildGanttAxis(null, null, 50), []);
+  assert.equal(buildGanttAxis("2026-12-31", "2026-12-31", 2)[1].iso, "2027-01-01");
+  assert.equal(buildGanttAxis("2028-02-28", "2028-02-28", 3)[2].iso, "2028-03-01");
+});
 
 test("분야별 간트 화면 순서를 드래그 행 배열로 그대로 평탄화한다", () => {
   const tasks = [

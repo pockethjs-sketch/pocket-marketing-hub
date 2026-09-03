@@ -63,7 +63,7 @@ import {
 import { canOperateProjectTasks, nextTaskResponsibleOrgCode, nextTaskStatusCode, taskCreateInitialFields, taskCreateSubmissionFields, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskStatusMutationFields, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
 import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, taskScheduleCategory, taskScheduleMedia, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
-import { groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
+import { buildGanttAxis, ganttMonthClass, groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
 import { readableTaskActivities, taskActivitySentence } from "./taskActivity.js";
 import { isNewTask, unacknowledgedNewTasks } from "./taskFreshness.js";
 import { KPI_CHANNEL_OPTIONS, KPI_PERIOD_OPTIONS, KPI_UNIT_OPTIONS, kpiInitialFields, kpiSubmissionFields } from "./kpiForm.js";
@@ -1234,6 +1234,7 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
 
   return <tr className={`task-schedule-row reference-task-row ${rowClass}${mediaGroupStart ? " is-media-group-start" : ""}${newTask ? " is-new-task" : ""}${savingField ? " is-saving" : ""}${saveError ? " has-save-error" : ""}`} style={{ "--media-color": mediaColor }}>
     <td className="reference-task-media" aria-label={media}><div className="reference-task-cell"><span><i aria-hidden="true" />{media}</span></div></td>
+    <td className="reference-task-workstream"><div className="reference-task-cell">{taskScheduleCategory(task)}</div></td>
     <td className="reference-task-name"><div className="reference-task-cell"><input className="task-inline-input task-name" aria-label={`${task.title} 업무명`} maxLength={500} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.title} onChange={(event) => setField("title", event.target.value)} onBlur={(event) => void commitField("title", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "title")} />{newTask && <em className="task-new-badge">신규</em>}{saveError && <small className="task-inline-error" role="alert">{saveError}</small>}</div></td>
     <td className="reference-task-detail"><div className="reference-task-cell"><textarea className="task-inline-textarea" aria-label={`${task.title} 세부내용`} rows="1" maxLength={20000} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.description} placeholder={canWrite ? "세부내용" : ""} onChange={(event) => setField("description", event.target.value)} onBlur={(event) => void commitField("description", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "description")} /></div></td>
     <td className="reference-task-dates"><div className="reference-task-cell task-inline-date-range" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) void commitField("date_range"); }}><CompactTaskDateInput label={`${task.title} 시작일`} readOnly={!canWrite} disabled={disabled} value={draft.planned_start_date} max={draft.due_date || undefined} onChange={(event) => setField("planned_start_date", event.target.value)} /><ArrowRight size={10} aria-hidden="true" /><CompactTaskDateInput label={`${task.title} 종료일`} readOnly={!canWrite} disabled={disabled} value={draft.due_date} min={draft.planned_start_date || undefined} onChange={(event) => setField("due_date", event.target.value)} /></div></td>
@@ -1248,8 +1249,8 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
 }
 
 function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, onEdit, onArchive, ganttDrafts, freshnessNow, scheduleClass, mediaColor }) {
-  const columnWidths = [88, 290, 200, 126, 44, 92, 54, 54, 105, 135];
-  return <div className="task-schedule-matrix-scroll reference-task-scroll"><table className="task-schedule-matrix is-detailed reference-task-table"><colgroup>{columnWidths.map((width, index) => <col key={`${index}-${width}`} style={{ width }} />)}{canWrite && <col style={{ width: 56 }} />}</colgroup><thead><tr><th>매체</th><th>업무</th><th>세부내용</th><th>일정</th><th>기간</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th>{canWrite && <th>관리</th>}</tr></thead><tbody>{tasks.map((task, index) => {
+  const columnWidths = [88, 64, null, 200, 126, 44, 92, 54, 54, 105, 135];
+  return <div className="task-schedule-matrix-scroll reference-task-scroll"><table className="task-schedule-matrix is-detailed reference-task-table" style={{ "--schedule-min-width": canWrite ? "1308px" : "1252px" }}><colgroup>{columnWidths.map((width, index) => <col key={index} style={width ? { width } : undefined} />)}{canWrite && <col style={{ width: 56 }} />}</colgroup><thead><tr><th>매체</th><th>업무분야</th><th>업무</th><th>세부내용</th><th>일정</th><th>기간</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th>{canWrite && <th>관리</th>}</tr></thead><tbody>{tasks.map((task, index) => {
     const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
     const bounds = scheduleDateBounds(scheduleDates);
     const displayedStart = bounds.start || task.plannedStartDate || "";
@@ -1410,7 +1411,7 @@ function ProjectIssuePanel({ issues, canWrite, onCreate, onUpdate, onArchive }) 
   </section>;
 }
 
-function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWriteIssues, canEditProject, onUpdate, onArchive, onBatchUpdate, onProjectUpdate, onCreate, onIssueCreate, onIssueUpdate, onIssueArchive, displayMode, onViewChange, canViewActivity, activityState, onLoadActivity }) {
+export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWriteIssues, canEditProject, onUpdate, onArchive, onBatchUpdate, onProjectUpdate, onCreate, onIssueCreate, onIssueUpdate, onIssueArchive, displayMode, onViewChange, canViewActivity, activityState, onLoadActivity }) {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [scheduleFilter, setScheduleFilter] = useState("ALL");
@@ -1423,6 +1424,17 @@ function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWrit
   const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
   const activityMode = displayMode === "activity";
   const matrixRef = useRef(null);
+  const schedulePanelRef = useRef(null);
+  const [ganttViewportWidth, setGanttViewportWidth] = useState(0);
+  useEffect(() => {
+    const panel = schedulePanelRef.current;
+    if (!panel) return;
+    const measure = () => setGanttViewportWidth(panel.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
   const paintRef = useRef(null);
   const ganttTasksRef = useRef([]);
   const daysRef = useRef([]);
@@ -1475,22 +1487,13 @@ function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWrit
   }, [statusSummaryTasks]);
   const { done, inProgress, onHold, countable, completed, completionRate } = summary;
   const missingSchedule = useMemo(() => filteredTasks.filter((task) => !task.plannedStartDate || !task.dueDate).length, [filteredTasks]);
-  const days = useMemo(() => {
-    const items = [];
-    if (!timeline.start || !timeline.end) return items;
-    const cursor = trackerDate(timeline.start);
-    const end = trackerDate(timeline.end);
-    while (cursor && end && cursor <= end) {
-      const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
-      items.push({ iso, day: cursor.getDate(), weekday: ["일", "월", "화", "수", "목", "금", "토"][cursor.getDay()], monthKey: iso.slice(0, 7), weekend: cursor.getDay() === 0 || cursor.getDay() === 6 });
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    return items;
-  }, [timeline.start, timeline.end]);
+  const days = useMemo(() => buildGanttAxis(timeline.start, timeline.end,
+    Math.ceil(Math.max(0, ganttViewportWidth - GANTT_LABEL_WIDTH) / GANTT_DAY_WIDTH)),
+  [timeline.start, timeline.end, ganttViewportWidth]);
   const months = useMemo(() => days.reduce((items, day) => {
     const last = items[items.length - 1];
     if (last?.key === day.monthKey) last.count += 1;
-    else items.push({ key: day.monthKey, label: `${Number(day.monthKey.slice(0, 4))}년 ${Number(day.monthKey.slice(5, 7))}월`, count: 1 });
+    else items.push({ key: day.monthKey, tone: day.monthTone, label: `${Number(day.monthKey.slice(0, 4))}년 ${Number(day.monthKey.slice(5, 7))}월`, count: 1 });
     return items;
   }, []), [days]);
   const today = localDateValue();
@@ -1689,15 +1692,15 @@ function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWrit
     <QuoteSummary quote={project.quoteData} />
     <section className="campaign-board-progress" aria-label="전체 진행률"><div><span>전체 진행률</span><strong>{completionRate}<em>%</em></strong><small>완료 {completed}건 · 전체 {countable.length}건</small><div><i style={{ width: `${completionRate}%` }} /></div></div><div className="campaign-board-statuses"><button type="button" className={statusFilter === "ALL" ? "is-active" : ""} onClick={() => setStatusFilter("ALL")}><span>전체</span><strong>{countable.length}</strong></button><button type="button" className={statusFilter === "ACTIVE" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "ACTIVE"))}><span>진행중</span><strong>{inProgress}</strong></button><button type="button" className={statusFilter === "DONE" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "DONE"))}><span>완료</span><strong>{done}</strong></button><button type="button" className={statusFilter === "HOLD" ? "is-active" : ""} onClick={() => setStatusFilter((current) => toggleScheduleStatusFilter(current, "HOLD"))}><span>보류</span><strong>{onHold}</strong></button></div></section>
     <div className="campaign-schedule-toolbar reference-toolbar toolbar"><TaskWorkspaceTabs activeView={displayMode} onChange={onViewChange} canViewActivity={canViewActivity} />{activityMode ? <div className="task-activity-toolbar-copy">사용자가 생성·완료·변경한 업무만 표시합니다.</div> : <><div className="task-schedule-filters" aria-label="일정표 업무 필터"><ScheduleFilterButtons label="업무 상태" value={statusFilter} options={scheduleStatusFilters} onChange={setStatusFilter} /><ScheduleFilterButtons label="업무 카테고리" value={categoryFilter} options={scheduleCategoryFilters} onChange={setCategoryFilter} /><ScheduleFilterButtons label="업무 일정" value={scheduleFilter} options={scheduleWeekFilters} onChange={setScheduleFilter} /><div className="task-schedule-filter-result"><strong>{filteredTasks.length}</strong><span>/ {tasks.length}건</span>{filtersActive && <button type="button" onClick={() => { setStatusFilter("ALL"); setCategoryFilter("ALL"); setScheduleFilter("ALL"); }}>초기화</button>}</div></div>{canEditProject && <div className="schedule-start-date refbox"><label><span>착수일</span><input type="date" value={startDateDraft} disabled={startDateSaving} onChange={(event) => { setStartDateDraft(event.target.value); setStartDateError(""); }} /></label><button type="button" className="btn" disabled={startDateSaving || !startDateDraft || startDateDraft === (project.startDate || "")} onClick={saveProjectStartDate}>{startDateSaving ? "저장 중" : "저장"}</button>{startDateError && <small role="alert">{startDateError}</small>}</div>}</>}</div>
-    <section className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
+    <section ref={schedulePanelRef} className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
       <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : " · 업무명을 누르면 수정"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={onLoadActivity} disabled={activityState?.status === "loading"}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
       {displayMode === "gantt" && canWrite && <div className="g-hint"><span>✎</span><span>칸을 클릭하면 칠해지고, 다시 누르면 지워집니다. 옆으로 끌면 여러 칸을 한 번에 — 시작일·종료일·기간은 칠한 범위에 맞춰 자동으로 바뀝니다.</span></div>}
       {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} onRefresh={onLoadActivity} /> : filteredTasks.length === 0 ? <EmptyState title="조건에 맞는 업무가 없습니다" description="상태·카테고리·일정 필터를 변경해 주세요." /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={setEditingTaskId} onArchive={onArchive} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ width: `${GANTT_LABEL_WIDTH + ganttTrackWidth}px`, minWidth: `${GANTT_LABEL_WIDTH + ganttTrackWidth}px`, "--gantt-label-width": `${GANTT_LABEL_WIDTH}px`, "--gantt-day-width": `${GANTT_DAY_WIDTH}px` }}>
-        <div className="g-hrow"><div className="g-lbl g-corner"><span className="nm">매체 · 업무</span></div><div className="g-hstack" style={{ width: `${ganttTrackWidth}px` }}><div className="g-months">{months.map((month) => <div className="g-m" key={month.key} style={{ width: `${month.count * GANTT_DAY_WIDTH}px` }}>{month.label}</div>)}</div><div className="g-days">{days.map((day) => <div key={day.iso} className={`g-d${day.weekend ? " we" : ""}${day.weekday === "일" ? " sun" : ""}${day.iso === today ? " ref" : ""}`}><span>{day.day}</span><span className="dw">{day.weekday}</span></div>)}</div></div></div>
+        <div className="g-hrow"><div className="g-lbl g-corner"><span className="nm">매체 · 업무</span></div><div className="g-hstack" style={{ width: `${ganttTrackWidth}px` }}><div className="g-months">{months.map((month) => <div className={`g-m month-tone-${month.tone}`} key={month.key} style={{ width: `${month.count * GANTT_DAY_WIDTH}px` }}>{month.label}</div>)}</div><div className="g-days">{days.map((day) => <div key={day.iso} className={`g-d${ganttMonthClass(day)}${day.weekend ? " we" : ""}${day.weekday === "일" ? " sun" : ""}${day.iso === today ? " ref" : ""}`}><span>{day.day}</span><span className="dw">{day.weekday}</span></div>)}</div></div></div>
         {ganttGroups.map((group) => {
           const color = ganttCategoryColor(group.label);
           const groupDone = group.tasks.filter((task) => task.statusCode === "DONE").length;
-          return <section className="g-section" key={group.label}><div className="g-grow"><div className="g-lbl" style={{ "--rail": color }}><span className="nm">{group.label}</span><span className="g-gcount">{groupDone}/{group.tasks.length}</span></div><div className="g-track g-gtrack" style={{ width: `${ganttTrackWidth}px` }}>{days.map((day) => <div key={`${group.label}-${day.iso}`} className={`g-c ${day.weekend ? "we" : ""} ${day.iso === today ? "ref" : ""}`} />)}{todayIndex >= 0 && <div className="g-refline" style={{ left: `${todayIndex * GANTT_DAY_WIDTH}px` }} />}</div></div>{group.tasks.map((task) => {
+          return <section className="g-section" key={group.label}><div className="g-grow"><div className="g-lbl" style={{ "--rail": color }}><span className="nm">{group.label}</span><span className="g-gcount">{groupDone}/{group.tasks.length}</span></div><div className="g-track g-gtrack" style={{ width: `${ganttTrackWidth}px` }}>{days.map((day) => <div key={`${group.label}-${day.iso}`} className={`g-c${ganttMonthClass(day)} ${day.weekend ? "we" : ""} ${day.iso === today ? "ref" : ""}`} />)}{todayIndex >= 0 && <div className="g-refline" style={{ left: `${todayIndex * GANTT_DAY_WIDTH}px` }} />}</div></div>{group.tasks.map((task) => {
             const rowIndex = ganttRowIndexById.get(task.id);
             const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
             const scheduleSet = new Set(scheduleDates);
@@ -1707,7 +1710,7 @@ function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, canWrit
               const active = scheduleSet.has(day.iso);
               const starts = active && !scheduleSet.has(days[dayIndex - 1]?.iso);
               const ends = active && !scheduleSet.has(days[dayIndex + 1]?.iso);
-              return <div key={`${task.id}-${day.iso}`} data-r={task.id} data-ri={rowIndex} data-o={dayIndex} data-gantt-task-id={task.id} data-gantt-task-title={task.title} data-gantt-row-index={rowIndex} data-gantt-day-index={dayIndex} className={`g-c${day.weekend ? " we" : ""}${day.iso === today ? " ref" : ""}${active ? " on" : ""}${starts ? " rs" : ""}${ends ? " re" : ""}`} title={active ? `${task.title} · ${day.iso}` : day.iso} />;
+              return <div key={`${task.id}-${day.iso}`} data-r={task.id} data-ri={rowIndex} data-o={dayIndex} data-gantt-task-id={task.id} data-gantt-task-title={task.title} data-gantt-row-index={rowIndex} data-gantt-day-index={dayIndex} className={`g-c${ganttMonthClass(day)}${day.weekend ? " we" : ""}${day.iso === today ? " ref" : ""}${active ? " on" : ""}${starts ? " rs" : ""}${ends ? " re" : ""}`} title={active ? `${task.title} · ${day.iso}` : day.iso} />;
             })}{todayIndex >= 0 && <div className="g-refline" style={{ left: `${todayIndex * GANTT_DAY_WIDTH}px` }} />}</div></div>;
           })}</section>;
         })}

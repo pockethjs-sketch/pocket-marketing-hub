@@ -5036,6 +5036,21 @@ table tbody tr:hover {
   opacity: .85;
 }
 
+/* Consecutive calendar months keep their own background and boundary all the
+   way down the grid; today and painted task cells remain higher contrast. */
+.reference-gantt .g-d.month-tone-0,
+.reference-gantt .g-c.month-tone-0 { background: #fbfcff; }
+.reference-gantt .g-d.month-tone-1,
+.reference-gantt .g-c.month-tone-1 { background: #f0f5fb; }
+.reference-gantt .g-m.month-tone-0 { background: #e1e9f7; color: #263d66; }
+.reference-gantt .g-m.month-tone-1 { background: #d1deee; color: #263d66; }
+.reference-gantt .g-d.we,
+.reference-gantt .g-c.we { background: #e9edf5; }
+.reference-gantt .g-m + .g-m,
+.reference-gantt .month-start { box-shadow: inset 2px 0 #8296b6; }
+.reference-gantt .g-c.ref { background: #dce8ff; }
+.reference-gantt .g-d.ref { background: #0058ff; color: white; }
+
 .g-section {
   display: contents;
 }
@@ -10436,9 +10451,9 @@ table tbody tr:hover {
 }
 
 .campaign-schedule-surface .reference-task-table {
-  width: 1244px;
-  min-width: 1244px !important;
-  max-width: 1244px;
+  width: 100%;
+  min-width: var(--schedule-min-width, 1308px) !important;
+  max-width: none;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -10448,6 +10463,11 @@ table tbody tr:hover {
 
 .campaign-schedule-surface .reference-task-table th,
 .campaign-schedule-surface .reference-task-table td {
+  position: static;
+  left: auto;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
   height: auto;
   padding: 0;
   border: 0;
@@ -10483,17 +10503,7 @@ table tbody tr:hover {
   position: sticky;
   left: 0;
   z-index: 6;
-  width: 88px !important;
-  min-width: 88px !important;
-  max-width: 88px !important;
   border-left: 3px solid var(--media-color, #6e7177);
-  background: #fff;
-}
-
-.campaign-schedule-surface .reference-task-table thead th:first-child {
-  z-index: 10;
-  border-left-color: transparent;
-  background: #f7f8fa;
 }
 
 .campaign-schedule-surface .reference-task-table thead th:nth-child(2),
@@ -10501,36 +10511,28 @@ table tbody tr:hover {
   position: sticky;
   left: 88px;
   z-index: 6;
-  width: 290px !important;
-  min-width: 290px !important;
-  max-width: 290px !important;
-  background: #fff;
+}
+
+.campaign-schedule-surface .reference-task-table thead th:nth-child(3),
+.campaign-schedule-surface .reference-task-table tbody td:nth-child(3) {
+  position: sticky;
+  left: 152px;
+  z-index: 6;
   box-shadow: 1px 0 0 #dfe4ec;
 }
 
-.campaign-schedule-surface .reference-task-table thead th:nth-child(2) {
+.campaign-schedule-surface .reference-task-table thead th:nth-child(-n+3) {
   z-index: 10;
+  border-left-color: transparent;
   background: #f7f8fa;
 }
 
-.campaign-schedule-surface .reference-task-table th:nth-child(3),
-.campaign-schedule-surface .reference-task-table td:nth-child(3) { width: 200px; min-width: 200px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(4),
-.campaign-schedule-surface .reference-task-table td:nth-child(4) { width: 126px; min-width: 126px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(5),
-.campaign-schedule-surface .reference-task-table td:nth-child(5) { width: 44px; min-width: 44px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(6),
-.campaign-schedule-surface .reference-task-table td:nth-child(6) { width: 92px; min-width: 92px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(7),
-.campaign-schedule-surface .reference-task-table td:nth-child(7) { width: 54px; min-width: 54px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(8),
-.campaign-schedule-surface .reference-task-table td:nth-child(8) { width: 54px; min-width: 54px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(9),
-.campaign-schedule-surface .reference-task-table td:nth-child(9) { width: 105px; min-width: 105px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(10),
-.campaign-schedule-surface .reference-task-table td:nth-child(10) { width: 135px; min-width: 135px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(11),
-.campaign-schedule-surface .reference-task-table td:nth-child(11) { width: 56px; min-width: 56px; }
+.reference-task-workstream .reference-task-cell {
+  align-items: center;
+  color: #52627d;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 .campaign-schedule-surface .reference-task-table tbody tr:hover td,
 .campaign-schedule-surface .reference-task-table tbody tr:hover td:first-child,
@@ -10929,7 +10931,9 @@ table tbody tr:hover {
   .campaign-schedule-surface .reference-task-table thead th:first-child,
   .campaign-schedule-surface .reference-task-table tbody td:first-child,
   .campaign-schedule-surface .reference-task-table thead th:nth-child(2),
-  .campaign-schedule-surface .reference-task-table tbody td:nth-child(2) {
+  .campaign-schedule-surface .reference-task-table tbody td:nth-child(2),
+  .campaign-schedule-surface .reference-task-table thead th:nth-child(3),
+  .campaign-schedule-surface .reference-task-table tbody td:nth-child(3) {
     position: static;
     box-shadow: none;
   }

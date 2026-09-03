@@ -66,20 +66,22 @@ test("참고 캠페인 일정 화면이 업무 화면의 최상위 구조이며 
 });
 
 test("일정표는 참고 HTML 열 구조를 유지하며 셀 직접 수정과 상태·담당 클릭 저장을 제공한다", () => {
-  assert.match(appSource, /<th>매체<\/th><th>업무<\/th><th>세부내용<\/th><th>일정<\/th><th>기간<\/th><th>진행률<\/th><th>상태<\/th><th>담당<\/th><th>완료링크<\/th><th>비고<\/th>/);
+  assert.match(appSource, /<th>매체<\/th><th>업무분야<\/th><th>업무<\/th><th>세부내용<\/th><th>일정<\/th><th>기간<\/th><th>진행률<\/th><th>상태<\/th><th>담당<\/th><th>완료링크<\/th><th>비고<\/th>/);
   assert.match(appSource, /function TaskScheduleInlineRow/);
   assert.match(appSource, /onBlur=\{\(event\) => void commitField\("description"/);
   assert.match(appSource, /onBlur=\{\(event\) => void commitField\("completion_url"/);
   assert.match(appSource, /onClick=\{cycleStatus\}/);
   assert.match(appSource, /onClick=\{cycleOwner\}/);
   assert.match(appSource, /schedule_dates_json: start && end \? serializeScheduleDates\(scheduleDateRange\(start, end\)\) : null/);
-  assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*min-width:\s*1244px/);
+  assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*width:\s*100%/);
+  assert.match(styleSource, /min-width:\s*var\(--schedule-min-width, 1308px\)/);
   assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*table-layout:\s*fixed/);
   assert.match(styleSource, /\.reference-task-cell\s*\{[\s\S]*min-height:\s*32px/);
   assert.match(appSource, /className="reference-task-media"[\s\S]*<span><i aria-hidden="true" \/>\{media\}<\/span>/);
   assert.match(appSource, /className="reference-task-cell task-inline-date-range"[\s\S]*commitField\("date_range"\)/);
   assert.match(appSource, /function CompactTaskDateInput/);
-  assert.match(appSource, /const columnWidths = \[88, 290, 200, 126, 44, 92, 54, 54, 105, 135\]/);
+  assert.match(appSource, /const columnWidths = \[88, 64, null, 200, 126, 44, 92, 54, 54, 105, 135\]/);
+  assert.match(appSource, /reference-task-workstream[\s\S]*taskScheduleCategory\(task\)/);
   assert.match(appSource, /fields = taskStatusMutationFields\(value\)/);
   assert.match(styleSource, /\.reference-task-detail \.task-inline-textarea[\s\S]*field-sizing:\s*content/);
   assert.match(styleSource, /\.reference-task-detail \.task-inline-textarea[\s\S]*max-height:\s*calc\(2 \* 1\.45em \+ 6px\)/);
