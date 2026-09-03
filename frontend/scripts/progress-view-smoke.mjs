@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 const fixture = `
 import React, {useState} from "react";
 import {createRoot} from "react-dom/client";
-import {ProgressView} from "./src/ProgressView.jsx";
+import {ProjectProgressView} from "./src/App.jsx";
 import "./src/styles.css";
 window.meetingCalls = 0;
 window.failWrite = false;
@@ -28,8 +28,8 @@ function Harness() {
   window.setTestRole = setRole;
   window.setTestProject = setProject;
   const [tasks] = useState([
-    {id:"1",title:"완료 업무",statusCode:"DONE",status:"완료",description:"제작 완료",updatedAt:"2026-09-02",owner:"NS"},
-    {id:"2",title:"이번 주 제작",statusCode:"NOT_STARTED",plannedStartDate:"2026-09-03",dueDate:"2026-09-04",scheduleDates:null,owner:"NS"}
+    {id:"1",title:"완료 업무",categoryCode:"YOUTUBE",statusCode:"DONE",status:"완료",description:"제작 완료",updatedAt:"2026-09-02",owner:"NS",responsibleOrgCode:"NS",plannedStartDate:"2026-09-01",dueDate:"2026-09-02",createdAt:"2026-09-03T06:00:00Z"},
+    {id:"2",title:"이번 주 제작",categoryCode:"INSTAGRAM",statusCode:"NOT_STARTED",plannedStartDate:"2026-09-03",dueDate:"2026-09-04",scheduleDates:null,owner:"NS",responsibleOrgCode:"NS",createdAt:new Date(Date.now()-1000).toISOString()}
   ]);
   const create = async fields => {
     if(window.failWrite)throw Error("QA 저장 실패");
@@ -39,11 +39,11 @@ function Harness() {
     if(window.failWrite)throw Error("QA 저장 실패");
     setIssues(current => current.map(row => row.id === issue.id ? {...row, statusCode:fields.status_code || row.statusCode,remarks:fields.remarks ?? row.remarks,rowVersion:row.rowVersion+1} : row));
   };
-  return <main style={{padding:24}}><ProgressView key={role+projectId} project={{id:projectId,name:"QA 프로젝트",clientName:"고객사",allowedPages:role === "client" ? ["tasks"] : ["tasks","daily"]}} role={role} actorName="QA 담당자" source={source} taskPage={{items:projectId==="1"?tasks:[],issues:projectId==="1"?issues:[],issueCanWrite:role!=="client"}} canWrite={role!=="client"} onIssueCreate={create} onIssueUpdate={update} onNavigate={view=>window.navigated=view} /></main>;
+  return <main style={{padding:24}}><ProjectProgressView key={role+projectId} project={{id:projectId,name:"QA 프로젝트",clientName:"고객사",allowedPages:role === "client" ? ["tasks"] : ["tasks","daily"]}} role={role} actorName="QA 담당자" source={source} taskPage={{items:projectId==="1"?tasks:[],issues:projectId==="1"?issues:[],issueCanWrite:role!=="client"}} canWrite={role!=="client"} onIssueCreate={create} onIssueUpdate={update} onNavigate={view=>window.navigated=view} /></main>;
 }
 createRoot(document.getElementById("root")).render(<Harness />);
 `;
-const result = await build({ stdin:{contents:fixture,resolveDir:process.cwd(),loader:"jsx"}, bundle:true, write:false, outfile:"qa.js", jsx:"automatic" });
+const result = await build({ stdin:{contents:fixture,resolveDir:process.cwd(),loader:"jsx"}, bundle:true, write:false, outfile:"qa.js", jsx:"automatic", define:{"import.meta.env":"{}"} });
 const js = result.outputFiles.find(file=>file.path.endsWith(".js")).text;
 const css = result.outputFiles.find(file=>file.path.endsWith(".css")).text;
 const server = createServer((req,res)=>{
@@ -74,6 +74,17 @@ try {
   await send("Page.navigate",{url:`http://127.0.0.1:${server.address().port}`});
   await wait('document.querySelector(".pb-meeting")');
   assert.equal(await evaluate('document.querySelectorAll(".pb-work-grid .pb-panel").length'),2);
+  assert.ok(await evaluate('document.querySelector(".pb-heading h1").textContent.endsWith("진행상황")'));
+  await wait('document.querySelectorAll(".pb-schedule .g-row").length===2');
+  assert.ok(await evaluate('document.querySelector(".pb-schedule").getBoundingClientRect().top >= document.querySelector(".pb-work-grid").getBoundingClientRect().bottom'));
+  assert.equal(await evaluate('document.querySelectorAll(".pb-schedule .task-workspace-tabs,.pb-schedule .schedule-filter-panel,.pb-schedule .project-issue-panel,.pb-schedule .task-schedule-create,.pb-schedule .paint").length'),0);
+  assert.equal(await evaluate('document.querySelectorAll(".pb-schedule .g-new-badge").length'),1,"only tasks after reset are new");
+  const painted=await evaluate('document.querySelectorAll(".pb-schedule .g-c.on").length');
+  await evaluate('document.querySelector(".pb-schedule .g-c[data-gantt-task-id]").dispatchEvent(new PointerEvent("pointerdown",{bubbles:true,button:0}));window.dispatchEvent(new PointerEvent("pointerup"));');
+  assert.equal(await evaluate('document.querySelectorAll(".pb-schedule .g-c.on").length'),painted,"summary Gantt is read-only");
+  await send("Emulation.setDeviceMetricsOverride",{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
+  if(process.env.QA_SCREENSHOT){const shot=await send("Page.captureScreenshot",{format:"png"});await writeFile(process.env.QA_SCREENSHOT,Buffer.from(shot.data,"base64"));}
+  await evaluate('document.querySelector(".pb-collab-details > summary").click()');
   await click("확인 요청 올리기");
   await fill(".pb-request-form input","검토 요청");
   await fill(".pb-request-form textarea","내용 확인해주세요");
@@ -98,15 +109,18 @@ try {
   await evaluate('(()=>{const s=document.querySelector(".pb-review-toolbar select");s.value="all";s.dispatchEvent(new Event("change",{bubbles:true}));})()');
   await wait('document.querySelector(".pb-request")');
   await send("Emulation.setDeviceMetricsOverride",{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
-  if(process.env.QA_SCREENSHOT){const shot=await send("Page.captureScreenshot",{format:"png"});await writeFile(process.env.QA_SCREENSHOT,Buffer.from(shot.data,"base64"));}
   const calls=await evaluate("window.meetingCalls");
   await evaluate('window.setTestRole("client")');
   await wait('document.querySelector(".pb-empty")?.textContent.includes("회의록 조회 권한")');
   assert.equal(await evaluate("window.meetingCalls"),calls);
   assert.equal(await evaluate('document.querySelectorAll(".pb-request-actions, .pb-request-form").length'),0);
+  assert.equal(await evaluate('document.querySelectorAll(".pb-schedule .otag").length'),0,"client Gantt hides executor identity");
   assert.ok(!await evaluate('document.querySelector(".progress-brief").textContent.includes("내부 논의")'));
+  await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(150);
+  assert.ok(await evaluate("document.documentElement.scrollWidth <= 390"),"populated Gantt uses inner scroll on mobile");
   await evaluate('window.setTestProject("2")');
   await wait('document.querySelectorAll(".pb-task, .pb-request").length===0');
+  assert.equal(await evaluate('document.querySelectorAll(".pb-schedule .g-row").length'),0,"project switch clears Gantt rows");
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await delay(150);
   assert.ok(await evaluate("document.documentElement.scrollWidth <= 390"),"mobile overflow");

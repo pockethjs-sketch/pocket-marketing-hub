@@ -28,7 +28,7 @@ function Harness() {
   return <div className={"app-shell has-sidebar-workspace "+(nav.projectSidebarCollapsed?"is-sidebar-collapsed ":"")+(nav.isDrawerOpen?"is-navigation-drawer-open":"")}>
     <ProjectSidebar project={project} role={role} clients={clients} activeClient={active} onSelectClient={setActive} activeView={view} activePlanVariant="client" onView={setView} open={nav.isDrawerOpen} onClose={()=>setDrawer(false)} taskCount={0} visible={nav.projectSidebarVisible} navigation={nav} onToggleNavigation={toggle} canCreateProject={role!=="client"} onCreateProject={()=>window.created=(window.created||0)+1} onImportQuote={()=>window.imported=(window.imported||0)+1}/>
     {nav.isDrawerOpen&&<button className="mobile-overlay" aria-label="메뉴 닫기" onClick={()=>setDrawer(false)}/>}
-    <div className="app-main"><Topbar project={project} actor={{name:"포켓컴퍼니",role}} search="" setSearch={()=>{}} notificationTasks={[]} notificationsLoaded={true}/><main className="content-canvas"><h1>{view==="tasks"?"업무":view==="progress"?"진행사항":view}</h1><p>실제 화면 컴포넌트의 탐색·배치 검사용 화면입니다.</p></main></div>
+    <div className="app-main"><Topbar project={project} actor={{name:"포켓컴퍼니",role}} search="" setSearch={()=>{}} notificationTasks={[]} notificationsLoaded={true}/><main className="content-canvas"><h1>{view==="tasks"?"업무":view==="progress"?"진행상황":view}</h1><p>실제 화면 컴포넌트의 탐색·배치 검사용 화면입니다.</p></main></div>
   </div>;
 }
 createRoot(document.getElementById("root")).render(<Harness/>);
@@ -65,7 +65,7 @@ try {
   assert.equal(await width(".project-sidebar"),264);
   assert.equal(await evaluate('document.querySelector(".app-main").getBoundingClientRect().left'),264);
   assert.equal(await evaluate('document.querySelectorAll(".sidebar-company-list button").length'),3);
-  assert.deepEqual(await evaluate('[...document.querySelectorAll("#project-page-links button")].map(b=>b.textContent)'),["업무","진행사항","데일리 회의록"]);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll("#project-page-links button")].map(b=>b.textContent)'),["업무","진행상황","데일리 회의록"]);
   await click(".project-group-toggle");
   assert.equal(await evaluate('document.querySelector("#project-page-links")'),null);
   assert.equal(await evaluate('document.querySelector("main h1").textContent'),"업무","project folder must not navigate");
@@ -74,8 +74,8 @@ try {
   await click(".sidebar-company-list button:nth-child(2)");
   assert.equal(await evaluate('document.querySelector(".topbar-project-context small").textContent'),"무극");
   assert.equal(await width(".project-sidebar"),264,"desktop selection stays expanded");
-  await evaluate('[...document.querySelectorAll(".project-nav button")].find(b=>b.textContent==="진행사항").click()');
-  await wait('document.querySelector("main h1").textContent==="진행사항"');
+  await evaluate('[...document.querySelectorAll(".project-nav button")].find(b=>b.textContent==="진행상황").click()');
+  await wait('document.querySelector("main h1").textContent==="진행상황"');
   assert.equal(await evaluate('document.querySelectorAll("#project-page-links .is-active").length'),1);
   assert.equal(await evaluate('document.querySelector(".project-group-toggle").classList.contains("is-active")'),false,"folder is not a selected page");
   await click(".sidebar-project-create");await click(".sidebar-project-import");
@@ -87,7 +87,7 @@ try {
   assert.ok(await evaluate('document.querySelector(".sidebar-workspace-scroll").scrollHeight>document.querySelector(".sidebar-workspace-scroll").clientHeight'),"short screens scroll menus only");
   assert.ok(await evaluate('Math.abs(document.querySelector(".sidebar-project-tools").getBoundingClientRect().bottom-innerHeight)<2'),"actions stay pinned on short screens");
   await click(".sidebar-toggle");assert.equal(await width(".project-sidebar"),56);
-  assert.equal(await evaluate('document.querySelector("main h1").textContent'),"진행사항","collapse does not navigate");
+  assert.equal(await evaluate('document.querySelector("main h1").textContent'),"진행상황","collapse does not navigate");
   await evaluate('window.setTestRole("client")');await click(".sidebar-toggle");
   assert.equal(await evaluate('document.querySelectorAll(".sidebar-project-tools").length'),0,"client creation stays forbidden");
   await evaluate('window.setTestPages(["daily"])');await delay(80);
@@ -98,6 +98,9 @@ try {
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await delay(180);assert.equal(await width(".project-sidebar"),56);
   await click(".sidebar-toggle");assert.equal(await width(".project-sidebar"),280);
+  // The preceding short-screen scenario leaves the menu scrolled to its end.
+  // Bring company choices into view before checking mobile hit-testing.
+  await evaluate('document.querySelector(".sidebar-workspace-scroll").scrollTop=0');await delay(80);
   assert.ok(await evaluate('(()=>{const b=document.querySelector(".sidebar-company-list button"),r=b.getBoundingClientRect();return b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()'),"mobile drawer is clickable above overlay");
   await click(".sidebar-company-list button:first-child");
   assert.equal(await width(".project-sidebar"),56,"mobile selection closes drawer");

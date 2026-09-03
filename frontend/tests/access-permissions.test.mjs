@@ -26,7 +26,7 @@ test("운영 메뉴와 고객 권한 선택지는 페이지 카탈로그에서 �
   assert.deepEqual(NAVIGATION_PAGE_OPTIONS.map((page) => page.id), ["overview", "plan", "tasks", "progress", "daily", "performance", "files"]);
 });
 
-test("프로젝트는 업무·진행사항·회의록의 탐색 폴더이며 별도 페이지 권한을 만들지 않는다", () => {
+test("프로젝트는 업무·진행상황·회의록의 탐색 폴더이며 별도 페이지 권한을 만들지 않는다", () => {
   assert.deepEqual(PROJECT_NAVIGATION_GROUP.pageIds, ["tasks", "progress", "daily"]);
   assert.equal(PROJECT_NAVIGATION_GROUP.label, "프로젝트");
   assert.equal(NAVIGATION_PAGE_OPTIONS.some(page => page.id === PROJECT_NAVIGATION_GROUP.id), false);

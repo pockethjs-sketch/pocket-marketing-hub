@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, Check, MessageSquare, Plus, RefreshCw, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, MessageSquare, Plus, RefreshCw, X } from "lucide-react";
 import { dailyMeetingsViewModel } from "./api/viewModel.js";
 import { isViewAllowed } from "./accessPermissions.js";
 import { appendBriefReply, briefRequestFields, latestBriefMeeting, progressBriefTasks, publicHttpLink } from "./progressBrief.js";
 import "./progressView.css";
 
 const shortDate = value => value ? String(value).slice(5, 10).replace("-", ".") : "미정";
-const statusLabels = { NOT_STARTED: "미착수", IN_PROGRESS: "진행 중", DONE: "완료", REVIEW: "검토 중", BLOCKED: "차단", ON_HOLD: "보류" };
+const statusLabels = { NOT_STARTED: "미착수", IN_PROGRESS: "진행 중", DONE: "완료", COMPLETED: "완료", REVIEW: "검토 중", INTERNAL_REVIEW: "검토 중", WAITING_CLIENT: "고객 확인", REVISION: "수정 중", BLOCKED: "차단", ON_HOLD: "보류" };
 function Tag({ code, children }) {
-  return <span className={`pb-tag ${code === "DONE" ? "is-done" : ["ON_HOLD", "BLOCKED"].includes(code) ? "is-wait" : ""}`}>{children || statusLabels[code] || code}</span>;
+  return <span className={`pb-tag ${["DONE", "COMPLETED"].includes(code) ? "is-done" : ["ON_HOLD", "BLOCKED"].includes(code) ? "is-wait" : ""}`}>{children || statusLabels[code] || code}</span>;
 }
 function Empty({ children }) { return <p className="pb-empty">{children}</p>; }
 function Link({ value, children = "자료 열기" }) {
@@ -72,7 +72,7 @@ function RequestCard({ issue, canWrite, actorName, onUpdate }) {
     {error && <p className="pb-error" role="alert">{error}</p>}
   </article>;
 }
-export function ProgressView({ project, role, taskPage, source, actorName, canWrite, onIssueCreate, onIssueUpdate, onNavigate }) {
+export function ProgressView({ project, role, taskPage, source, actorName, canWrite, onIssueCreate, onIssueUpdate, onNavigate, schedule }) {
   const [now, setNow] = useState(() => new Date());
   const [meetingState, setMeetingState] = useState({ status: "loading", items: [] });
   const [meetingRetry, setMeetingRetry] = useState(0);
@@ -98,12 +98,13 @@ export function ProgressView({ project, role, taskPage, source, actorName, canWr
   const requests = issues.filter(issue => filter === "all" || (filter === "done" ? issue.statusCode === "DONE" : issue.statusCode !== "DONE"));
   const owners = [...new Set([project.clientName || "고객사", "포켓컴퍼니", "NS"])];
   return <div className="progress-brief">
-    <div className="pb-heading"><div><small>프로젝트 / 진행사항</small><h1>{project.name} · 진행사항</h1><p>진행된 업무와 이번 주 계획, 지난 회의와 확인할 내용을 공유합니다.</p></div><span>{shortDate(week.start)} — {shortDate(week.end)} · 이번 주</span></div>
+    <div className="pb-heading"><div><small>프로젝트 / 진행상황</small><h1>{project.name} · 진행상황</h1><p>지금까지 진행된 업무와 이번 주 예정 업무, 전체 일정을 한눈에 확인합니다.</p></div><span>{shortDate(week.start)} — {shortDate(week.end)} · 이번 주</span></div>
     <div className="pb-work-grid">
-      <TaskColumn title="진행된 업무" subtitle="실제 상태 기준 · 최근 갱신순" items={progressed} client={client} onTasks={() => onNavigate("tasks")} />
+      <TaskColumn title="지금까지 진행된 업무" subtitle="완료·진행·검토·보류 포함 · 최근 갱신순" items={progressed} client={client} onTasks={() => onNavigate("tasks")} />
       <TaskColumn title="이번 주 진행 예정 업무" subtitle="월요일–일요일 · 등록 일정 기준" items={planned} planned client={client} onTasks={() => onNavigate("tasks")} />
     </div>
-    <div className="pb-collab-grid">
+    {schedule && <section className="pb-schedule" aria-label="프로젝트 전체 간트 일정"><div className="pb-schedule-heading"><div><h2>전체 업무 일정</h2><p>업무 탭과 같은 일정 · 간트 조회</p></div><button type="button" onClick={() => onNavigate("tasks")}>{canWrite ? "업무에서 수정" : "업무 보기"} <ArrowUpRight size={13} /></button></div>{schedule}</section>}
+    <details className="pb-collab-details"><summary>지난 회의 · 확인 요청 <ChevronDown size={16}/></summary><div className="pb-collab-grid">
       <section className="pb-panel"><header><h2>지난 회의 내용</h2>{canReadMeetings && <button onClick={() => onNavigate("daily")}>회의록 보기 <ArrowUpRight size={13} /></button>}</header>
         {meetingState.status === "loading" ? <Empty>회의 내용을 불러오는 중입니다.</Empty>
         : meetingState.status === "forbidden" ? <Empty>회의록 조회 권한이 필요합니다. 관리자에게 공개 범위를 확인해 주세요.</Empty>
@@ -117,6 +118,6 @@ export function ProgressView({ project, role, taskPage, source, actorName, canWr
         {requests.length ? (allRequests ? requests : requests.slice(0, 5)).map(issue => <RequestCard key={issue.id} issue={issue} canWrite={canWriteIssues} actorName={actorName} onUpdate={onIssueUpdate} />) : <Empty>해당 상태의 확인 요청이 없습니다.</Empty>}
         {requests.length > 5 && <button className="pb-more" onClick={() => setAllRequests(value => !value)}>{allRequests ? "간단히 보기" : `전체 ${requests.length}건 펼치기`}</button>}
       </section>
-    </div>
+    </div></details>
   </div>;
 }

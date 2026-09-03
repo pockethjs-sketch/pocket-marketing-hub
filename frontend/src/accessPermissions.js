@@ -1,8 +1,8 @@
 export const PAGE_CATALOG = Object.freeze([
   Object.freeze({ id: "overview", label: "총괄 현황", description: "프로젝트 요약과 최근 업데이트", navigation: true, customerSelectable: true }),
   Object.freeze({ id: "plan", label: "실행계획", description: "클라이언트 공유용 실행계획", navigation: true, customerSelectable: true }),
-  Object.freeze({ id: "tasks", label: "업무", description: "업무 목록·일정표·업무 로그·진행사항", navigation: true, customerSelectable: true }),
-  Object.freeze({ id: "progress", label: "진행사항", permissionId: "tasks", navigation: true, customerSelectable: false, nested: true }),
+  Object.freeze({ id: "tasks", label: "업무", description: "업무 목록·일정표·업무 로그·진행상황", navigation: true, customerSelectable: true }),
+  Object.freeze({ id: "progress", label: "진행상황", permissionId: "tasks", navigation: true, customerSelectable: false, nested: true }),
   Object.freeze({ id: "schedule", label: "일정표", permissionId: "tasks", navigation: false, customerSelectable: false, nested: true }),
   Object.freeze({ id: "daily", label: "데일리 회의록", description: "날짜별 회의 내용과 후속 업무", navigation: true, customerSelectable: true, nested: true }),
   Object.freeze({ id: "content", label: "콘텐츠", navigation: false, customerSelectable: false }),

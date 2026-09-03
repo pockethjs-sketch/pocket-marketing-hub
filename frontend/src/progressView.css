@@ -7,6 +7,17 @@
 .pb-heading > span { flex-shrink:0; background:#edf1fa; color:#223760; padding:9px 13px; border-radius:9px; font-size:11px; }
 .pb-work-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; margin-bottom:16px; align-items:start; }
 .pb-collab-grid { display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.3fr); gap:16px; align-items:start; }
+.pb-schedule { min-width:0; margin:24px 0 20px; }
+.pb-schedule-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.pb-schedule-heading h2 { margin:0 0 5px; font-size:16px; }
+.pb-schedule-heading p { margin:0; color:var(--pb-muted); font-size:11px; }
+.pb-schedule-heading button { display:flex; gap:5px; align-items:center; border:1px solid var(--pb-line); border-radius:8px; background:#fff; color:#24375e; font:inherit; font-size:11px; padding:8px 10px; white-space:nowrap; }
+.pb-schedule .campaign-schedule-board .reference-schedule-panel .reference-gantt-scroll { min-height:0; max-height:520px; }
+.pb-schedule .g-task-open:disabled { opacity:1; color:inherit; cursor:default; }
+.pb-collab-details > summary { display:flex; align-items:center; gap:8px; padding:14px 0; cursor:pointer; list-style:none; color:#52617b; font-size:12px; font-weight:700; }
+.pb-collab-details > summary::-webkit-details-marker { display:none; }
+.pb-collab-details[open] > summary svg { transform:rotate(180deg); }
+.pb-schedule-heading button:focus-visible, .pb-collab-details > summary:focus-visible { outline:2px solid #526b9f; outline-offset:3px; }
 .pb-panel { background:white; border:1px solid var(--pb-line); border-radius:15px; box-shadow:0 5px 18px #1a2d4b06; overflow:hidden; min-width:0; }
 .pb-panel > header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:15px 18px; border-bottom:1px solid var(--pb-line); min-height:59px; }
 .pb-panel h2 { font-size:14px; margin:0; font-weight:800; }

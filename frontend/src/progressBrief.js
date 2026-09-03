@@ -15,10 +15,10 @@ export function briefWeek(now = new Date()) {
 
 export function progressBriefTasks(tasks = [], now = new Date()) {
   const week = briefWeek(now);
-  const progressed = tasks.filter(task => ["DONE", "IN_PROGRESS", "REVIEW", "BLOCKED", "ON_HOLD"].includes(task.statusCode))
+  const progressed = tasks.filter(task => ["DONE", "COMPLETED", "IN_PROGRESS", "REVIEW", "INTERNAL_REVIEW", "WAITING_CLIENT", "REVISION", "BLOCKED", "ON_HOLD"].includes(task.statusCode))
     .slice().sort((a, b) => String(b.updatedAt || b.completedAt || "").localeCompare(String(a.updatedAt || a.completedAt || "")));
   const planned = tasks.filter(task => {
-    if (["DONE", "CANCELLED"].includes(task.statusCode)) return false;
+    if (["DONE", "COMPLETED", "CANCELLED"].includes(task.statusCode)) return false;
     const explicit = normalizeScheduleDates(task.scheduleDates);
     if (explicit !== null) return explicit.some(day => day >= week.start && day <= week.end);
     const start = task.plannedStartDate || task.dueDate;

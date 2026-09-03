@@ -5,8 +5,9 @@ import { appendBriefReply, briefRequestFields, briefWeek, latestBriefMeeting, pr
 import { parseViewLocation, viewLocationHash, viewResourceKey } from "../src/planNavigation.js";
 import { isViewAllowed, NAVIGATION_PAGE_OPTIONS } from "../src/accessPermissions.js";
 
-test("진행사항은 업무 바로 아래에 위치하고 업무 권한·캐시를 재사용한다", () => {
+test("진행상황은 업무 바로 아래에 위치하고 업무 권한·캐시를 재사용한다", () => {
   assert.equal(NAVIGATION_PAGE_OPTIONS[NAVIGATION_PAGE_OPTIONS.findIndex(page => page.id === "tasks") + 1].id, "progress");
+  assert.equal(NAVIGATION_PAGE_OPTIONS.find(page => page.id === "progress").label, "진행상황");
   assert.deepEqual(parseViewLocation("#tasks/progress"), { view: "progress", planVariant: "client" });
   assert.equal(viewLocationHash("progress"), "tasks/progress");
   assert.equal(viewResourceKey("progress"), "tasks");
@@ -43,6 +44,13 @@ test("지난 회의는 미래 회의를 제외하고 고객에게 공개본만 �
   assert.equal(latestBriefMeeting([], {client:true}), null);
 });
 
+test("완료 별칭과 검토 중 업무도 진행상황에서 누락하지 않는다", () => {
+  const rows = ["COMPLETED","INTERNAL_REVIEW","WAITING_CLIENT","REVISION"].map(statusCode=>({id:statusCode,statusCode,plannedStartDate:"2026-09-01",dueDate:"2026-09-04"}));
+  const result = progressBriefTasks(rows,new Date("2026-09-03T00:00:00Z"));
+  assert.equal(result.progressed.length,4);
+  assert.equal(result.planned.some(task=>task.statusCode==="COMPLETED"),false);
+});
+
 test("확인 요청은 기존 issue 필드만 저장하며 위험한 링크를 차단한다", () => {
   assert.equal(publicHttpLink("javascript:alert(1)"), null);
   assert.equal(publicHttpLink("file:///secret"), null);
@@ -60,7 +68,7 @@ test("답변은 기존 기록을 보존하고 원장 제한을 넘기지 않는�
   assert.throws(() => appendBriefReply({remarks:"x".repeat(10000)}, "new", "담당자"));
 });
 
-test("실서비스 진행사항은 시안 대신 실제 원장을 읽고 쓰기를 공통 잠금에 연결한다", async () => {
+test("실서비스 진행상황은 시안 대신 실제 원장을 읽고 쓰기를 공통 잠금에 연결한다", async () => {
   const view = await readFile(new URL("../src/ProgressView.jsx", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   assert.ok(view.includes('source.dailyMeetings({ projectId: project.id'));
@@ -71,6 +79,10 @@ test("실서비스 진행사항은 시안 대신 실제 원장을 읽고 쓰기�
   assert.ok(app.includes('key={project.id}'));
   assert.ok(app.includes('view === "progress") return source.tasks(params)'));
   assert.ok(!view.includes("dashboard-prototype"));
+  assert.ok(app.includes('view === "progress") return <ProjectProgressView'));
+  assert.ok(app.includes('displayMode="gantt" summaryOnly canWrite={false}'));
+  assert.ok(app.includes('showOwners={props.role !== "client"}'));
+  assert.ok(view.indexOf('className="pb-work-grid"') < view.indexOf('className="pb-schedule"'));
   const navigation = app.slice(app.indexOf("const navigateToView ="), app.indexOf("const toggleNavigation ="));
   assert.ok(navigation.includes("setView(nextView)"));
   assert.ok(!navigation.includes("nextProject"));
