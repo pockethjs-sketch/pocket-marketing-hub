@@ -10430,9 +10430,9 @@ table tbody tr:hover {
 }
 
 .campaign-schedule-surface .reference-task-table {
-  width: 1350px;
-  min-width: 1350px !important;
-  max-width: 1350px;
+  width: 1244px;
+  min-width: 1244px !important;
+  max-width: 1244px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -10477,9 +10477,9 @@ table tbody tr:hover {
   position: sticky;
   left: 0;
   z-index: 6;
-  width: 94px !important;
-  min-width: 94px !important;
-  max-width: 94px !important;
+  width: 88px !important;
+  min-width: 88px !important;
+  max-width: 88px !important;
   border-left: 3px solid var(--media-color, #6e7177);
   background: #fff;
 }
@@ -10493,11 +10493,11 @@ table tbody tr:hover {
 .campaign-schedule-surface .reference-task-table thead th:nth-child(2),
 .campaign-schedule-surface .reference-task-table tbody td:nth-child(2) {
   position: sticky;
-  left: 94px;
+  left: 88px;
   z-index: 6;
-  width: 176px !important;
-  min-width: 176px !important;
-  max-width: 176px !important;
+  width: 170px !important;
+  min-width: 170px !important;
+  max-width: 170px !important;
   background: #fff;
   box-shadow: 1px 0 0 #dfe4ec;
 }
@@ -10508,25 +10508,23 @@ table tbody tr:hover {
 }
 
 .campaign-schedule-surface .reference-task-table th:nth-child(3),
-.campaign-schedule-surface .reference-task-table td:nth-child(3) { width: 190px; min-width: 190px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(3) { width: 250px; min-width: 250px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(4),
-.campaign-schedule-surface .reference-task-table td:nth-child(4),
+.campaign-schedule-surface .reference-task-table td:nth-child(4) { width: 196px; min-width: 196px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(5),
-.campaign-schedule-surface .reference-task-table td:nth-child(5) { width: 132px; min-width: 132px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(5) { width: 44px; min-width: 44px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(6),
-.campaign-schedule-surface .reference-task-table td:nth-child(6) { width: 58px; min-width: 58px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(6) { width: 92px; min-width: 92px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(7),
-.campaign-schedule-surface .reference-task-table td:nth-child(7) { width: 100px; min-width: 100px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(7) { width: 54px; min-width: 54px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(8),
-.campaign-schedule-surface .reference-task-table td:nth-child(8) { width: 72px; min-width: 72px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(8) { width: 54px; min-width: 54px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(9),
-.campaign-schedule-surface .reference-task-table td:nth-child(9) { width: 76px; min-width: 76px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(9) { width: 105px; min-width: 105px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(10),
-.campaign-schedule-surface .reference-task-table td:nth-child(10) { width: 110px; min-width: 110px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(10) { width: 135px; min-width: 135px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(11),
-.campaign-schedule-surface .reference-task-table td:nth-child(11) { width: 150px; min-width: 150px; }
-.campaign-schedule-surface .reference-task-table th:nth-child(12),
-.campaign-schedule-surface .reference-task-table td:nth-child(12) { width: 60px; min-width: 60px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(11) { width: 56px; min-width: 56px; }
 
 .campaign-schedule-surface .reference-task-table tbody tr:hover td,
 .campaign-schedule-surface .reference-task-table tbody tr:hover td:first-child,
@@ -10588,9 +10586,21 @@ table tbody tr:hover {
 
 .task-inline-textarea {
   min-height: 24px;
-  height: 24px;
+  height: auto;
   padding: 3px 4px;
-  resize: vertical;
+  resize: none;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.reference-task-detail .task-inline-textarea {
+  field-sizing: content;
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  min-height: 24px;
+  overflow-y: hidden;
+  line-height: 1.45;
 }
 
 .task-inline-input:not([readonly]):hover,
@@ -10636,9 +10646,29 @@ table tbody tr:hover {
 .reference-task-duration .reference-task-cell {
   padding-top: 7px;
   color: #667085;
-  text-align: right;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.task-inline-date-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 11px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  padding-inline: 4px;
+}
+
+.task-inline-date-range > svg {
+  color: #98a2b3;
+}
+
+.task-inline-date-range .task-inline-date {
+  min-height: 24px;
+  padding: 2px 1px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: -.02em;
 }
 
 .task-inline-progress {
@@ -10686,6 +10716,7 @@ table tbody tr:hover {
   font: inherit;
   font-size: 10px;
   font-weight: 750;
+  padding: 2px 4px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -10700,8 +10731,12 @@ table tbody tr:hover {
   cursor: default;
 }
 
-.task-inline-owner {
-  padding: 2px 7px;
+.reference-task-status .reference-task-cell,
+.reference-task-owner .reference-task-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 2px;
 }
 
 .task-inline-owner.is-pocket { background: #e8eefc; color: #244c9e; }

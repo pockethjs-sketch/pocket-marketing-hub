@@ -169,15 +169,40 @@ try {
     const rows = Array.from(document.querySelectorAll('.reference-task-row'));
     const labels = rows.map((row) => row.querySelector('.reference-task-media span')?.textContent.trim() || '');
     return {
+      rowCount: rows.length,
       groupStarts: rows.filter((row) => row.classList.contains('is-media-group-start')).length,
       visibleLabels: labels.filter(Boolean),
       repeatedAdjacentLabels: labels.some((label, index) => label && labels[index - 1] === label),
       tableWidth: getComputedStyle(document.querySelector('.reference-task-table')).width,
+      tableLayout: getComputedStyle(document.querySelector('.reference-task-table')).tableLayout,
       firstRowHeight: rows[0] ? getComputedStyle(rows[0]).height : '',
+      dateRangeCells: document.querySelectorAll('.task-inline-date-range').length,
+      firstCellHeights: rows[0] ? Array.from(rows[0].cells).map((cell) => { const style = getComputedStyle(cell); return { className: cell.className, width: cell.getBoundingClientRect().width, cssWidth: style.width, minWidth: style.minWidth, maxWidth: style.maxWidth, cell: cell.getBoundingClientRect().height, child: cell.firstElementChild?.getBoundingClientRect().height || 0 }; }) : [],
+      detailMetrics: rows[0] ? (() => { const el = rows[0].querySelector('.reference-task-detail textarea'); const style = getComputedStyle(el); return { value: el.value, width: style.width, clientWidth: el.clientWidth, height: style.height, lineHeight: style.lineHeight, fieldSizing: style.fieldSizing, scrollHeight: el.scrollHeight }; })() : null,
     };
   })()`);
-  assert(scheduleGrouping.groupStarts === scheduleGrouping.visibleLabels.length && !scheduleGrouping.repeatedAdjacentLabels, `Schedule media grouping drifted: ${JSON.stringify(scheduleGrouping)}`);
-  assert(scheduleGrouping.tableWidth === "1350px" && parseFloat(scheduleGrouping.firstRowHeight) <= 36, `Schedule density drifted: ${JSON.stringify(scheduleGrouping)}`);
+  assert(scheduleGrouping.visibleLabels.length === scheduleGrouping.rowCount && scheduleGrouping.repeatedAdjacentLabels, `Every schedule row must repeat its media label: ${JSON.stringify(scheduleGrouping)}`);
+  assert(scheduleGrouping.dateRangeCells === scheduleGrouping.rowCount, `Schedule dates are not grouped into one compact cell: ${JSON.stringify(scheduleGrouping)}`);
+  assert(scheduleGrouping.tableWidth === "1244px" && parseFloat(scheduleGrouping.firstRowHeight) <= 36, `Schedule density drifted: ${JSON.stringify(scheduleGrouping)}`);
+  await evaluate(client, `(() => {
+    const textarea = document.querySelector('.reference-task-detail .task-inline-textarea');
+    window.__scheduleSmokeDetail = textarea.value;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    setValue.call(textarea, '긴 세부내용은 별도 펼치기 없이 셀 너비에 맞춰 여러 줄로 자동 줄바꿈되어야 합니다. 일정표에서 전체 내용을 바로 확인할 수 있어야 합니다.');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await delay(100);
+  const detailGrowth = await evaluate(client, `(() => {
+    const textarea = document.querySelector('.reference-task-detail .task-inline-textarea');
+    return { clientHeight: textarea.clientHeight, scrollHeight: textarea.scrollHeight, rowHeight: textarea.closest('tr').getBoundingClientRect().height };
+  })()`);
+  assert(detailGrowth.clientHeight >= detailGrowth.scrollHeight - 1 && detailGrowth.rowHeight > 36, `Long task detail did not expand its row: ${JSON.stringify(detailGrowth)}`);
+  await evaluate(client, `(() => {
+    const textarea = document.querySelector('.reference-task-detail .task-inline-textarea');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    setValue.call(textarea, window.__scheduleSmokeDetail || '');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
   const desktopNavigation = await evaluate(client, `({
     companyTabs: document.querySelectorAll('.topbar-company-tabs button').length,
     clientRailPresent: Boolean(document.querySelector('.client-rail')),
@@ -211,7 +236,8 @@ try {
   assert(ganttFrame.cellWidth === "26px" && ganttFrame.cellHeight === "30px", `Gantt cell is not the compact 26x30 frame: ${ganttFrame.cellWidth}x${ganttFrame.cellHeight}`);
   assert(ganttFrame.rowHeight === "31px" && ganttFrame.labelWidth === "260px", `Gantt row/label geometry drifted: ${ganttFrame.rowHeight}/${ganttFrame.labelWidth}`);
   assert(ganttFrame.groups.some((label) => label === "YouTube"), `Gantt is not grouped by source media: ${ganttFrame.groups.join(",")}`);
-  assert(JSON.stringify(ganttFrame.groups) === JSON.stringify(scheduleGrouping.visibleLabels), `Schedule/Gantt media order differs: ${scheduleGrouping.visibleLabels.join(",")} / ${ganttFrame.groups.join(",")}`);
+  const scheduleMediaGroups = scheduleGrouping.visibleLabels.filter((label, index, labels) => index === 0 || label !== labels[index - 1]);
+  assert(JSON.stringify(ganttFrame.groups) === JSON.stringify(scheduleMediaGroups), `Schedule/Gantt media order differs: ${scheduleMediaGroups.join(",")} / ${ganttFrame.groups.join(",")}`);
 
   if (expectActivity) {
     assert(await evaluate(client, clickTab("업무 로그")), "Activity tab was not clickable");
