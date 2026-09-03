@@ -177,6 +177,7 @@ try {
       tableLayout: getComputedStyle(document.querySelector('.reference-task-table')).tableLayout,
       firstRowHeight: rows[0] ? getComputedStyle(rows[0]).height : '',
       dateRangeCells: document.querySelectorAll('.task-inline-date-range').length,
+      compactDateLabels: Array.from(document.querySelectorAll('.task-inline-date-display')).slice(0, 4).map((item) => item.textContent.trim()),
       firstCellHeights: rows[0] ? Array.from(rows[0].cells).map((cell) => { const style = getComputedStyle(cell); return { className: cell.className, width: cell.getBoundingClientRect().width, cssWidth: style.width, minWidth: style.minWidth, maxWidth: style.maxWidth, cell: cell.getBoundingClientRect().height, child: cell.firstElementChild?.getBoundingClientRect().height || 0 }; }) : [],
       detailMetrics: rows[0] ? (() => { const el = rows[0].querySelector('.reference-task-detail textarea'); const style = getComputedStyle(el); return { value: el.value, width: style.width, clientWidth: el.clientWidth, height: style.height, lineHeight: style.lineHeight, fieldSizing: style.fieldSizing, scrollHeight: el.scrollHeight }; })() : null,
     };
@@ -184,6 +185,19 @@ try {
   assert(scheduleGrouping.visibleLabels.length === scheduleGrouping.rowCount && scheduleGrouping.repeatedAdjacentLabels, `Every schedule row must repeat its media label: ${JSON.stringify(scheduleGrouping)}`);
   assert(scheduleGrouping.dateRangeCells === scheduleGrouping.rowCount, `Schedule dates are not grouped into one compact cell: ${JSON.stringify(scheduleGrouping)}`);
   assert(scheduleGrouping.tableWidth === "1244px" && parseFloat(scheduleGrouping.firstRowHeight) <= 36, `Schedule density drifted: ${JSON.stringify(scheduleGrouping)}`);
+  assert(Math.abs(scheduleGrouping.firstCellHeights[1].width - 290) < 0.1, `Task title column is not 290px: ${JSON.stringify(scheduleGrouping.firstCellHeights)}`);
+  assert(Math.abs(scheduleGrouping.firstCellHeights[2].width - 200) < 0.1, `Task detail column is not 200px: ${JSON.stringify(scheduleGrouping.firstCellHeights)}`);
+  assert(Math.abs(scheduleGrouping.firstCellHeights[3].width - 126) < 0.1, `Task date column is not 126px: ${JSON.stringify(scheduleGrouping.firstCellHeights)}`);
+  assert(scheduleGrouping.compactDateLabels.length > 0 && scheduleGrouping.compactDateLabels.every((label) => label === "–" || /^\d{1,2}\.\d{1,2}$/.test(label)), `Schedule still exposes four-digit years: ${scheduleGrouping.compactDateLabels.join(",")}`);
+  const completionCandidate = await evaluate(client, `(() => {
+    const row = Array.from(document.querySelectorAll('.reference-task-row')).find((item) => item.querySelector('.task-inline-status')?.dataset.statusCode === 'IN_PROGRESS');
+    if (!row) return null;
+    row.querySelector('.task-inline-status').click();
+    return row.querySelector('.task-inline-progress input')?.getAttribute('aria-label') || '';
+  })()`);
+  if (completionCandidate) {
+    assert(await waitFor(client, `(() => { const progress = Array.from(document.querySelectorAll('.task-inline-progress input')).find((item) => item.getAttribute('aria-label') === ${JSON.stringify(completionCandidate)}); const row = progress?.closest('tr'); return progress?.value === '100' && row?.querySelector('.task-inline-status')?.dataset.statusCode === 'DONE'; })()`), "Completing a schedule task did not atomically set progress to 100");
+  }
   await evaluate(client, `(() => {
     const textarea = document.querySelector('.reference-task-detail .task-inline-textarea');
     window.__scheduleSmokeDetail = textarea.value;
@@ -196,7 +210,7 @@ try {
     const textarea = document.querySelector('.reference-task-detail .task-inline-textarea');
     return { clientHeight: textarea.clientHeight, scrollHeight: textarea.scrollHeight, rowHeight: textarea.closest('tr').getBoundingClientRect().height };
   })()`);
-  assert(detailGrowth.clientHeight >= detailGrowth.scrollHeight - 1 && detailGrowth.rowHeight > 36, `Long task detail did not expand its row: ${JSON.stringify(detailGrowth)}`);
+  assert(detailGrowth.clientHeight <= 40 && detailGrowth.scrollHeight > detailGrowth.clientHeight && detailGrowth.rowHeight > 36, `Long task detail is not capped at two visible lines: ${JSON.stringify(detailGrowth)}`);
   await evaluate(client, `(() => {
     const textarea = document.querySelector('.reference-task-detail .task-inline-textarea');
     const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
@@ -304,7 +318,7 @@ try {
     event.method === "Runtime.exceptionThrown" ||
     (event.method === "Log.entryAdded" && ["error", "warning"].includes(event.params?.entry?.level)),
   );
-  assert(seriousEvents.length === 0, `Browser console contains ${seriousEvents.length} error/warning events`);
+  assert(seriousEvents.length === 0, `Browser console contains ${seriousEvents.length} error/warning events: ${JSON.stringify(seriousEvents)}`);
   client.close();
   console.log(expectActivity
     ? "Task navigation smoke passed: schedule -> gantt -> activity -> gantt/activity -> schedule, including project switch."

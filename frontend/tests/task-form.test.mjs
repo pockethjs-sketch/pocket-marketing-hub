@@ -124,3 +124,13 @@ test("일정표 상태와 담당 클릭은 제품에서 정한 순서로 순환�
   assert.equal(taskForm.nextTaskResponsibleOrgCode("NS"), "CLIENT");
   assert.equal(taskForm.nextTaskResponsibleOrgCode("CLIENT"), "POCKET");
 });
+
+test("일정표에서 완료로 바꾸면 상태와 진행률 100을 한 번에 저장한다", () => {
+  assert.deepEqual(taskForm.taskStatusMutationFields("DONE"), {
+    status_code: "DONE",
+    progress_percent: 100,
+  });
+  assert.deepEqual(taskForm.taskStatusMutationFields("ON_HOLD"), {
+    status_code: "ON_HOLD",
+  });
+});

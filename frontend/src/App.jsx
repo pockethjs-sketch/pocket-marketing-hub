@@ -57,7 +57,7 @@ import {
   viewLocationHash,
   viewResourceKey,
 } from "./planNavigation.js";
-import { canOperateProjectTasks, nextTaskResponsibleOrgCode, nextTaskStatusCode, taskCreateInitialFields, taskCreateSubmissionFields, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
+import { canOperateProjectTasks, nextTaskResponsibleOrgCode, nextTaskStatusCode, taskCreateInitialFields, taskCreateSubmissionFields, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskStatusMutationFields, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
 import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, taskScheduleCategory, taskScheduleMedia, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
 import { groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
@@ -1046,6 +1046,19 @@ function validInlineTaskUrl(value) {
   return !String(value || "").trim() || /^https?:\/\/[^\s]+$/i.test(String(value).trim());
 }
 
+function compactTaskDateLabel(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  return match ? `${Number(match[2])}.${Number(match[3])}` : "–";
+}
+
+function CompactTaskDateInput({ label, value, min, max, readOnly, disabled, onChange }) {
+  return <label className={`task-inline-date-compact${readOnly ? " is-readonly" : ""}`} title={value || label}>
+    <span className="task-inline-date-display" aria-hidden="true">{compactTaskDateLabel(value)}</span>
+    <CalendarDays size={11} aria-hidden="true" />
+    <input className="task-inline-date" type="date" aria-label={label} value={value} min={min} max={max} readOnly={readOnly} disabled={disabled} onChange={onChange} />
+  </label>;
+}
+
 function TaskRowActions({ task, onEdit, onArchive, disabled = false, compact = false }) {
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -1124,8 +1137,12 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
     }
 
     const dateRangeField = field === "date_range";
-    const nextDraft = dateRangeField ? { ...draft } : { ...draft, [field]: value };
+    let nextDraft = dateRangeField ? { ...draft } : { ...draft, [field]: value };
     let fields = dateRangeField ? {} : { [field]: value };
+    if (field === "status_code") {
+      fields = taskStatusMutationFields(value);
+      nextDraft = { ...nextDraft, ...fields };
+    }
     if (dateRangeField || field === "planned_start_date" || field === "due_date") {
       const start = String(nextDraft.planned_start_date || "");
       const end = String(nextDraft.due_date || "");
@@ -1194,7 +1211,7 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
     <td className="reference-task-media" aria-label={media}><div className="reference-task-cell"><span><i aria-hidden="true" />{media}</span></div></td>
     <td className="reference-task-name"><div className="reference-task-cell"><input className="task-inline-input task-name" aria-label={`${task.title} 업무명`} maxLength={500} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.title} onChange={(event) => setField("title", event.target.value)} onBlur={(event) => void commitField("title", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "title")} />{newTask && <em className="task-new-badge">신규</em>}{saveError && <small className="task-inline-error" role="alert">{saveError}</small>}</div></td>
     <td className="reference-task-detail"><div className="reference-task-cell"><textarea className="task-inline-textarea" aria-label={`${task.title} 세부내용`} rows="1" maxLength={20000} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.description} placeholder={canWrite ? "세부내용" : ""} onChange={(event) => setField("description", event.target.value)} onBlur={(event) => void commitField("description", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "description")} /></div></td>
-    <td className="reference-task-dates"><div className="reference-task-cell task-inline-date-range" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) void commitField("date_range"); }}><input className="task-inline-date" type="date" aria-label={`${task.title} 시작일`} readOnly={!canWrite} disabled={disabled} value={draft.planned_start_date} max={draft.due_date || undefined} onChange={(event) => setField("planned_start_date", event.target.value)} /><ArrowRight size={11} aria-hidden="true" /><input className="task-inline-date" type="date" aria-label={`${task.title} 종료일`} readOnly={!canWrite} disabled={disabled} value={draft.due_date} min={draft.planned_start_date || undefined} onChange={(event) => setField("due_date", event.target.value)} /></div></td>
+    <td className="reference-task-dates"><div className="reference-task-cell task-inline-date-range" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) void commitField("date_range"); }}><CompactTaskDateInput label={`${task.title} 시작일`} readOnly={!canWrite} disabled={disabled} value={draft.planned_start_date} max={draft.due_date || undefined} onChange={(event) => setField("planned_start_date", event.target.value)} /><ArrowRight size={10} aria-hidden="true" /><CompactTaskDateInput label={`${task.title} 종료일`} readOnly={!canWrite} disabled={disabled} value={draft.due_date} min={draft.planned_start_date || undefined} onChange={(event) => setField("due_date", event.target.value)} /></div></td>
     <td className="reference-task-duration"><div className="reference-task-cell">{duration === null ? "–" : `${duration}일`}</div></td>
     <td className="reference-task-progress"><div className="reference-task-cell"><span className="task-inline-progress"><span><i style={{ width: `${progress}%` }} /></span><input type="number" min="0" max="100" aria-label={`${task.title} 진행률`} readOnly={!canWrite} disabled={disabled} value={draft.progress_percent} onChange={(event) => setField("progress_percent", event.target.value)} onBlur={(event) => void commitField("progress_percent", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "progress_percent")} /><em>%</em></span></div></td>
     <td className="reference-task-status"><div className="reference-task-cell"><button type="button" className={`task-inline-status ${statusClass[statusLabel] || "status status-muted"}`} disabled={disabled} data-status-code={draft.status_code} title="눌러서 미착수 → 진행 → 완료 → 보류 순으로 변경" onClick={cycleStatus}>{savingField === "status_code" ? <LoaderCircle size={12} className="spin" /> : statusLabel}</button></div></td>
@@ -1206,7 +1223,7 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
 }
 
 function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, onEdit, onArchive, ganttDrafts, freshnessNow, scheduleClass, mediaColor }) {
-  const columnWidths = [88, 170, 250, 196, 44, 92, 54, 54, 105, 135];
+  const columnWidths = [88, 290, 200, 126, 44, 92, 54, 54, 105, 135];
   return <div className="task-schedule-matrix-scroll reference-task-scroll"><table className="task-schedule-matrix is-detailed reference-task-table"><colgroup>{columnWidths.map((width, index) => <col key={`${index}-${width}`} style={{ width }} />)}{canWrite && <col style={{ width: 56 }} />}</colgroup><thead><tr><th>매체</th><th>업무</th><th>세부내용</th><th>일정</th><th>기간</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th>{canWrite && <th>관리</th>}</tr></thead><tbody>{tasks.map((task, index) => {
     const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
     const bounds = scheduleDateBounds(scheduleDates);

@@ -78,7 +78,11 @@ test("일정표는 참고 HTML 열 구조를 유지하며 셀 직접 수정과 �
   assert.match(styleSource, /\.reference-task-cell\s*\{[\s\S]*min-height:\s*32px/);
   assert.match(appSource, /className="reference-task-media"[\s\S]*<span><i aria-hidden="true" \/>\{media\}<\/span>/);
   assert.match(appSource, /className="reference-task-cell task-inline-date-range"[\s\S]*commitField\("date_range"\)/);
+  assert.match(appSource, /function CompactTaskDateInput/);
+  assert.match(appSource, /const columnWidths = \[88, 290, 200, 126, 44, 92, 54, 54, 105, 135\]/);
+  assert.match(appSource, /fields = taskStatusMutationFields\(value\)/);
   assert.match(styleSource, /\.reference-task-detail \.task-inline-textarea[\s\S]*field-sizing:\s*content/);
+  assert.match(styleSource, /\.reference-task-detail \.task-inline-textarea[\s\S]*max-height:\s*calc\(2 \* 1\.45em \+ 6px\)/);
   assert.match(styleSource, /tr\.is-media-group-start:not\(:first-child\) td/);
   assert.match(appSource, /<th>비고<\/th>\{canWrite && <th>관리<\/th>\}/);
   assert.match(appSource, /function TaskRowActions/);

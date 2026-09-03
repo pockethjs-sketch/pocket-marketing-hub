@@ -85,6 +85,17 @@ function response(action, body) {
   if (action === "bootstrap") return bootstrap(body.initialView);
   if (action === "tasks") return taskPayload(body.projectId);
   if (action === "activity") return { items: [], nextCursor: null };
+  if (action === "mutate") {
+    const mutation = body.mutation || {};
+    if (String(mutation.entityType || "").toLowerCase() !== "task" || String(mutation.operation || "").toUpperCase() !== "UPDATE") {
+      throw Object.assign(new Error("unsupported_mutation"), { status: 400 });
+    }
+    const rows = tasksByProject[mutation.projectId] || [];
+    const task = rows.find((item) => item.task_id === mutation.id);
+    if (!task) throw Object.assign(new Error("task_not_found"), { status: 404 });
+    Object.assign(task, mutation.fields || {}, { row_version: Number(task.row_version || 0) + 1 });
+    return { record: task };
+  }
   throw Object.assign(new Error("unsupported_action"), { status: 400 });
 }
 

@@ -10501,9 +10501,9 @@ table tbody tr:hover {
   position: sticky;
   left: 88px;
   z-index: 6;
-  width: 170px !important;
-  min-width: 170px !important;
-  max-width: 170px !important;
+  width: 290px !important;
+  min-width: 290px !important;
+  max-width: 290px !important;
   background: #fff;
   box-shadow: 1px 0 0 #dfe4ec;
 }
@@ -10514,9 +10514,9 @@ table tbody tr:hover {
 }
 
 .campaign-schedule-surface .reference-task-table th:nth-child(3),
-.campaign-schedule-surface .reference-task-table td:nth-child(3) { width: 250px; min-width: 250px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(3) { width: 200px; min-width: 200px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(4),
-.campaign-schedule-surface .reference-task-table td:nth-child(4) { width: 196px; min-width: 196px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(4) { width: 126px; min-width: 126px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(5),
 .campaign-schedule-surface .reference-task-table td:nth-child(5) { width: 44px; min-width: 44px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(6),
@@ -10605,7 +10605,8 @@ table tbody tr:hover {
   min-width: 100%;
   max-width: 100%;
   min-height: 24px;
-  overflow-y: hidden;
+  max-height: calc(2 * 1.45em + 6px);
+  overflow-y: auto;
   line-height: 1.45;
 }
 
@@ -10659,22 +10660,62 @@ table tbody tr:hover {
 
 .task-inline-date-range {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 11px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr);
   align-items: center;
-  gap: 3px;
-  padding-inline: 4px;
+  gap: 2px;
+  padding-inline: 3px;
 }
 
 .task-inline-date-range > svg {
   color: #98a2b3;
 }
 
-.task-inline-date-range .task-inline-date {
+.task-inline-date-compact {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
   min-height: 24px;
-  padding: 2px 1px;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: -.02em;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #1d2738;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.task-inline-date-compact > svg {
+  flex: 0 0 auto;
+  color: #8491a5;
+}
+
+.task-inline-date-compact:hover:not(.is-readonly),
+.task-inline-date-compact:focus-within {
+  border-color: #0058ff;
+  background: #edf4ff;
+  box-shadow: 0 0 0 2px rgba(0, 88, 255, .12);
+}
+
+.task-inline-date-compact.is-readonly {
+  cursor: default;
+}
+
+.task-inline-date-compact .task-inline-date {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 100%;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.task-inline-date-compact.is-readonly .task-inline-date {
+  cursor: default;
 }
 
 .task-inline-progress {
