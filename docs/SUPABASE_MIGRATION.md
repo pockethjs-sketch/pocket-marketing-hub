@@ -11,6 +11,8 @@
 
 위 네 항목의 구현과 원격 E2E는 완료했습니다. 기존 Sheets는 실행계획 등 미전환 영역과 복구 기준본 때문에 삭제·초기화하지 않습니다.
 
+자동 백업 실검증은 2026-09-03 09:07 KST에 완료했습니다. Supabase 업무 101건의 내용 해시 스냅샷을 숨김·보호 탭에 기록하고, 같은 스냅샷이 포함된 전체 Google Drive 복제본의 시트 manifest를 다시 대조했습니다.
+
 - 공식 Supabase Codex 플러그인 `0.1.15` 설치
 - Supabase MCP OAuth 인증 완료
 - 프로젝트 루트 `.mcp.json`에 `https://mcp.supabase.com/mcp` 등록
