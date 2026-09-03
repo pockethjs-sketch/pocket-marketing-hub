@@ -90,6 +90,22 @@ test("프로젝트 생성은 회사·프로젝트·기간을 단일 RPC 계약�
   });
 });
 
+test("견적 프로젝트와 기존 프로젝트 추가는 전용 원자적 RPC를 사용한다", async () => {
+  const client = clientReturning({
+    create_project_from_quote: { data: { ok: true, data: { client: { client_id: "CLT-Q" }, project: { project_id: "PRJ-Q" } } }, error: null },
+    import_quote_tasks: { data: { ok: true, data: { imported_task_count: 1 } }, error: null },
+  });
+  const api = createSupabaseCoreDomainApi(client);
+  const task = { title: "유튜브 운영", workstream_code: "VIDEO" };
+  await api.createProject({ mutationId: "quote_project_123", fields: { client_name: "고객사", project_name: "캠페인" }, quote: { total: 10 }, tasks: [task] });
+  await api.importQuoteTasks({ mutationId: "quote_append_123", projectId: 7, quote: { total: 10 }, tasks: [task] });
+  assert.equal(client.calls[0].name, "create_project_from_quote");
+  assert.deepEqual(client.calls[0].args.p_tasks, [task]);
+  assert.deepEqual(client.calls[0].args.p_quote_data, { total: 10 });
+  assert.equal(client.calls[1].name, "import_quote_tasks");
+  assert.equal(client.calls[1].args.p_project_id, "7");
+});
+
 test("고객 권한의 Sheets 호환 복제는 Supabase membership id를 넘기지 않는다", () => {
   assert.deepEqual(legacyPermissionMirrorInput({
     operation: "UPSERT",

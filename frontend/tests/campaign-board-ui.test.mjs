@@ -162,9 +162,18 @@ test("포켓·NS 내부 계정은 상단에서 프로젝트 회사를 생성한�
   assert.match(appSource, /className="topbar-project-create"/);
   assert.match(appSource, /function ProjectCreateModal/);
   assert.match(appSource, /\["pocket", "ns"\]\.includes\(role\)/);
-  assert.match(appSource, /source\.createProject\(\{ fields \}\)/);
+  assert.match(appSource, /source\.createProject\(payload\)/);
   assert.match(appSource, /setActiveClient\(createdClientId\)/);
   assert.match(appSource, /setActiveProjectId\(createdProjectId\)/);
+});
+
+test("견적서를 검토한 뒤 새 프로젝트 또는 현재 프로젝트 업무로 생성한다", () => {
+  assert.match(appSource, /function QuoteImportModal/);
+  assert.match(appSource, /견적서 불러오기/);
+  assert.match(appSource, /현재 프로젝트에 추가/);
+  assert.match(appSource, /새 프로젝트로 만들기/);
+  assert.match(appSource, /source\.importQuoteTasks/);
+  assert.match(styleSource, /\.quote-item-table/);
 });
 
 test("왼쪽 프로젝트 메뉴는 기존 화면과 실행계획 하위 화면을 연결한다", () => {

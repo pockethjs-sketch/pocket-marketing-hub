@@ -26,5 +26,6 @@ test("업무·이슈·프로젝트·회의록·KPI·권한 저장이 공통 잠�
   assert.doesNotMatch(appSource, /await source\.mutate\(/);
   assert.doesNotMatch(appSource, /await source\.mutateBatch\(/);
   assert.doesNotMatch(appSource, /await source\.accessAdminMutate\(/);
-  assert.match(appSource, /runSheetWrite\("새 프로젝트와 편집 권한을 생성하고 있습니다\."/);
+  assert.match(appSource, /runSheetWrite\(payload\.tasks\?\.length[\s\S]*source\.createProject\(payload\)/);
+  assert.match(appSource, /runSheetWrite\(`견적 업무 \$\{payload\.tasks\.length\}개를 한 번에 저장하고 있습니다\.`/);
 });

@@ -24,7 +24,7 @@ async function expectDenied(sql, label) {
     await db.exec(sql);
   } catch (error) {
     const message = String(error?.message || error);
-    assert(/permission denied|row-level security|immutable_column|forbidden_project|project_create_forbidden/i.test(message), `${label}: unexpected error ${message}`);
+    assert(/permission denied|row-level security|immutable_column|forbidden_project|project_create_forbidden|quote_import_forbidden/i.test(message), `${label}: unexpected error ${message}`);
     return;
   }
   throw new Error(`${label}: operation unexpectedly succeeded`);
@@ -85,6 +85,9 @@ await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub'
 await expectDenied("select public.read_tasks(1, false)", "client tasks page permission");
 await expectDenied("select * from public.tasks", "client raw task table");
 await expectDenied(`select public.create_project('project_client_denied_001', '권한 우회 고객사', '권한 우회 프로젝트', null, null, null)`, "client project creation");
+const { rows: [clientQuoteCreate] } = await db.query(`select public.create_project_from_quote('quote_client_denied_001', '권한 우회 견적사', '권한 우회 견적', null, null, null, '{}'::jsonb, jsonb_build_array(jsonb_build_object('title','권한 우회 업무'))) as response`);
+assert(clientQuoteCreate.response?.ok === false && clientQuoteCreate.response?.error?.code === "forbidden", "client quote project creation was not rejected");
+await expectDenied(`select public.import_quote_tasks('quote_append_denied_01', 1, '{}'::jsonb, jsonb_build_array(jsonb_build_object('title','권한 우회 업무')))`, "client quote task import");
 assert(await scalar("select count(*)::int as count from public.profiles") === 1, "client can enumerate project executors");
 
 await db.exec(`reset role; update public.project_memberships set allowed_pages=array['overview','tasks'] where user_id='${userIds.client}'; set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.client}', false);`);
@@ -126,8 +129,68 @@ assert(duplicateProject.response?.ok === false && duplicateProject.response?.err
 const { rows: [nsBootstrap] } = await db.query("select public.read_bootstrap() as response");
 assert(nsBootstrap.response.projects.some((project) => project.project_id === createdProjectLegacyId && project.permission_code === "EDIT"), "created NS project is missing from bootstrap");
 assert(await scalar(`select count(*)::int as count from public.clients where display_name='NS 신규 고객사'`) === 1, "project replay created a duplicate client");
+const quoteTaskJson = `jsonb_build_array(jsonb_build_object(
+  'phase_code', 'P0', 'workstream_code', 'VIDEO', 'category_code', 'YouTube',
+  'title', '견적 본편 업로드', 'responsible_org_code', 'NS',
+  'reviewer_org_code', 'POCKET', 'status_code', 'NOT_STARTED',
+  'planned_start_date', '2026-09-03', 'due_date', '2026-09-10',
+  'schedule_dates', jsonb_build_array('2026-09-03', '2026-09-10')
+))`;
+const { rows: [quoteProject] } = await db.query(`
+  select public.create_project_from_quote(
+    'quote_project_ns_0001', '견적 신규 고객사', '견적 캠페인',
+    '원자적 견적 생성', '2026-09-03', '2026-09-30',
+    jsonb_build_object('source_file','quote.xlsx','totals',jsonb_build_object('total',500000)),
+    ${quoteTaskJson}
+  ) as response
+`);
+assert(quoteProject.response?.ok === true && quoteProject.response?.importedTaskCount === 1, `quote project creation failed: ${JSON.stringify(quoteProject.response)}`);
+const quoteProjectLegacyId = quoteProject.response.data.project.project_id;
+await db.exec("reset role");
+const quoteProjectId = await scalar(`select id::int as value from public.projects where legacy_id='${quoteProjectLegacyId}'`, "value");
+assert(await scalar(`select count(*)::int as count from public.tasks where project_id=${quoteProjectId} and source_code='QUOTE_IMPORT'`) === 1, "quote task was not created");
+assert(await scalar(`select (quote_data #>> '{totals,total}')::int as value from public.projects where id=${quoteProjectId}`, "value") === 500000, "quote metadata was not stored");
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
+const { rows: [quoteReplay] } = await db.query(`
+  select public.create_project_from_quote(
+    'quote_project_ns_0001', '견적 신규 고객사', '견적 캠페인',
+    '원자적 견적 생성', '2026-09-03', '2026-09-30',
+    jsonb_build_object('source_file','quote.xlsx','totals',jsonb_build_object('total',500000)),
+    ${quoteTaskJson}
+  ) as response
+`);
+assert(JSON.stringify(quoteReplay.response) === JSON.stringify(quoteProject.response), "quote project replay changed the response");
+await db.exec("reset role");
+const beforeFailedImport = await scalar("select count(*)::int as count from public.tasks where project_id=1");
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
+const { rows: [failedQuoteImport] } = await db.query(`
+  select public.import_quote_tasks(
+    'quote_atomic_fail_001', 1, jsonb_build_object('source_file','broken.csv'),
+    jsonb_build_array(
+      jsonb_build_object('title','롤백되어야 할 업무','workstream_code','MARKETING'),
+      jsonb_build_object('title','','workstream_code','MARKETING')
+    )
+  ) as response
+`);
+assert(failedQuoteImport.response?.ok === false, "invalid quote task batch unexpectedly succeeded");
+await db.exec("reset role");
+assert(await scalar("select count(*)::int as count from public.tasks where project_id=1") === beforeFailedImport, "failed quote batch left a partial task");
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
+const { rows: [quoteAppend] } = await db.query(`
+  select public.import_quote_tasks(
+    'quote_append_ns_0001', 1,
+    jsonb_build_object('source_file','append.csv','totals',jsonb_build_object('total',250000)),
+    ${quoteTaskJson}
+  ) as response
+`);
+assert(quoteAppend.response?.ok === true && quoteAppend.response.data.imported_task_count === 1, `quote append failed: ${JSON.stringify(quoteAppend.response)}`);
+await db.exec("reset role");
+assert(await scalar("select count(*)::int as count from public.tasks where project_id=1") === beforeFailedImport + 1, "quote append task count mismatch");
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userIds.ns}', false);`);
+const { rows: [quoteWorkspace] } = await db.query("select public.read_task_workspace(1, false) as response");
+assert(quoteWorkspace.response.project.quote_data.source_file === "append.csv", "task workspace did not expose quote metadata to editor");
 const { rows: [nsRead] } = await db.query("select public.read_tasks(1, false) as response");
-assert(nsRead.response?.items?.length === 2, "NS task access mismatch");
+assert(nsRead.response?.items?.length === 3, "NS task access mismatch after quote append");
 assert(nsRead.response.members.length === 2, "NS project member projection mismatch");
 await expectDenied("select * from public.project_issues", "NS raw issue table");
 const { rows: [issueCreate] } = await db.query(`
@@ -229,8 +292,8 @@ const { rows: [archiveResult] } = await db.query(`select public.mutate_task('mut
 assert(archiveResult.response?.ok === true && archiveResult.response?.data?.item?.archived_at, "task archive failed");
 const { rows: [activeAfterArchive] } = await db.query("select public.read_tasks(1, false) as response");
 const { rows: [allAfterArchive] } = await db.query("select public.read_tasks(1, true) as response");
-assert(activeAfterArchive.response?.items?.length === 2, "archived task remained in the active list");
-assert(allAfterArchive.response?.items?.length === 3, "authorized archived task read failed");
+assert(activeAfterArchive.response?.items?.length === 3, "archived task remained in the active list");
+assert(allAfterArchive.response?.items?.length === 4, "authorized archived task read failed");
 
 await db.exec("reset role");
 await expectDenied(`update public.tasks set project_id=2 where id=${taskId}`, "cross-project row move");
@@ -254,5 +317,7 @@ console.log(JSON.stringify({
   projectIssueLedger: "pass",
   nsProjectCreation: "pass",
   projectCreationIdempotency: "pass",
+  quoteProjectAtomicity: "pass",
+  quoteImportRollback: "pass",
 }));
 await db.close();

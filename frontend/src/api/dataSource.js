@@ -185,6 +185,18 @@ export function createHubDataSource(options = {}) {
     }
   }
 
+  async function domainWrite(method, input) {
+    if (!live || typeof live[method] !== "function") throw new OfflineMutationError();
+    try {
+      const result = await live[method](input);
+      remember({ mode: "live", phase: "ready", action: null, error: null, lastSuccessfulAt: result.generatedAt || new Date().toISOString() });
+      return result;
+    } catch (error) {
+      rememberWriteFailure(error);
+      throw error;
+    }
+  }
+
   async function login(credentials) {
     if (!live) {
       throw new HubApiError("API 주소가 설정되지 않았습니다.", {
@@ -317,6 +329,8 @@ export function createHubDataSource(options = {}) {
     activity: (params) => load("activity", params),
     permissions: (params) => load("permissions", params),
     accessAdminMutate,
+    createProject: (input) => domainWrite("createProject", input),
+    importQuoteTasks: (input) => domainWrite("importQuoteTasks", input),
     mutate,
     mutateBatch,
   });

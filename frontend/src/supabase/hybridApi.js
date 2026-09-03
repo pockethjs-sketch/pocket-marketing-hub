@@ -333,6 +333,12 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     return core.createProject(input);
   }
 
+  async function importQuoteTasks(input = {}) {
+    await requireAuth();
+    const projectId = await resolveProjectId(input.projectId);
+    return core.importQuoteTasks({ ...input, projectId });
+  }
+
   function logout() {
     sessionStore.clear();
     legacySessionStore.clear();
@@ -360,6 +366,7 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     activity,
     permissions: () => accessAdmin.read(),
     createProject,
+    importQuoteTasks,
     accessAdminMutate,
     mutate,
     mutateBatch,
