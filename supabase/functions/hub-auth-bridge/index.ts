@@ -137,13 +137,15 @@ async function syncIdentity(
 
   let authUserId = existingProfile?.id || null;
   if (authUserId) {
-    const { error } = await admin.auth.admin.updateUserById(authUserId, {
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { legacy_user_id: legacyUserId },
-    });
-    if (error) throw error;
+    // A migrated account is owned by Supabase Auth. A stale Sheets password
+    // must never reset its password, reactivate it, or overwrite memberships.
+    const { data, error } = await emailClient.auth.signInWithPassword({ email, password });
+    if (error || !data?.session || data.user?.id !== authUserId) {
+      const rejected = new Error("invalid_credentials");
+      (rejected as any).status = 401;
+      throw rejected;
+    }
+    return data.session;
   } else {
     // A previous bridge attempt may have created Auth before the profile write
     // completed. Reuse that identity instead of failing on duplicate email.
