@@ -165,6 +165,19 @@ try {
     const renderedTasks = await evaluate(client, "document.querySelectorAll('.task-schedule-row').length");
     assert(renderedTasks >= expectedTasksMin, `Expected at least ${expectedTasksMin} task rows, received ${renderedTasks}`);
   }
+  const scheduleGrouping = await evaluate(client, `(() => {
+    const rows = Array.from(document.querySelectorAll('.reference-task-row'));
+    const labels = rows.map((row) => row.querySelector('.reference-task-media span')?.textContent.trim() || '');
+    return {
+      groupStarts: rows.filter((row) => row.classList.contains('is-media-group-start')).length,
+      visibleLabels: labels.filter(Boolean),
+      repeatedAdjacentLabels: labels.some((label, index) => label && labels[index - 1] === label),
+      tableWidth: getComputedStyle(document.querySelector('.reference-task-table')).width,
+      firstRowHeight: rows[0] ? getComputedStyle(rows[0]).height : '',
+    };
+  })()`);
+  assert(scheduleGrouping.groupStarts === scheduleGrouping.visibleLabels.length && !scheduleGrouping.repeatedAdjacentLabels, `Schedule media grouping drifted: ${JSON.stringify(scheduleGrouping)}`);
+  assert(scheduleGrouping.tableWidth === "1350px" && parseFloat(scheduleGrouping.firstRowHeight) <= 36, `Schedule density drifted: ${JSON.stringify(scheduleGrouping)}`);
   const desktopNavigation = await evaluate(client, `({
     companyTabs: document.querySelectorAll('.topbar-company-tabs button').length,
     clientRailPresent: Boolean(document.querySelector('.client-rail')),
@@ -195,9 +208,10 @@ try {
     };
   })()`);
   assert(ganttFrame.cellClass && !ganttFrame.cellClass.includes("task-schedule-cell"), `Legacy schedule-cell skin still affects Gantt: ${ganttFrame.cellClass}`);
-  assert(ganttFrame.cellWidth === "28px" && ganttFrame.cellHeight === "32px", `Gantt cell is not the supplied 28x32 frame: ${ganttFrame.cellWidth}x${ganttFrame.cellHeight}`);
-  assert(ganttFrame.rowHeight === "33px" && ganttFrame.labelWidth === "280px", `Gantt row/label geometry drifted: ${ganttFrame.rowHeight}/${ganttFrame.labelWidth}`);
+  assert(ganttFrame.cellWidth === "26px" && ganttFrame.cellHeight === "30px", `Gantt cell is not the compact 26x30 frame: ${ganttFrame.cellWidth}x${ganttFrame.cellHeight}`);
+  assert(ganttFrame.rowHeight === "31px" && ganttFrame.labelWidth === "260px", `Gantt row/label geometry drifted: ${ganttFrame.rowHeight}/${ganttFrame.labelWidth}`);
   assert(ganttFrame.groups.some((label) => label === "YouTube"), `Gantt is not grouped by source media: ${ganttFrame.groups.join(",")}`);
+  assert(JSON.stringify(ganttFrame.groups) === JSON.stringify(scheduleGrouping.visibleLabels), `Schedule/Gantt media order differs: ${scheduleGrouping.visibleLabels.join(",")} / ${ganttFrame.groups.join(",")}`);
 
   if (expectActivity) {
     assert(await evaluate(client, clickTab("업무 로그")), "Activity tab was not clickable");

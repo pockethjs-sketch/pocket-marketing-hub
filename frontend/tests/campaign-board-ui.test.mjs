@@ -48,7 +48,9 @@ test("간트는 사각형 드래그로 일정 추가와 삭제를 구분하고 �
   assert.match(styleSource, /\.g-track\.paint \.g-c:hover::after/);
 });
 
-test("간트 드래그 행은 카테고리로 묶인 실제 화면 순서와 동일하다", () => {
+test("간트 드래그 행은 매체로 묶인 일정표와 실제 화면 순서가 동일하다", () => {
+  assert.match(appSource, /groupTaskScheduleByMedia\(ganttVisibleTasks\)/);
+  assert.match(appSource, /groupGanttTasks\(filteredTasks, taskScheduleMedia\)/);
   assert.match(appSource, /const ganttTasks = useMemo\(\(\) => ganttGroups\.flatMap\(\(group\) => group\.tasks\), \[ganttGroups\]\)/);
   assert.match(appSource, /ganttTasksRef\.current = ganttTasks/);
   assert.match(appSource, /const rows = ganttTasksRef\.current\.map/);
@@ -72,7 +74,10 @@ test("일정표는 참고 HTML 열 구조를 유지하며 셀 직접 수정과 �
   assert.match(appSource, /onClick=\{cycleOwner\}/);
   assert.match(appSource, /schedule_dates_json: start && end \? serializeScheduleDates\(scheduleDateRange\(start, end\)\) : null/);
   assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*min-width:\s*1350px/);
-  assert.match(styleSource, /\.reference-task-cell\s*\{[\s\S]*min-height:\s*36px/);
+  assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*table-layout:\s*fixed/);
+  assert.match(styleSource, /\.reference-task-cell\s*\{[\s\S]*min-height:\s*32px/);
+  assert.match(appSource, /mediaGroupStart && <span><i aria-hidden="true" \/>\{media\}<\/span>/);
+  assert.match(styleSource, /tr\.is-media-group-start:not\(:first-child\) td/);
   assert.match(appSource, /<th>비고<\/th>\{canWrite && <th>관리<\/th>\}/);
   assert.match(appSource, /function TaskRowActions/);
   assert.match(appSource, /onArchive=\{onTaskArchive\}/);
@@ -144,6 +149,14 @@ test("생성 후 24시간 업무는 일정표·간트와 우측 상단 알림 �
 test("업무표는 고정 헤더와 고정 업무명 열을 제공한다", () => {
   assert.match(styleSource, /\.task-schedule-matrix thead th[\s\S]*position:\s*sticky/);
   assert.match(styleSource, /\.task-schedule-matrix thead tr:first-child > th:first-child,[\s\S]*position:\s*sticky/);
+});
+
+test("간트는 앱 안에서 조밀한 260px 업무열과 26px 날짜 셀을 사용한다", () => {
+  assert.match(appSource, /const GANTT_LABEL_WIDTH = 260/);
+  assert.match(appSource, /const GANTT_DAY_WIDTH = 26/);
+  assert.match(styleSource, /\.g-lbl\s*\{[\s\S]*width:\s*260px/);
+  assert.match(styleSource, /\.g-c\s*\{[\s\S]*width:\s*26px/);
+  assert.match(styleSource, /\.g-row \.g-lbl\s*\{[\s\S]*height:\s*30px/);
 });
 
 test("프로젝트 회사는 상단에서 선택하고 왼쪽에는 화면 메뉴만 나열한다", () => {

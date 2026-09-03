@@ -38,6 +38,28 @@ export function taskScheduleMedia(task = {}) {
   return TASK_MEDIA_LABELS[code] || String(task.category || task.parent || "미지정").trim() || "미지정";
 }
 
+function taskScheduleMediaKey(task = {}) {
+  return taskScheduleMedia(task).replace(/\s+/g, " ").trim().toLocaleUpperCase("ko");
+}
+
+// sort_order is the authored row order. Preserve it inside each media and
+// only gather identical media so the table and Gantt share one row sequence.
+export function groupTaskScheduleByMedia(tasks = []) {
+  const groups = [];
+  const byMedia = new Map();
+  tasks.forEach((task) => {
+    const key = taskScheduleMediaKey(task);
+    let group = byMedia.get(key);
+    if (!group) {
+      group = [];
+      byMedia.set(key, group);
+      groups.push(group);
+    }
+    group.push(task);
+  });
+  return groups.flat();
+}
+
 export function taskScheduleStatusGroup(task = {}) {
   const status = String(task.statusCode || "").toUpperCase();
   if (["DONE", "COMPLETED"].includes(status)) return "DONE";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { buildTaskTimeline, filterTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("업무 시작일과 종료일을 같은 축의 간트 위치로 변환한다", () => {
   const timeline = buildTaskTimeline([
@@ -104,6 +104,17 @@ test("일정표는 시작일과 종료일이 빠른 업무를 먼저 두고 미�
     { id: "EARLY-A", title: "선순위 A", plannedStartDate: "2026-09-01", dueDate: "2026-09-03" },
   ];
   assert.deepEqual(sortTaskSchedule(tasks).map((task) => task.id), ["EARLY-A", "EARLY-B", "LATE", "NONE"]);
+});
+
+test("일정표와 간트는 원장 순서를 보존하면서 같은 매체를 연속 그룹으로 묶는다", () => {
+  const tasks = [
+    { id: "YT-1", categoryCode: "YOUTUBE" },
+    { id: "ADS-1", categoryCode: "ADS" },
+    { id: "YT-2", categoryCode: "YOUTUBE" },
+    { id: "NAVER-1", categoryCode: "NAVER_BLOG" },
+    { id: "ADS-2", categoryCode: "ADS" },
+  ];
+  assert.deepEqual(groupTaskScheduleByMedia(tasks).map((task) => task.id), ["YT-1", "YT-2", "ADS-1", "ADS-2", "NAVER-1"]);
 });
 
 test("일정표 상단 상태 요약은 같은 상태를 다시 누르면 전체로 돌아간다", () => {

@@ -4753,7 +4753,7 @@ table tbody tr:hover {
   min-height: 0;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 8px 12px;
   border-bottom: 1px solid #e2e7f0;
   background: #f8fafc;
 }
@@ -4775,14 +4775,14 @@ table tbody tr:hover {
 .campaign-schedule-board .reference-schedule-panel .reference-panel-head h2 {
   margin: 0;
   color: #0e141e;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -.015em;
 }
 
 .campaign-schedule-board .reference-schedule-panel .reference-panel-head .hint {
   color: #8a93a3;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
 }
 
@@ -4851,7 +4851,7 @@ table tbody tr:hover {
   left: 0;
   z-index: 2;
   display: flex;
-  width: 280px;
+  width: 260px;
   flex: none;
   align-items: center;
   gap: 8px;
@@ -4885,7 +4885,7 @@ table tbody tr:hover {
 
 .g-months {
   display: flex;
-  height: 21px;
+  height: 20px;
   border-bottom: 1px solid var(--line-2);
 }
 
@@ -4906,25 +4906,25 @@ table tbody tr:hover {
 
 .g-days {
   display: flex;
-  height: 42px;
+  height: 38px;
 }
 
 .g-d {
   display: flex;
-  width: 28px;
+  width: 26px;
   flex: none;
   flex-direction: column;
   justify-content: center;
   gap: 1px;
   border-right: 1px solid var(--line-2);
   color: var(--ink-3);
-  font-size: 11px;
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
 .g-d .dw {
-  font-size: 9.5px;
+  font-size: 9px;
 }
 
 .g-d.we,
@@ -4964,19 +4964,19 @@ table tbody tr:hover {
 }
 
 .g-row .g-lbl {
-  height: 32px;
+  height: 30px;
 }
 
 .g-track {
   position: relative;
   display: flex;
-  height: 32px;
+  height: 30px;
   flex: none;
 }
 
 .g-c {
   position: relative;
-  width: 28px;
+  width: 26px;
   flex: none;
   border-right: 1px solid var(--line-2);
 }
@@ -5005,9 +5005,9 @@ table tbody tr:hover {
 
 .g-c.on::before {
   position: absolute;
-  top: 7px;
+  top: 6px;
   right: -1px;
-  bottom: 7px;
+  bottom: 6px;
   left: 0;
   background: var(--fill, var(--idle));
   content: "";
@@ -5058,7 +5058,7 @@ table tbody tr:hover {
 }
 
 .g-grow .g-lbl {
-  height: 27px;
+  height: 25px;
   background: var(--surface-3);
   box-shadow: 1px 0 0 var(--line), inset 3px 0 0 var(--rail, transparent);
   color: var(--ink-2);
@@ -5068,7 +5068,7 @@ table tbody tr:hover {
 }
 
 .g-gtrack {
-  height: 27px;
+  height: 25px;
   background: var(--surface-3);
 }
 
@@ -10346,12 +10346,14 @@ table tbody tr:hover {
 }
 
 .campaign-schedule-surface .reference-task-table {
-  width: 100%;
+  width: 1350px;
   min-width: 1350px !important;
+  max-width: 1350px;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   color: #263247;
-  font-size: 11.75px;
+  font-size: 11.25px;
 }
 
 .campaign-schedule-surface .reference-task-table th,
@@ -10372,11 +10374,11 @@ table tbody tr:hover {
   position: sticky;
   top: 0;
   z-index: 8;
-  height: 36px;
-  padding: 7px 8px;
+  height: 32px;
+  padding: 6px 7px;
   background: #f7f8fa;
   color: #5b6575;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -10426,7 +10428,7 @@ table tbody tr:hover {
 .campaign-schedule-surface .reference-task-table th:nth-child(4),
 .campaign-schedule-surface .reference-task-table td:nth-child(4),
 .campaign-schedule-surface .reference-task-table th:nth-child(5),
-.campaign-schedule-surface .reference-task-table td:nth-child(5) { width: 112px; min-width: 112px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(5) { width: 132px; min-width: 132px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(6),
 .campaign-schedule-surface .reference-task-table td:nth-child(6) { width: 58px; min-width: 58px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(7),
@@ -10436,7 +10438,7 @@ table tbody tr:hover {
 .campaign-schedule-surface .reference-task-table th:nth-child(9),
 .campaign-schedule-surface .reference-task-table td:nth-child(9) { width: 76px; min-width: 76px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(10),
-.campaign-schedule-surface .reference-task-table td:nth-child(10) { width: 150px; min-width: 150px; }
+.campaign-schedule-surface .reference-task-table td:nth-child(10) { width: 110px; min-width: 110px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(11),
 .campaign-schedule-surface .reference-task-table td:nth-child(11) { width: 150px; min-width: 150px; }
 .campaign-schedule-surface .reference-task-table th:nth-child(12),
@@ -10448,19 +10450,23 @@ table tbody tr:hover {
   background: #f8fafc;
 }
 
+.campaign-schedule-surface .reference-task-table tbody tr.is-media-group-start:not(:first-child) td {
+  border-top: 1px solid #cbd5e1;
+}
+
 .reference-task-cell {
   position: relative;
-  min-height: 36px;
-  padding: 4px 7px;
+  min-height: 32px;
+  padding: 3px 6px;
 }
 
 .reference-task-media .reference-task-cell > span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding-top: 3px;
+  padding-top: 2px;
   color: #293549;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 650;
   white-space: nowrap;
 }
@@ -10485,21 +10491,21 @@ table tbody tr:hover {
   background: transparent;
   color: #1d2738;
   font: inherit;
-  font-size: 11.75px;
+  font-size: 11.25px;
   line-height: 1.35;
 }
 
 .task-inline-input,
 .task-inline-date,
 .task-inline-progress input {
-  min-height: 24px;
+  min-height: 22px;
   padding: 2px 4px;
 }
 
 .task-inline-textarea {
-  min-height: 26px;
-  height: 26px;
-  padding: 4px;
+  min-height: 24px;
+  height: 24px;
+  padding: 3px 4px;
   resize: vertical;
 }
 
@@ -10526,7 +10532,7 @@ table tbody tr:hover {
 
 .reference-task-name .task-new-badge {
   position: absolute;
-  top: 9px;
+  top: 7px;
   right: 7px;
 }
 
@@ -10544,7 +10550,7 @@ table tbody tr:hover {
 }
 
 .reference-task-duration .reference-task-cell {
-  padding-top: 9px;
+  padding-top: 7px;
   color: #667085;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -10556,7 +10562,7 @@ table tbody tr:hover {
   grid-template-columns: minmax(34px, 1fr) 30px 8px;
   align-items: center;
   gap: 4px;
-  min-height: 24px;
+  min-height: 22px;
 }
 
 .task-inline-progress > span {
@@ -10588,13 +10594,13 @@ table tbody tr:hover {
 .task-inline-status,
 .task-inline-owner {
   display: inline-flex;
-  min-height: 22px;
+  min-height: 20px;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
   border-radius: 5px;
   font: inherit;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 750;
   white-space: nowrap;
   cursor: pointer;
@@ -10647,7 +10653,7 @@ table tbody tr:hover {
 }
 
 .reference-task-actions .task-row-actions {
-  min-height: 36px;
+  min-height: 32px;
   justify-content: center;
 }
 
@@ -10660,8 +10666,8 @@ table tbody tr:hover {
 
 .task-row-actions > button {
   display: inline-flex;
-  min-width: 24px;
-  height: 24px;
+  min-width: 22px;
+  height: 22px;
   align-items: center;
   justify-content: center;
   padding: 0 5px;
@@ -10716,9 +10722,9 @@ table tbody tr:hover {
 }
 
 .g-lbl .task-row-actions.is-compact > button {
-  width: 22px;
-  min-width: 22px;
-  height: 22px;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
   padding: 0;
   border-radius: 5px;
 }
