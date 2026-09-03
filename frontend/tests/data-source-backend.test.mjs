@@ -68,3 +68,23 @@ test("a verified Supabase live adapter is selected explicitly", async () => {
   assert.equal(source.config.hasEndpoint, true);
   assert.equal((await source.bootstrap()).ok, true);
 });
+
+test("Supabase mode preserves the legacy Apps Script endpoint", () => {
+  const supabaseLive = {
+    getSession: () => null,
+  };
+  const endpoint = "https://script.google.com/macros/s/example/exec";
+  const source = createHubDataSource({
+    supabaseLive,
+    env: {
+      VITE_POCKET_DATA_BACKEND: "supabase",
+      VITE_SUPABASE_URL: "https://project.supabase.co",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "public-key",
+      VITE_POCKET_API_MODE: "live",
+      VITE_POCKET_API_URL: endpoint,
+    },
+  });
+
+  assert.equal(source.config.endpoint, endpoint);
+  assert.equal(source.config.hasEndpoint, true);
+});

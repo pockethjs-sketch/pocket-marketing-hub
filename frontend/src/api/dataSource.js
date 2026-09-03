@@ -27,11 +27,12 @@ export function createHubDataSource(options = {}) {
         retriable: false,
       });
     }
-    const baseConfig = options.config || readApiConfig({
-      ...(runtimeEnv || {}),
-      VITE_POCKET_API_MODE: "auto",
-      VITE_POCKET_API_URL: "",
-    });
+    // Supabase is the primary store, but the hybrid adapter still needs the
+    // deployed Apps Script endpoint for the pages that have not moved yet and
+    // for the background legacy session. Never erase the validated build-time
+    // endpoint here: doing so makes createSupabaseHybridApi fail before the
+    // login screen can render.
+    const baseConfig = options.config || readApiConfig(runtimeEnv);
     config = Object.freeze({
       ...baseConfig,
       dataBackend: "supabase",
