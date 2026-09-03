@@ -71,7 +71,8 @@ test("일정표는 참고 HTML 열 구조를 유지하며 셀 직접 수정과 �
   assert.match(appSource, /onClick=\{cycleStatus\}/);
   assert.match(appSource, /onClick=\{cycleOwner\}/);
   assert.match(appSource, /schedule_dates_json: start && end \? serializeScheduleDates\(scheduleDateRange\(start, end\)\) : null/);
-  assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*min-width:\s*1544px/);
+  assert.match(styleSource, /\.campaign-schedule-surface \.reference-task-table[\s\S]*min-width:\s*1350px/);
+  assert.match(styleSource, /\.reference-task-cell\s*\{[\s\S]*min-height:\s*36px/);
   assert.match(appSource, /<th>비고<\/th>\{canWrite && <th>관리<\/th>\}/);
   assert.match(appSource, /function TaskRowActions/);
   assert.match(appSource, /onArchive=\{onTaskArchive\}/);
