@@ -43,12 +43,56 @@ test("내부 업무 프레임은 프로젝트별 권한 캐시와 무관하게 �
   assert.equal(taskForm.canOperateProjectTasks({ live: false, role: "pocket" }), false);
 });
 
-test("완료 업무 추가는 완료 상태만 고정하고 담당 기본값은 로그인 조직을 따른다", () => {
+test("완료 업무 추가는 완료 상태와 100%를 고정하고 담당 기본값은 로그인 조직을 따른다", () => {
   assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").responsible_org_code, "POCKET");
   assert.equal(taskForm.taskCreateInitialFields("ns", "completed").responsible_org_code, "NS");
   assert.equal(taskForm.taskCreateInitialFields("client", "completed").responsible_org_code, "CLIENT");
   assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").status_code, "DONE");
-  assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").progress_percent, 0);
+  assert.equal(taskForm.taskCreateInitialFields("pocket", "completed").progress_percent, 100);
+});
+
+test("새 업무는 오늘부터 7일, 완료 업무는 최근 7일을 제안한다", () => {
+  const regular = taskForm.taskCreateInitialFields("ns", "default", "2026-09-03");
+  assert.equal(regular.planned_start_date, "2026-09-03");
+  assert.equal(regular.due_date, "2026-09-09");
+  assert.equal(taskForm.taskDateRangeDuration(regular), 7);
+  const done = taskForm.taskCreateInitialFields("pocket", "completed", "2026-09-03");
+  assert.equal(done.planned_start_date, "2026-08-28");
+  assert.equal(done.due_date, "2026-09-03");
+  assert.equal(taskForm.taskDateRangeDuration(done), 7);
+});
+
+test("일정 빠른 선택은 한국 기준일과 월·연도 경계를 유지한다", () => {
+  assert.deepEqual(taskForm.taskDateRangePreset("NEXT_7", new Date("2026-09-02T16:00:00Z")), {planned_start_date:"2026-09-03",due_date:"2026-09-09"});
+  assert.deepEqual(taskForm.taskDateRangePreset("NEXT_7", "2026-12-29"), {planned_start_date:"2026-12-29",due_date:"2027-01-04"});
+  assert.deepEqual(taskForm.taskDateRangePreset("LAST_7", "2024-03-03"), {planned_start_date:"2024-02-26",due_date:"2024-03-03"});
+  assert.deepEqual(taskForm.taskDateRangePreset("THIS_WEEK", "2026-09-06"), {planned_start_date:"2026-08-31",due_date:"2026-09-06"});
+  assert.deepEqual(taskForm.taskDateRangePreset("NEXT_WEEK", "2026-09-03"), {planned_start_date:"2026-09-07",due_date:"2026-09-13"});
+  assert.deepEqual(taskForm.taskDateRangePreset("UNSCHEDULED"), {planned_start_date:"",due_date:""});
+});
+
+test("작성 오류는 저장 전에 안내하며 일정 미정은 허용한다", () => {
+  const valid = {...taskForm.taskCreateInitialFields("pocket", "default", "2026-09-03"),title:"업무"};
+  assert.equal(taskForm.taskCreateValidationError(valid), "");
+  assert.match(taskForm.taskCreateValidationError({...valid,title:"   "}), /제목/);
+  assert.match(taskForm.taskCreateValidationError({...valid,due_date:"2026-09-01"}), /종료일/);
+  assert.match(taskForm.taskCreateValidationError({...valid,due_date:""}), /함께/);
+  assert.match(taskForm.taskCreateValidationError({...valid,progress_percent:101}), /진행률/);
+  assert.match(taskForm.taskCreateValidationError({...valid,completion_url:"javascript:alert(1)"}), /https/);
+  assert.equal(taskForm.taskCreateValidationError({...valid,...taskForm.taskDateRangePreset("UNSCHEDULED")}), "");
+});
+
+test("새 업무 일정은 간트 배열에 일치시키고 완료 진행률은 100으로 저장한다", () => {
+  const fields = {...taskForm.taskCreateInitialFields("ns","completed","2026-09-03"),title:"  완료 업무  ",progress_percent:0};
+  const payload = taskForm.taskCreateSubmissionFields(fields);
+  assert.equal(payload.title, "완료 업무");
+  assert.equal(payload.progress_percent, 100);
+  const dates = JSON.parse(payload.schedule_dates_json);
+  assert.equal(dates.length, 7);
+  assert.equal(dates[0], fields.planned_start_date);
+  assert.equal(dates.at(-1), fields.due_date);
+  const unscheduled = taskForm.taskCreateSubmissionFields({...fields,...taskForm.taskDateRangePreset("UNSCHEDULED")});
+  assert.equal(Object.hasOwn(unscheduled, "schedule_dates_json"), false);
 });
 
 test("업무 생성은 표·일정 필드를 보존하고 진행률을 숫자로 변환한다", () => {

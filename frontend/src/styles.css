@@ -5722,7 +5722,15 @@ table tbody tr:hover {
   background: #f8fafc;
 }
 
-.project-issue-footer .btn { display: inline-flex; align-items: center; gap: 5px; }
+.project-issue-footer .project-issue-add {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 34px; padding: 7px 13px; border: 1px solid #24375e; border-radius: 8px;
+  background: #24375e; color: #fff; font: inherit; font-size: 12px; font-weight: 700;
+  box-shadow: 0 2px 4px #192a4714; cursor: pointer; transition: background .15s, box-shadow .15s;
+}
+.project-issue-footer .project-issue-add:hover:not(:disabled) { background: #172744; box-shadow: 0 3px 7px #192a4726; }
+.project-issue-footer .project-issue-add:focus-visible { outline: 3px solid #9faed0; outline-offset: 2px; }
+.project-issue-footer .project-issue-add:disabled { opacity: .55; cursor: wait; }
 .project-issue-footer small { color: #c7354f; font-size: 11px; }
 
 @media (max-width: 700px) {

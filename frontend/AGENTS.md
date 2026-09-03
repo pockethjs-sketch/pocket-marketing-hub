@@ -10,6 +10,10 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Pocket Marketing Hub design decisions
 
+- Task creation uses the dedicated TaskCreateModal: title/details → Korean workstream and assigned organization → date range → status/progress. Use click choices, not a wall of dropdowns. Keep phase, priority, completion link, remarks, and Pocket-only visibility under additional settings; completed-task entry opens these settings.
+- New tasks suggest today through today+6 (7 calendar days, Korea time); completed tasks suggest the last 7 days and DONE/100%. Offer today+7-day range, last 7 days, this/next Monday–Sunday week, and unscheduled presets. These are editable creation defaults only, never a rewrite of existing tasks or progress inferred from elapsed dates. Keep start/end and Gantt dates consistent on creation.
+- Creation dialogs must retain drafts on rejected saves, lock duplicate submits, confirm discarding a modified draft, and keep the footer visible while only the form body scrolls. Style the issue-row add button explicitly in its component scope; generic unscoped btn classes are insufficient.
+
 - Use taskWorkstreams.js for Korean workstream labels across new MARKETING/DESIGN/VIDEO and legacy MKT/DSN/VID codes. Never show raw English workstream enums in the schedule table or let equivalent codes fail a Korean filter.
 - Put a dedicated filter panel below the table/Gantt switch: 업무 상태별 / 업무 분야별 / 매체별 / 기간별 / 담당 업무별. Filter types are tabs, values are click buttons, and selected conditions remain visible as removable chips. Combine groups with AND, preserve selections when switching table/Gantt or filter tabs, reset on project change, and keep controls usable at zero results.
 - Pocket/NS task filters use the assigned responsible organization, not creator identity. Hide the company filter for clients to preserve executor privacy. Apply all filters locally to the existing task resource; never fetch or save just because a filter was clicked.

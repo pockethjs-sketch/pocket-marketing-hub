@@ -60,7 +60,8 @@ import {
   viewLocationHash,
   viewResourceKey,
 } from "./planNavigation.js";
-import { canOperateProjectTasks, nextTaskResponsibleOrgCode, nextTaskStatusCode, taskCreateInitialFields, taskCreateSubmissionFields, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskStatusMutationFields, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
+import { canOperateProjectTasks, nextTaskResponsibleOrgCode, nextTaskStatusCode, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskStatusMutationFields, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
+import { TaskCreateModal } from "./TaskCreateModal.jsx";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
 import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, taskScheduleCategory, taskScheduleMedia, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
 import { buildGanttAxis, ganttMonthClass, groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
@@ -686,26 +687,29 @@ function DisclosureChevron({ expanded, className, size = 16 }) {
   return <span className={`disclosure-chevron ${className || ""}`} data-direction={direction} style={{ "--chevron-size": `${size + 3}px` }} aria-hidden="true">{disclosureChevronGlyph(expanded)}</span>;
 }
 
-function CreateRecordModal({ entityType, role, clientName, onClose, onSubmit }) {
-  const completedTaskMode = entityType === "task-completed";
-  const recordType = completedTaskMode ? "task" : entityType;
-  const [fields, setFields] = useState(() => recordType === "task" ? taskCreateInitialFields(role, completedTaskMode ? "completed" : "default") : recordType === "content" ? {
+function CreateRecordModal(props) {
+  return ["task", "task-completed"].includes(props.entityType)
+    ? <TaskCreateModal {...props} completed={props.entityType === "task-completed"} />
+    : <ContentOrFileCreateModal {...props} />;
+}
+
+function ContentOrFileCreateModal({ entityType, role, onClose, onSubmit }) {
+  const recordType = entityType;
+  const [fields, setFields] = useState(() => recordType === "content" ? {
     title: "", channel_code: "INSTAGRAM", format_code: "FEED", status_code: "DRAFT", planned_date: "", visibility_code: "PROJECT_TEAM",
   } : {
     title: "", url: "", file_type_code: "LINK", storage_provider_code: "LINK", visibility_code: "PROJECT_TEAM", notes: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const entityLabel = completedTaskMode ? "완료 업무" : recordType === "task" ? "업무" : recordType === "content" ? "콘텐츠" : "자료";
+  const entityLabel = recordType === "content" ? "콘텐츠" : "자료";
   const setField = (name, value) => setFields((current) => ({ ...current, [name]: value }));
   const submit = async (event) => {
     event.preventDefault();
     setError(null);
     setSaving(true);
     try {
-      const cleaned = recordType === "task"
-        ? taskCreateSubmissionFields(fields)
-        : Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== ""));
+      const cleaned = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== ""));
       if (recordType === "content") cleaned.current_version_no = 1;
       await onSubmit(recordType, cleaned);
       onClose();
@@ -717,7 +721,6 @@ function CreateRecordModal({ entityType, role, clientName, onClose, onSubmit }) 
   };
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal" role="dialog" aria-modal="true" aria-labelledby="create-record-title"><header><div><p className="editorial-kicker">운영 데이터 원장 등록</p><h2 id="create-record-title">{entityLabel} 추가</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
     <label className="create-field is-wide"><span>{entityLabel} 제목</span><input autoFocus required maxLength={200} value={fields.title} onChange={(event) => setField("title", event.target.value)} placeholder={`${entityLabel} 제목을 입력하세요`} /></label>
-    {recordType === "task" && <><FormSelect label="단계" value={fields.phase_code} onChange={(value) => setField("phase_code", value)} options={createFormOptions.phase} /><FormSelect label="업무 분야" value={fields.workstream_code} onChange={(value) => setField("workstream_code", value)} options={createFormOptions.stream} /><FormSelect label="담당" value={fields.responsible_org_code} onChange={(value) => setField("responsible_org_code", value)} options={taskResponsibleOrgOptions(clientName)} />{completedTaskMode ? <div className="completed-task-lock"><Check size={16} /><div><strong>완료 상태로 바로 등록</strong><span>담당자는 직접 선택할 수 있습니다.</span></div></div> : <FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["NOT_STARTED", "미착수"], ["IN_PROGRESS", "진행"]]} />}<FormSelect label="우선순위" value={fields.priority_code} onChange={(value) => setField("priority_code", value)} options={[["NORMAL", "보통"], ["HIGH", "높음"], ["CRITICAL", "긴급"]]} /><label className="create-field is-wide"><span>세부내용</span><textarea rows="3" maxLength={10000} value={fields.description} onChange={(event) => setField("description", event.target.value)} placeholder="업무 범위와 산출물을 적어 주세요" /></label><label className="create-field"><span>시작일</span><input type="date" value={fields.planned_start_date} onChange={(event) => setField("planned_start_date", event.target.value)} /></label><label className="create-field"><span>종료일</span><input type="date" value={fields.due_date} onChange={(event) => setField("due_date", event.target.value)} /></label><label className="create-field"><span>진행률 (%)</span><input type="number" min="0" max="100" value={fields.progress_percent} onChange={(event) => setField("progress_percent", event.target.value)} /></label><label className="create-field is-wide"><span>완료링크</span><input type="url" pattern="https://.*" value={fields.completion_url} onChange={(event) => setField("completion_url", event.target.value)} placeholder="https://" /></label><label className="create-field is-wide"><span>비고</span><textarea rows="2" maxLength={10000} value={fields.remarks} onChange={(event) => setField("remarks", event.target.value)} placeholder="일정 이슈나 참고사항을 적어 주세요" /></label></>}
     {recordType === "content" && <><FormSelect label="채널" value={fields.channel_code} onChange={(value) => setField("channel_code", value)} options={createFormOptions.channel} /><FormSelect label="형식" value={fields.format_code} onChange={(value) => setField("format_code", value)} options={createFormOptions.format} /><FormSelect label="상태" value={fields.status_code} onChange={(value) => setField("status_code", value)} options={[["DRAFT", "초안"], ["PLANNED", "예정"], ["IN_PROGRESS", "제작"]]} /><label className="create-field"><span>예정일</span><input type="date" value={fields.planned_date} onChange={(event) => setField("planned_date", event.target.value)} /></label></>}
     {recordType === "file" && <><label className="create-field is-wide"><span>HTTPS 자료 링크</span><input type="url" required pattern="https://.*" value={fields.url} onChange={(event) => setField("url", event.target.value)} placeholder="https://" /></label><label className="create-field is-wide"><span>메모</span><textarea rows="3" maxLength={1000} value={fields.notes} onChange={(event) => setField("notes", event.target.value)} placeholder="자료 설명 또는 버전을 적어 주세요" /></label></>}
     {role === "pocket" && <FormSelect label="공개 범위" value={fields.visibility_code} onChange={(value) => setField("visibility_code", value)} options={[["PROJECT_TEAM", "프로젝트 팀"], ["CLIENT", "고객 공개"], ["POCKET_ONLY", "포켓 전용"]]} />}
@@ -1412,7 +1415,7 @@ function ProjectIssueRow({ issue, index, canWrite, onUpdate, onArchive }) {
   </tr>;
 }
 
-function ProjectIssuePanel({ issues, canWrite, onCreate, onUpdate, onArchive }) {
+export function ProjectIssuePanel({ issues, canWrite, onCreate, onUpdate, onArchive }) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const addIssue = async () => {
@@ -1432,7 +1435,7 @@ function ProjectIssuePanel({ issues, canWrite, onCreate, onUpdate, onArchive }) 
     <div className="project-issue-scroll"><table id="issueTable"><thead><tr><th>No</th><th>등록일</th><th>구분</th><th>관련 업무</th><th>내용</th><th>담당자</th><th>상태</th><th>완료링크</th><th>비고</th>{canWrite && <th aria-label="행 작업" />}</tr></thead><tbody>
       {issues.length ? issues.map((issue, index) => <ProjectIssueRow key={issue.id} issue={issue} index={index} canWrite={canWrite} onUpdate={onUpdate} onArchive={onArchive} />) : <tr><td colSpan={canWrite ? 10 : 9} className="project-issue-empty">기록된 이슈가 없습니다.</td></tr>}
     </tbody></table></div>
-    {canWrite && <footer className="project-issue-footer"><button type="button" className="btn" disabled={creating} onClick={addIssue}>{creating ? <LoaderCircle size={13} className="spin" /> : <Plus size={13} />}이슈 행 추가</button>{createError && <small role="alert">{createError}</small>}</footer>}
+    {canWrite && <footer className="project-issue-footer"><button type="button" className="project-issue-add" disabled={creating} onClick={addIssue}>{creating ? <LoaderCircle size={14} className="spin" /> : <Plus size={14} />}{creating ? "행 추가 중" : "이슈 행 추가"}</button>{createError && <small role="alert">{createError}</small>}</footer>}
   </section>;
 }
 

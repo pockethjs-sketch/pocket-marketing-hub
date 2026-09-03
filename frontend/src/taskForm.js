@@ -52,7 +52,46 @@ export function canOperateProjectTasks({ live, role, loginEnabled = true } = {})
   return role === "pocket" || role === "ns";
 }
 
-export function taskCreateInitialFields(role, mode = "default") {
+export function taskDateRangePreset(preset = "NEXT_7", todayValue = new Date()) {
+  if (preset === "UNSCHEDULED") return { planned_start_date: "", due_date: "" };
+  const iso = typeof todayValue === "string" ? todayValue.slice(0, 10) : (() => {
+    const parts = new Intl.DateTimeFormat("en", {timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(todayValue);
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  })();
+  const start = new Date(`${iso}T12:00:00`);
+  const end = new Date(start);
+  if (preset === "LAST_7") start.setDate(start.getDate() - 6);
+  else if (preset === "THIS_WEEK" || preset === "NEXT_WEEK") {
+    const offset = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - offset + (preset === "NEXT_WEEK" ? 7 : 0));
+    end.setTime(start.getTime());
+    end.setDate(end.getDate() + 6);
+  } else end.setDate(end.getDate() + 6);
+  const format = date => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+  return { planned_start_date: format(start), due_date: format(end) };
+}
+
+export function taskDateRangeDuration(fields = {}) {
+  if (!fields.planned_start_date || !fields.due_date) return null;
+  const start = new Date(`${fields.planned_start_date}T12:00:00Z`).getTime();
+  const end = new Date(`${fields.due_date}T12:00:00Z`).getTime();
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start ? Math.round((end - start) / 86400000) + 1 : null;
+}
+
+export function taskCreateValidationError(fields = {}) {
+  if (!String(fields.title || "").trim()) return "업무 제목을 입력해 주세요.";
+  if (Boolean(fields.planned_start_date) !== Boolean(fields.due_date)) return "시작일과 종료일을 함께 선택하거나 일정 미정을 선택해 주세요.";
+  if (fields.planned_start_date && taskDateRangeDuration(fields) === null) return "종료일은 시작일과 같거나 이후여야 합니다.";
+  if (!Number.isFinite(Number(fields.progress_percent)) || Number(fields.progress_percent) < 0 || Number(fields.progress_percent) > 100) return "진행률은 0~100 사이로 입력해 주세요.";
+  if (fields.completion_url) {
+    try { if (new URL(fields.completion_url).protocol !== "https:") return "완료링크는 https:// 주소를 입력해 주세요."; }
+    catch { return "올바른 완료링크 주소를 입력해 주세요."; }
+  }
+  return "";
+}
+
+export function taskCreateInitialFields(role, mode = "default", todayValue = new Date()) {
   const responsibleOrgCode = role === "ns" ? "NS" : role === "client" ? "CLIENT" : "POCKET";
   return {
     title: "",
@@ -62,9 +101,8 @@ export function taskCreateInitialFields(role, mode = "default") {
     status_code: mode === "completed" ? "DONE" : "NOT_STARTED",
     priority_code: "NORMAL",
     description: "",
-    planned_start_date: "",
-    due_date: "",
-    progress_percent: 0,
+    ...taskDateRangePreset(mode === "completed" ? "LAST_7" : "NEXT_7", todayValue),
+    progress_percent: mode === "completed" ? 100 : 0,
     completion_url: "",
     remarks: "",
     visibility_code: role === "client" ? "CLIENT" : "PROJECT_TEAM",
@@ -73,7 +111,10 @@ export function taskCreateInitialFields(role, mode = "default") {
 
 export function taskCreateSubmissionFields(fields) {
   const cleaned = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== ""));
+  if (Object.prototype.hasOwnProperty.call(cleaned, "title")) cleaned.title = String(cleaned.title).trim();
   if (Object.prototype.hasOwnProperty.call(cleaned, "progress_percent")) cleaned.progress_percent = Number(cleaned.progress_percent);
+  if (cleaned.status_code === "DONE") cleaned.progress_percent = 100;
+  if (cleaned.planned_start_date && cleaned.due_date) cleaned.schedule_dates_json = serializeScheduleDates(scheduleDateRange(cleaned.planned_start_date, cleaned.due_date));
   return { ...cleaned, reviewer_org_code: "POCKET" };
 }
 
