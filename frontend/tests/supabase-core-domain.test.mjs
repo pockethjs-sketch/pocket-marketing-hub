@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createSupabaseCoreDomainApi } from "../src/supabase/coreDomainApi.js";
+import { legacyPermissionMirrorInput } from "../src/supabase/hybridApi.js";
 
 function clientReturning(responses) {
   const calls = [];
@@ -53,4 +54,15 @@ test("도메인 RPC의 애플리케이션 오류는 저장 성공으로 처리�
     api.mutateKpi({ projectId: 1, mutationId: "kpi_abcdefgh", expectedRowVersion: 2, mutation: { operation: "UPDATE", id: 3, fields: { target_value: 10 } } }),
     (error) => error.code === "conflict",
   );
+});
+
+test("고객 권한의 Sheets 호환 복제는 Supabase membership id를 넘기지 않는다", () => {
+  assert.deepEqual(legacyPermissionMirrorInput({
+    operation: "UPSERT",
+    account: { account: "client", projectId: "PRJ-1", membershipId: "42", allowedPages: ["tasks"] },
+  }), {
+    operation: "UPSERT",
+    account: { account: "client", projectId: "PRJ-1", allowedPages: ["tasks"] },
+    fields: undefined,
+  });
 });

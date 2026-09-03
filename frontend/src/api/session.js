@@ -1,5 +1,5 @@
-// v2 forces one clean sign-in when task persistence moves from Apps Script to
-// Supabase, ensuring both sessions exist before the first task read.
+// v3 forces one clean sign-in for direct Supabase Auth and prepares the legacy
+// Sheets compatibility session in the background.
 export const SESSION_STORAGE_KEY = "pocket_marketing_hub_session_v3";
 
 function safeStorage(candidate) {

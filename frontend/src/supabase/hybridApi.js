@@ -88,6 +88,16 @@ export function summarizeSupabaseTasks(items = []) {
   };
 }
 
+export function legacyPermissionMirrorInput(input = {}) {
+  const account = input.account || input.fields || {};
+  const { membershipId: _membershipId, membership_id: _membershipIdSnake, ...legacyAccount } = account;
+  return {
+    ...input,
+    account: legacyAccount,
+    fields: undefined,
+  };
+}
+
 export function createSupabaseHybridApi(storageConfig, options = {}) {
   const env = options.env ?? import.meta.env;
   const sessionStore = options.sessionStore || createSessionStore();
@@ -281,6 +291,29 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     return mutateTasksBatch({ ...input, projectId, mutations: mutations.map((mutation) => ({ ...mutation, projectId })) });
   }
 
+  async function accessAdminMutate(input = {}) {
+    const operation = String(input.operation || input.account?.operation || "UPSERT").toUpperCase();
+    let result;
+    try {
+      result = await accessAdmin.mutate(input);
+    } catch (error) {
+      if (operation !== "REMOVE_ACCESS" || error?.code !== "not_found") throw error;
+      result = { ok: true, generatedAt: new Date().toISOString(), data: { saved: true, removed: true, alreadyRemoved: true } };
+    }
+    await requireLegacySession();
+    try {
+      await sheets.accessAdminMutate(legacyPermissionMirrorInput(input));
+    } catch (error) {
+      throw new HubApiError("Supabase 권한은 저장됐지만 기존 Sheets 화면용 계정 복제에 실패했습니다. 다시 로그인한 뒤 같은 내용을 재저장해 주세요.", {
+        code: "legacy_permission_sync_failed",
+        action: "access_admin",
+        retriable: true,
+        cause: error,
+      });
+    }
+    return result;
+  }
+
   async function activity(params = {}) {
     if (String(params.entityType || "").toUpperCase() !== "TASK") return sheets.activity(params);
     const projectId = await resolveProjectId(params.projectId);
@@ -313,7 +346,7 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
     files: legacyRead("files"),
     activity,
     permissions: () => accessAdmin.read(),
-    accessAdminMutate: (input) => accessAdmin.mutate(input),
+    accessAdminMutate,
     mutate,
     mutateBatch,
   });
