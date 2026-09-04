@@ -10,7 +10,9 @@ const valueAfter = (name) => {
   return index >= 0 ? args[index + 1] : "";
 };
 const sourcePath = path.resolve(valueAfter("--source") || "");
+const baselineBackupPath = valueAfter("--baseline-backup") ? path.resolve(valueAfter("--baseline-backup")) : "";
 const apply = args.includes("--apply");
+const overwriteAll = args.includes("--overwrite-all");
 const asOf = valueAfter("--as-of") || new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Seoul",
   year: "numeric",
@@ -19,6 +21,9 @@ const asOf = valueAfter("--as-of") || new Intl.DateTimeFormat("en-CA", {
 }).format(new Date());
 if (!sourcePath) throw new Error("--source <campaign schedule html> is required");
 if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error("--as-of must be YYYY-MM-DD");
+if (apply && !baselineBackupPath && !overwriteAll) {
+  throw new Error("Full overwrite is blocked. Use --baseline-backup for blank-only repair or explicitly pass --overwrite-all");
+}
 
 const html = await readFile(sourcePath, "utf8");
 const seedMatch = html.match(/<script\s+id="seed"\s+type="application\/json">([\s\S]*?)<\/script>/i);
@@ -53,6 +58,36 @@ const scheduleDates = (campaign, row) => {
     : Array.from({ length: inclusiveDays(row.start, row.end) }, (_, offset) => addDays(row.start, offset));
   return [...new Set(dates.map(isoDay))].sort();
 };
+const normalizedScheduleJson = (value) => {
+  if (Array.isArray(value)) return JSON.stringify(value.map(isoDay));
+  if (!value) return "[]";
+  try {
+    const parsed = JSON.parse(String(value));
+    return JSON.stringify(Array.isArray(parsed) ? parsed.map(isoDay) : []);
+  } catch {
+    return "[]";
+  }
+};
+const taskScheduleFields = (task = {}) => ({
+  planned_start_date: isoDay(task.planned_start_date),
+  due_date: isoDay(task.due_date),
+  schedule_dates_json: normalizedScheduleJson(task.schedule_dates_json),
+  progress_percent: Number(task.progress_percent || 0),
+});
+const sameScheduleFields = (left, right) => left.planned_start_date === right.planned_start_date
+  && left.due_date === right.due_date
+  && left.schedule_dates_json === right.schedule_dates_json
+  && left.progress_percent === right.progress_percent;
+const hasCompleteSchedule = (fields) => Boolean(fields.planned_start_date
+  && fields.due_date
+  && JSON.parse(fields.schedule_dates_json).length);
+
+let baselineBySourceId = null;
+if (baselineBackupPath) {
+  const baseline = JSON.parse(await readFile(baselineBackupPath, "utf8"));
+  baselineBySourceId = new Map((baseline.projects || []).flatMap((project) => project.tasks || [])
+    .map((task) => [String(task.source_task_id || ""), task]));
+}
 
 const envText = await readFile(new URL("../.env.production.local", import.meta.url), "utf8");
 const envValue = (name) => envText.match(new RegExp(`^${name}=(.+)$`, "m"))?.[1]?.trim() || "";
@@ -117,7 +152,7 @@ const expectedByCampaign = new Map(campaigns.map((campaign) => [campaign.id, cam
     campaign,
     row,
     source_task_id: sourceTaskId(campaign, row),
-    fields: {
+    restoredFields: {
       planned_start_date: dates[0],
       due_date: dates.at(-1),
       schedule_dates_json: JSON.stringify(dates),
@@ -125,6 +160,15 @@ const expectedByCampaign = new Map(campaigns.map((campaign) => [campaign.id, cam
     },
   };
 })]));
+
+for (const expectedRows of expectedByCampaign.values()) {
+  for (const item of expectedRows) {
+    const baselineTask = baselineBySourceId?.get(item.source_task_id);
+    const baselineFields = baselineTask ? taskScheduleFields(baselineTask) : null;
+    item.preserveBaseline = Boolean(baselineFields && hasCompleteSchedule(baselineFields));
+    item.fields = item.preserveBaseline ? baselineFields : item.restoredFields;
+  }
+}
 
 const plans = [];
 for (const campaign of campaigns) {
@@ -141,32 +185,40 @@ for (const campaign of campaigns) {
   if (missing.length) {
     throw new Error(`${campaign.id}: ${missing.length} source tasks are missing (${missing.slice(0, 5).map((item) => item.source_task_id).join(", ")})`);
   }
-  const updates = expectedRows.map((item) => ({ ...item, task: bySourceId.get(item.source_task_id) })).filter(({ task, fields }) => {
-    const currentDates = Array.isArray(task.schedule_dates_json)
-      ? JSON.stringify(task.schedule_dates_json.map(isoDay))
-      : String(task.schedule_dates_json || "");
-    return isoDay(task.planned_start_date) !== fields.planned_start_date
-      || isoDay(task.due_date) !== fields.due_date
-      || currentDates !== fields.schedule_dates_json
-      || Number(task.progress_percent || 0) !== fields.progress_percent;
+  const conflicts = [];
+  const updates = expectedRows.map((item) => ({ ...item, task: bySourceId.get(item.source_task_id) })).filter((item) => {
+    const currentFields = taskScheduleFields(item.task);
+    if (sameScheduleFields(currentFields, item.fields)) return false;
+    if (baselineBySourceId && !sameScheduleFields(currentFields, item.restoredFields)) {
+      conflicts.push({ sourceTaskId: item.source_task_id, title: item.task.title });
+      return false;
+    }
+    return true;
   });
-  plans.push({ campaign, project, tasks, expectedRows, updates });
+  plans.push({ campaign, project, tasks, expectedRows, updates, conflicts });
 }
 
-const summary = plans.map(({ campaign, project, tasks, expectedRows, updates }) => ({
+const summary = plans.map(({ campaign, project, tasks, expectedRows, updates, conflicts }) => ({
   campaign: campaign.id,
   project: project.project_name,
   sourceRows: expectedRows.length,
   databaseRows: tasks.length,
   rowsToRestore: updates.length,
+  existingSchedulesPreserved: expectedRows.filter((item) => item.preserveBaseline).length,
+  blankSchedulesFilled: expectedRows.filter((item) => !item.preserveBaseline).length,
+  concurrentEditConflicts: conflicts,
   scheduledRowsAfterRestore: expectedRows.filter((item) => JSON.parse(item.fields.schedule_dates_json).length > 0).length,
   progress: Object.fromEntries([...new Set(expectedRows.map((item) => item.fields.progress_percent))].sort((a, b) => a - b).map((percent) => [percent, expectedRows.filter((item) => item.fields.progress_percent === percent).length])),
 }));
 
 if (!apply) {
-  console.log(JSON.stringify({ apply: false, asOf, summary }, null, 2));
+  console.log(JSON.stringify({ apply: false, mode: baselineBySourceId ? "BLANK_ONLY_FROM_BASELINE" : "FULL_RESTORE", asOf, summary }, null, 2));
   await client.auth.signOut();
   process.exit(0);
+}
+
+if (plans.some((plan) => plan.conflicts.length)) {
+  throw new Error("Concurrent task edits were detected after the full restore; no correction was applied");
 }
 
 const backupDir = path.resolve(new URL("../../artifacts/backups", import.meta.url).pathname.replace(/^\/(?:([A-Za-z]:))/, "$1"));
@@ -218,5 +270,5 @@ for (const plan of plans) {
 }
 if (verification.some((item) => item.mismatches.length)) throw new Error(`Verification failed: ${JSON.stringify(verification)}`);
 
-console.log(JSON.stringify({ apply: true, asOf, backupPath, summary, verification }, null, 2));
+console.log(JSON.stringify({ apply: true, mode: baselineBySourceId ? "BLANK_ONLY_FROM_BASELINE" : "FULL_RESTORE", asOf, backupPath, summary, verification }, null, 2));
 await client.auth.signOut();
