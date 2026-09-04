@@ -1,4 +1,12 @@
 const DONE_CODES = new Set(["DONE", "COMPLETED"]);
+const DAY_MS = 86_400_000;
+
+function inclusiveDayCount(startDate, endDate) {
+  const start = Date.parse(`${startDate}T00:00:00Z`);
+  const end = Date.parse(`${endDate}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return Math.max(1, Math.floor((end - start) / DAY_MS) + 1);
+}
 
 export function koreaDateValue(value = new Date()) {
   if (typeof value === "string") return value.slice(0, 10);
@@ -28,10 +36,22 @@ export function effectiveTaskScheduleState(task = {}, todayValue = new Date()) {
   else if (statusMode !== "MANUAL" && startDate && today >= startDate && (!dueDate || today <= dueDate)) statusCode = "IN_PROGRESS";
 
   const rawProgress = Number(task.progressPercent ?? task.progress_percent ?? 0);
+  let progressPercent = Math.max(0, Math.min(100, Number.isFinite(rawProgress) ? rawProgress : 0));
+  if (DONE_CODES.has(statusCode)) {
+    progressPercent = 100;
+  } else if (statusMode !== "MANUAL" && startDate && dueDate) {
+    const totalDays = inclusiveDayCount(startDate, dueDate);
+    const elapsedDays = inclusiveDayCount(startDate, today);
+    if (totalDays !== null && elapsedDays !== null) {
+      progressPercent = today < startDate ? 0 : Math.max(0, Math.min(100, Math.round((elapsedDays / totalDays) * 100)));
+    }
+  } else if (statusCode === "NOT_STARTED" && statusMode !== "MANUAL") {
+    progressPercent = 0;
+  }
   return {
     statusMode,
     statusCode,
-    progressPercent: DONE_CODES.has(statusCode) ? 100 : statusCode === "NOT_STARTED" && statusMode !== "MANUAL" ? 0 : Math.max(0, Math.min(100, Number.isFinite(rawProgress) ? rawProgress : 0)),
+    progressPercent,
     automatic: statusMode !== "MANUAL" || Boolean(dueDate && today > dueDate),
   };
 }

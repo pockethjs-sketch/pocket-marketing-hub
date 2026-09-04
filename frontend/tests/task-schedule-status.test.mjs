@@ -5,8 +5,8 @@ import { effectiveTaskScheduleState, koreaDateValue } from "../src/taskScheduleS
 test("일정 자동 상태는 시작 전 미착수, 기간 중 진행, 종료일 다음 날 완료다", () => {
   const task = { status_mode: "SCHEDULE", status_code: "NOT_STARTED", planned_start_date: "2026-09-04", due_date: "2026-09-06", progress_percent: 35 };
   assert.deepEqual(effectiveTaskScheduleState(task, "2026-09-03"), { statusMode: "SCHEDULE", statusCode: "NOT_STARTED", progressPercent: 0, automatic: true });
-  assert.equal(effectiveTaskScheduleState(task, "2026-09-04").statusCode, "IN_PROGRESS");
-  assert.equal(effectiveTaskScheduleState(task, "2026-09-06").statusCode, "IN_PROGRESS");
+  assert.deepEqual(effectiveTaskScheduleState(task, "2026-09-04"), { statusMode: "SCHEDULE", statusCode: "IN_PROGRESS", progressPercent: 33, automatic: true });
+  assert.deepEqual(effectiveTaskScheduleState(task, "2026-09-06"), { statusMode: "SCHEDULE", statusCode: "IN_PROGRESS", progressPercent: 100, automatic: true });
   assert.deepEqual(effectiveTaskScheduleState(task, "2026-09-07"), { statusMode: "SCHEDULE", statusCode: "DONE", progressPercent: 100, automatic: true });
 });
 
