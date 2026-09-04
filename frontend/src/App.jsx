@@ -92,8 +92,8 @@ const SAVE_OVERLAY_MIN_MS = 500;
 const SAVE_OVERLAY_COALESCE_MS = 250;
 // Keep the Gantt geometry identical to the supplied campaign schedule HTML.
 // These are fixed columns; the scroll container owns overflow on narrow screens.
-const GANTT_LABEL_WIDTH = 280;
-const GANTT_DAY_WIDTH = 28;
+const GANTT_LABEL_WIDTH = 380;
+const GANTT_DAY_WIDTH = 24;
 
 const navIcons = {
   overview: LayoutDashboard,
@@ -111,8 +111,12 @@ const navItems = [
     icon: navIcons[page.id],
     ...(page.id === "plan" ? { children: Object.values(PLAN_VARIANTS) } : {}),
   })),
-  { id: "permissions", label: "권한 관리", icon: ShieldCheck, pocketOnly: true },
+  { id: "permissions", label: "권한 관리", icon: ShieldCheck, accessManagerOnly: true },
 ];
+
+function canManageClientAccess(role) {
+  return role === "pocket" || role === "ns";
+}
 
 const statusClass = {
   할일: "status status-muted",
@@ -232,7 +236,7 @@ export function ProjectSidebar({ project, role, activeView, activePlanVariant, o
 
   const visiblePlanChildren = role === "client" ? [PLAN_VARIANTS.client] : Object.values(PLAN_VARIANTS);
   const visibleNavItems = navItems.filter((item) => {
-    if (item.pocketOnly) return role === "pocket";
+    if (item.accessManagerOnly) return canManageClientAccess(role);
     if (role !== "client") return true;
     return isViewAllowed(item.permissionId || item.id, project.allowedPages);
   });
@@ -583,7 +587,7 @@ function CampaignWorkspaceHeader({ clients, activeClient, onSelectClient, projec
   const menuRef = useRef(null);
   const visiblePlanChildren = role === "client" ? [PLAN_VARIANTS.client] : Object.values(PLAN_VARIANTS);
   const visibleNavItems = navItems.filter((item) => {
-    if (item.pocketOnly) return role === "pocket";
+    if (item.accessManagerOnly) return canManageClientAccess(role);
     if (role !== "client") return true;
     return isViewAllowed(item.permissionId || item.id, project.allowedPages);
   });
@@ -2110,7 +2114,7 @@ function TrackingView({ tracking }) {
   </div>;
 }
 
-function AccessAccountModal({ account, projects, onClose, onSave }) {
+function AccessAccountModal({ account, projects, onClose, onSave, canDisableAccount }) {
   const firstAccess = account?.accesses?.[0] || null;
   const [fields, setFields] = useState(() => ({
     account: account?.account || "",
@@ -2175,11 +2179,11 @@ function AccessAccountModal({ account, projects, onClose, onSave }) {
     <fieldset className="access-page-fieldset"><legend>접근 가능한 페이지</legend><p>현재 운영 중인 화면만 표시합니다. 체크하지 않은 페이지는 메뉴와 서버 조회에서 모두 차단합니다.</p><div>{ACCESS_PAGE_OPTIONS.map((page) => <label key={page.id}><input type="checkbox" checked={fields.allowedPages.includes(page.id)} onChange={() => togglePage(page.id)} /><span><strong>{page.label}</strong><small>{page.description}</small></span></label>)}</div></fieldset>
     {account?.accesses?.length > 0 && <section className="access-current-projects"><strong>현재 프로젝트 권한</strong><div>{account.accesses.map((access) => <article key={access.id}><span><b>{access.projectName}</b><small>{access.allowedPages.length}개 페이지</small></span><button type="button" className="danger-button" disabled={saving} onClick={() => removeAccess(access)}>이 프로젝트 권한 제거</button></article>)}</div></section>}
     {error && <div className="form-error"><AlertCircle size={14} />{error.message}</div>}
-    <footer>{account && <button type="button" className="danger-button" onClick={disable} disabled={saving || !fields.projectId}>계정 비활성화</button>}<span /><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.account.trim() || !fields.displayName.trim() || !fields.projectId || !fields.allowedPages.length}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "권한 저장"}</button></footer>
+    <footer>{account && canDisableAccount && <button type="button" className="danger-button" onClick={disable} disabled={saving || !fields.projectId}>계정 비활성화</button>}<span /><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.account.trim() || !fields.displayName.trim() || !fields.projectId || !fields.allowedPages.length}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "권한 저장"}</button></footer>
   </form></section></div>;
 }
 
-function PermissionsView({ access, onSave }) {
+function PermissionsView({ access, onSave, role }) {
   const [editing, setEditing] = useState(undefined);
   const accounts = access.accounts || [];
   const pageLabel = Object.fromEntries(ACCESS_PAGE_OPTIONS.map((page) => [page.id, page.label]));
@@ -2187,7 +2191,7 @@ function PermissionsView({ access, onSave }) {
   return <div className="view-stack"><ViewHeader eyebrow="고객 계정 관리" title="권한 관리" description="고객사 계정을 만들고 프로젝트별로 볼 수 있는 페이지를 지정합니다."><button className="primary-button" type="button" onClick={() => setEditing(null)}><Plus size={15} /> 고객사 계정 생성</button></ViewHeader><section className="access-summary"><article><span>고객 계정</span><strong>{accounts.length}</strong></article><article><span>활성 계정</span><strong>{activeCount}</strong></article><article><span>배정 프로젝트</span><strong>{access.projects?.length || 0}</strong></article></section><section className="panel access-panel"><div className="panel-heading"><div><h3>계정별 접근 범위</h3><p>비밀번호 원문은 저장하거나 다시 표시하지 않습니다.</p></div></div>{accounts.length ? <div className="access-account-list">{accounts.map((account) => {
     const primaryAccess = account.accesses?.[0];
     return <button type="button" key={account.id} className="access-account-row" onClick={() => setEditing(account)}><span className={`access-account-state ${account.enabled ? "is-active" : ""}`}><ShieldCheck size={16} /></span><span className="access-account-identity"><strong>{account.displayName}</strong><small>{account.account}</small></span><span className="access-account-project"><small>프로젝트</small><strong>{primaryAccess?.projectName || "미배정"}</strong></span><span className="access-page-badges">{(primaryAccess?.allowedPages || []).map((page) => <i key={page}>{pageLabel[page] || page}</i>)}</span><span className={`status ${account.enabled ? "status-success" : "status-muted"}`}>{account.enabled ? "사용 중" : "중지"}</span><Pencil size={15} /></button>;
-  })}</div> : <EmptyState title="등록된 고객사 계정이 없습니다" description="고객사 계정 생성 버튼에서 첫 계정을 추가하세요." />}</section>{editing !== undefined && <AccessAccountModal account={editing} projects={access.projects || []} onClose={() => setEditing(undefined)} onSave={onSave} />}</div>;
+  })}</div> : <EmptyState title="등록된 고객사 계정이 없습니다" description="고객사 계정 생성 버튼에서 첫 계정을 추가하세요." />}</section>{editing !== undefined && <AccessAccountModal account={editing} projects={access.projects || []} onClose={() => setEditing(undefined)} onSave={onSave} canDisableAccount={role === "pocket"} />}</div>;
 }
 
 function DetailLogView({ role, activities }) {
@@ -2299,7 +2303,7 @@ function AppContent({ view, planVariant, project, role, search, setView, pageSta
   if (view === "content") return <ContentView role={role} query={search} contents={data.items || []} onCreate={onCreate} canWrite={canWrite} />;
   if (view === "tracking") return <TrackingView tracking={data} />;
   if (view === "performance") return <PerformanceView performance={data} canWrite={canWrite && role !== "client"} onKpiSave={onKpiSave} onKpiArchive={onKpiArchive} />;
-  if (view === "permissions") return role === "pocket" ? <PermissionsView access={data} onSave={onAccessSave} /> : <ErrorState error={new Error("포켓 운영 계정만 접근할 수 있습니다.")} />;
+  if (view === "permissions") return canManageClientAccess(role) ? <PermissionsView access={data} onSave={onAccessSave} role={role} /> : <ErrorState error={new Error("내부 운영 계정만 접근할 수 있습니다.")} />;
   if (view === "files") return <DetailLogView role={role} activities={data.activities?.items || []} />;
   return <OverviewView project={data.project || project} role={role} activities={data.activities || []} onNavigate={setView} />;
 }
@@ -3298,8 +3302,8 @@ export function App() {
   };
 
   const saveAccessAccount = async (account) => {
-    if (role !== "pocket") {
-      const forbidden = new Error("포켓 운영 계정만 고객 권한을 관리할 수 있습니다.");
+    if (!canManageClientAccess(role)) {
+      const forbidden = new Error("내부 운영 계정만 고객 권한을 관리할 수 있습니다.");
       forbidden.code = "forbidden";
       throw forbidden;
     }
@@ -3393,7 +3397,7 @@ export function App() {
 
   const navigateToView = (nextView, nextPlanVariant = planVariant) => {
     if (role === "client" && !isViewAllowed(nextView, project.allowedPages)) return;
-    if (nextView === "permissions" && role !== "pocket") return;
+    if (nextView === "permissions" && !canManageClientAccess(role)) return;
     if (nextView === "plan") setPlanVariant(nextPlanVariant);
     setView(nextView);
   };

@@ -61,6 +61,7 @@ test("수량 분할과 디자인 파생 업무를 프로젝트 저장 형식으�
   assert.equal(payload.tasks.filter((task) => task.title.startsWith("썸네일 제작")).length, 2);
   assert.ok(payload.tasks.every((task) => task.progress_percent === 0));
   assert.ok(payload.tasks.every((task) => task.schedule_dates.at(-1) === task.due_date));
+  assert.ok(payload.tasks.every((task) => task.remarks === null || !/원|₩|KRW/i.test(task.remarks)));
 });
 
 test("견적 세부내용에 디자인 산출물이 포함되면 중복 업무를 만들지 않는다", () => {

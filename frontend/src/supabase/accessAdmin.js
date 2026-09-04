@@ -3,7 +3,7 @@ import { HubApiError } from "../api/errors.js";
 function functionError(payload, status) {
   const code = String(payload?.error?.code || "access_admin_failed");
   const messages = {
-    forbidden: "포켓 관리자만 고객 계정 권한을 관리할 수 있습니다.",
+    forbidden: "권한이 있는 포켓·NS 운영자만 고객 계정 권한을 관리할 수 있습니다.",
     invalid_input: "계정과 프로젝트 권한 입력값을 확인해 주세요.",
     not_found: "계정 또는 프로젝트 권한을 찾지 못했습니다.",
   };

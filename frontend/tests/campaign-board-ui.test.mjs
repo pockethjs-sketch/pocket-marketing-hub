@@ -193,13 +193,13 @@ test("업무표는 고정 헤더와 고정 업무명 열을 제공한다", () =>
   assert.match(styleSource, /\.task-schedule-matrix thead tr:first-child > th:first-child,[\s\S]*position:\s*sticky/);
 });
 
-test("간트는 기준 HTML과 동일한 280px 업무열과 28px 날짜 셀을 고정한다", () => {
-  assert.match(appSource, /const GANTT_LABEL_WIDTH = 280/);
-  assert.match(appSource, /const GANTT_DAY_WIDTH = 28/);
+test("간트는 업무명을 넓히고 날짜 셀을 줄여 장기 일정을 압축한다", () => {
+  assert.match(appSource, /const GANTT_LABEL_WIDTH = 380/);
+  assert.match(appSource, /const GANTT_DAY_WIDTH = 24/);
   assert.match(appSource, /"--gantt-label-width": `\$\{GANTT_LABEL_WIDTH\}px`/);
   assert.match(appSource, /"--gantt-day-width": `\$\{GANTT_DAY_WIDTH\}px`/);
-  assert.match(styleSource, /\.g-lbl\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-label-width, 280px\)/);
-  assert.match(styleSource, /\.g-c\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-day-width, 28px\)/);
+  assert.match(styleSource, /\.g-lbl\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-label-width, 380px\)/);
+  assert.match(styleSource, /\.g-c\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-day-width, 24px\)/);
   assert.match(styleSource, /\.g-row \.g-lbl\s*\{[\s\S]*height:\s*32px/);
 });
 
@@ -228,6 +228,13 @@ test("포켓·NS 내부 계정은 왼쪽 하단에서 프로젝트 생성과 견
   assert.match(appSource, /source\.createProject\(payload\)/);
   assert.match(appSource, /setActiveClient\(createdClientId\)/);
   assert.match(appSource, /setActiveProjectId\(createdProjectId\)/);
+});
+
+test("포켓과 NS 계정은 고객 권한 관리 화면을 함께 사용한다", () => {
+  assert.match(appSource, /function canManageClientAccess\(role\)/);
+  assert.match(appSource, /role === "pocket" \|\| role === "ns"/);
+  assert.match(appSource, /accessManagerOnly:\s*true/);
+  assert.match(appSource, /canDisableAccount=\{role === "pocket"\}/);
 });
 
 test("견적서를 검토한 뒤 새 프로젝트 또는 현재 프로젝트 업무로 생성한다", () => {

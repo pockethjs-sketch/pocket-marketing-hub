@@ -406,7 +406,7 @@ function materializeRows(items, { start, end, splitQuantities }) {
         due_date: dueDate,
         schedule_dates: scheduleRange(start, dueDate),
         progress_percent: 0,
-        remarks: `${count === 1 && item.quantity > 1 ? `${item.quantity}${item.unit || ""} · ` : ""}${item.amount !== null ? `${Math.round(item.amount / count).toLocaleString("ko-KR")}원` : ""}`.trim() || null,
+        remarks: null,
         visibility_code: "PROJECT_TEAM",
         source_code: "QUOTE_IMPORT",
       };

@@ -251,10 +251,10 @@ try {
     };
   })()`);
   assert(ganttFrame.cellClass && !ganttFrame.cellClass.includes("task-schedule-cell"), `Legacy schedule-cell skin still affects Gantt: ${ganttFrame.cellClass}`);
-  assert(ganttFrame.cellWidth === "28px" && ganttFrame.cellHeight === "32px", `Gantt cell is not the reference 28x32 frame: ${ganttFrame.cellWidth}x${ganttFrame.cellHeight}`);
-  assert(Math.abs(ganttFrame.cellBoxWidth - 28) < 0.1, `Gantt day column expanded beyond the fixed reference width: ${ganttFrame.cellBoxWidth}`);
-  assert(ganttFrame.rowHeight === "33px" && ganttFrame.labelWidth === "280px", `Gantt row/label geometry drifted: ${ganttFrame.rowHeight}/${ganttFrame.labelWidth}`);
-  assert(Math.abs(ganttFrame.labelBoxWidth - 280) < 0.1, `Gantt label column expanded beyond the fixed reference width: ${ganttFrame.labelBoxWidth}`);
+  assert(ganttFrame.cellWidth === "24px" && ganttFrame.cellHeight === "32px", `Gantt cell is not the compact 24x32 frame: ${ganttFrame.cellWidth}x${ganttFrame.cellHeight}`);
+  assert(Math.abs(ganttFrame.cellBoxWidth - 24) < 0.1, `Gantt day column expanded beyond the compact width: ${ganttFrame.cellBoxWidth}`);
+  assert(ganttFrame.rowHeight === "33px" && ganttFrame.labelWidth === "380px", `Gantt row/label geometry drifted: ${ganttFrame.rowHeight}/${ganttFrame.labelWidth}`);
+  assert(Math.abs(ganttFrame.labelBoxWidth - 380) < 0.1, `Gantt label column expanded beyond the task-title width: ${ganttFrame.labelBoxWidth}`);
   assert(ganttFrame.groups.some((label) => label === "YouTube"), `Gantt is not grouped by source media: ${ganttFrame.groups.join(",")}`);
   const scheduleMediaGroups = scheduleGrouping.visibleLabels.filter((label, index, labels) => index === 0 || label !== labels[index - 1]);
   assert(JSON.stringify(ganttFrame.groups) === JSON.stringify(scheduleMediaGroups), `Schedule/Gantt media order differs: ${scheduleMediaGroups.join(",")} / ${ganttFrame.groups.join(",")}`);

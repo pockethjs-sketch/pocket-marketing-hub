@@ -6,9 +6,27 @@ var MH_ACCESS_PAGES = ['overview', 'plan', 'tasks', 'daily', 'performance', 'fil
 function mhAssertPermissionManager_(actor) {
   var master = actor && actor.role === 'MASTER';
   var pocketManager = actor && actor.role === 'POCKET_MANAGER' && actor.organization === 'POCKET';
-  if (!master && !pocketManager) {
+  var nsManager = actor && actor.role === 'EXECUTOR_EDITOR' && actor.organization === 'NS';
+  if (!master && !pocketManager && !nsManager) {
     throw mhApiError_('forbidden', 'permission_admin_requires_manager', 403);
   }
+}
+
+function mhPermissionManagerProjectIds_(actor) {
+  mhAssertPermissionManager_(actor);
+  if (actor.role === 'MASTER' || (actor.role === 'POCKET_MANAGER' && actor.organization === 'POCKET')) return null;
+  var scope = {};
+  (actor.memberships || []).forEach(function (membership) {
+    if (MH_WRITE_PERMISSIONS[mhAsText_(membership.permission_code).toUpperCase()]) {
+      scope[mhAsText_(membership.project_id)] = true;
+    }
+  });
+  return scope;
+}
+
+function mhCanManagePermissionProject_(actor, projectId) {
+  var scope = mhPermissionManagerProjectIds_(actor);
+  return scope === null || scope[mhAsText_(projectId)] === true;
 }
 
 function mhNormalizeAllowedPages_(value) {
@@ -60,22 +78,30 @@ function mhEnsureMembershipAccessHeader_() {
 
 function mhReadPermissionAdmin_(actor) {
   mhAssertPermissionManager_(actor);
+  var projectScope = mhPermissionManagerProjectIds_(actor);
   mhEnsureMembershipAccessHeader_();
-  var clients = mhActiveRows_(MH_SHEETS.CLIENTS).map(function (row) {
-    return mhNormalizeRow_(mhPick_(row, ['client_id', 'display_name', 'status_code']));
-  });
-  var projects = mhActiveRows_(MH_SHEETS.PROJECTS).map(function (row) {
+  var projects = mhActiveRows_(MH_SHEETS.PROJECTS).filter(function (row) {
+    return projectScope === null || projectScope[mhAsText_(row.project_id)] === true;
+  }).map(function (row) {
     return mhNormalizeRow_(mhPick_(row, ['project_id', 'client_id', 'project_name', 'status_code']));
   });
   var projectById = {};
   projects.forEach(function (row) { projectById[mhAsText_(row.project_id)] = row; });
+  var clientScope = {};
+  projects.forEach(function (row) { clientScope[mhAsText_(row.client_id)] = true; });
+  var clients = mhActiveRows_(MH_SHEETS.CLIENTS).filter(function (row) {
+    return clientScope[mhAsText_(row.client_id)] === true;
+  }).map(function (row) {
+    return mhNormalizeRow_(mhPick_(row, ['client_id', 'display_name', 'status_code']));
+  });
   var memberships = mhActiveRows_(MH_SHEETS.MEMBERSHIPS);
   var users = mhActiveRows_(MH_SHEETS.USERS).filter(function (row) {
     return mhAsText_(row.role_code).toUpperCase() === 'CLIENT_VIEWER';
   }).map(function (row) {
     var access = memberships.filter(function (membership) {
       return mhAsText_(membership.user_id) === mhAsText_(row.user_id) &&
-        mhAsText_(membership.status_code).toUpperCase() === 'ACTIVE';
+        mhAsText_(membership.status_code).toUpperCase() === 'ACTIVE' &&
+        !!projectById[mhAsText_(membership.project_id)];
     }).map(function (membership) {
       var project = projectById[mhAsText_(membership.project_id)] || {};
       return mhNormalizeRow_({
@@ -97,7 +123,7 @@ function mhReadPermissionAdmin_(actor) {
       row_version: row.row_version,
       accesses: access
     });
-  });
+  }).filter(function (account) { return projectScope === null || account.accesses.length > 0; });
   return { clients: clients, projects: projects, accounts: users, pageOptions: MH_ACCESS_PAGES.slice() };
 }
 
@@ -126,6 +152,10 @@ function mhPermissionAdminMutate_(request, actor) {
   }
   var project = mhFindRecord_(MH_SHEETS.PROJECTS, 'project_id', projectId).row;
   if (!project || mhNonEmpty_(project.archived_at)) throw mhApiError_('not_found', 'project_not_found', 404);
+  if (!mhCanManagePermissionProject_(actor, projectId)) throw mhApiError_('forbidden', 'permission_project_forbidden', 403);
+  if (operation === 'DISABLE' && actor.role === 'EXECUTOR_EDITOR') {
+    throw mhApiError_('forbidden', 'permission_global_disable_requires_pocket', 403);
+  }
 
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(MH_LOCK_TIMEOUT_MS)) throw mhApiError_('lock_timeout', 'write_lock_timeout', 409);
@@ -139,6 +169,16 @@ function mhPermissionAdminMutate_(request, actor) {
     });
     if (users.length > 1) throw mhApiError_('schema_mismatch', 'duplicate_user', 500);
     var existingUser = users[0] || null;
+    if (actor.role === 'EXECUTOR_EDITOR' && existingUser) {
+      var actorProjectScope = mhPermissionManagerProjectIds_(actor);
+      var scopedMemberships = mhReadTable_(MH_SHEETS.MEMBERSHIPS).rows.filter(function (row) {
+        return !mhNonEmpty_(row.archived_at) &&
+          mhAsText_(row.status_code).toUpperCase() === 'ACTIVE' &&
+          mhAsText_(row.user_id) === mhAsText_(existingUser.user_id) &&
+          actorProjectScope[mhAsText_(row.project_id)] === true;
+      });
+      if (!scopedMemberships.length) throw mhApiError_('forbidden', 'account_outside_manager_scope', 403);
+    }
     if (operation === 'REMOVE_ACCESS') {
       if (!existingUser) throw mhApiError_('not_found', 'account_not_found', 404);
       mhUseFreshTables_();

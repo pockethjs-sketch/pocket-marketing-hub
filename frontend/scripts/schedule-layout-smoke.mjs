@@ -144,7 +144,7 @@ try {
        end:g.querySelector(".g-row .g-c:last-of-type")?.title};
     })()`);
     assert.ok(metrics.width>=metrics.host && metrics.width-metrics.host<=44,JSON.stringify(metrics));
-    assert.equal(metrics.day,28);assert.equal(metrics.label,280);
+    assert.equal(metrics.day,24);assert.equal(metrics.label,380);
     assert.ok(metrics.months.includes("2026년 10월"));assert.notEqual(metrics.colors[0],metrics.colors[1]);
     assert.notEqual(metrics.boundary,"none");
     console.log("gantt",viewport,JSON.stringify(metrics));

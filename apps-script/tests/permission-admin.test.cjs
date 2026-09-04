@@ -53,10 +53,13 @@ assert.throws(
   () => context.mhAssertPermissionManager_({ role: 'POCKET_MANAGER', organization: 'NS' }),
   /permission_admin_requires_manager/,
 );
-assert.throws(
-  () => context.mhAssertPermissionManager_({ role: 'EXECUTOR_EDITOR', organization: 'NS' }),
-  /permission_admin_requires_manager/,
-);
+const nsManager = { role: 'EXECUTOR_EDITOR', organization: 'NS', memberships: [
+  { project_id: 'PRJ-UND', permission_code: 'EDIT' },
+  { project_id: 'PRJ-READ', permission_code: 'READ_ONLY' },
+] };
+assert.doesNotThrow(() => context.mhAssertPermissionManager_(nsManager));
+assert.equal(context.mhCanManagePermissionProject_(nsManager, 'PRJ-UND'), true);
+assert.equal(context.mhCanManagePermissionProject_(nsManager, 'PRJ-READ'), false);
 const permissionSource = fs.readFileSync(path.join(root, 'PermissionAdmin.gs'), 'utf8');
 assert.match(permissionSource, /operation !== 'REMOVE_ACCESS'/);
 assert.match(permissionSource, /removed\.archived_at = now/);

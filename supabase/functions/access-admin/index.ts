@@ -62,9 +62,25 @@ Deno.serve(async (req: Request) => {
   const { data: authData, error: authError } = await authClient.auth.getUser(token);
   if (authError || !authData.user) return fail(req, 401, "unauthorized", "유효한 로그인이 필요합니다.");
   const { data: actor } = await admin.from("profiles").select("id,organization_code,role_code,status_code,archived_at").eq("id", authData.user.id).maybeSingle();
-  if (!actor || actor.organization_code !== "POCKET" || actor.role_code !== "POCKET_MANAGER" || actor.status_code !== "ACTIVE" || actor.archived_at) {
-    return fail(req, 403, "forbidden", "포켓 관리자만 접근할 수 있습니다.");
+  const pocketManager = actor?.organization_code === "POCKET" && actor?.role_code === "POCKET_MANAGER";
+  const nsManager = actor?.organization_code === "NS" && actor?.role_code === "EXECUTOR_EDITOR";
+  if (!actor || (!pocketManager && !nsManager) || actor.status_code !== "ACTIVE" || actor.archived_at) {
+    return fail(req, 403, "forbidden", "권한이 있는 포켓·NS 운영자만 접근할 수 있습니다.");
   }
+
+  let manageableProjectIds: Set<string> | null = null;
+  if (nsManager) {
+    const { data: memberships, error } = await admin
+      .from("project_memberships")
+      .select("project_id")
+      .eq("user_id", actor.id)
+      .eq("status_code", "ACTIVE")
+      .is("archived_at", null)
+      .in("permission_code", ["ADMIN", "EDIT"]);
+    if (error) return fail(req, 500, "read_failed", "NS 프로젝트 관리 범위를 확인하지 못했습니다.");
+    manageableProjectIds = new Set((memberships || []).map((membership) => String(membership.project_id)));
+  }
+  const canManageProject = (projectId: unknown) => manageableProjectIds === null || manageableProjectIds.has(String(projectId));
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return fail(req, 400, "invalid_input", "JSON 본문이 필요합니다."); }
@@ -81,34 +97,39 @@ Deno.serve(async (req: Request) => {
       ]);
       const readError = clientsError || projectsError || profilesError || membershipsError;
       if (readError) throw readError;
-      const projectById = new Map((projects || []).map((project) => [String(project.id), project]));
+      const visibleProjects = (projects || []).filter((project) => canManageProject(project.id));
+      const visibleProjectIds = new Set(visibleProjects.map((project) => String(project.id)));
+      const visibleClientIds = new Set(visibleProjects.map((project) => String(project.client_id)));
+      const visibleMemberships = (memberships || []).filter((membership) => visibleProjectIds.has(String(membership.project_id)));
+      const projectById = new Map(visibleProjects.map((project) => [String(project.id), project]));
       const authById = new Map(authUsers.map((user) => [user.id, user]));
       return {
-        clients: (clients || []).map((client) => ({ client_id: client.legacy_id || String(client.id), display_name: client.display_name, status_code: client.status_code })),
-        projects: (projects || []).map((project) => ({ project_id: project.legacy_id || String(project.id), client_id: (clients || []).find((client) => client.id === project.client_id)?.legacy_id || String(project.client_id), project_name: project.project_name, status_code: project.status_code })),
+        clients: (clients || []).filter((client) => visibleClientIds.has(String(client.id))).map((client) => ({ client_id: client.legacy_id || String(client.id), display_name: client.display_name, status_code: client.status_code })),
+        projects: visibleProjects.map((project) => ({ project_id: project.legacy_id || String(project.id), client_id: (clients || []).find((client) => client.id === project.client_id)?.legacy_id || String(project.client_id), project_name: project.project_name, status_code: project.status_code })),
         accounts: (profiles || []).map((profile) => {
           const user = authById.get(profile.id);
+          const accesses = visibleMemberships.filter((membership) => membership.user_id === profile.id && !membership.archived_at).map((membership) => {
+            const project = projectById.get(String(membership.project_id));
+            const client = (clients || []).find((item) => item.id === project?.client_id);
+            return {
+              membership_id: String(membership.id),
+              client_id: client?.legacy_id || String(project?.client_id || ""),
+              project_id: project?.legacy_id || String(membership.project_id),
+              project_name: project?.project_name || "",
+              permission_code: membership.permission_code,
+              allowed_pages: membership.allowed_pages || [],
+              row_version: membership.row_version,
+            };
+          });
           return {
             user_id: profile.legacy_id || profile.id,
             account: String(user?.email || "").replace(/@hub\.local$/i, ""),
             email: user?.email || "",
             display_name: profile.display_name,
             status_code: profile.status_code,
-            accesses: (memberships || []).filter((membership) => membership.user_id === profile.id && !membership.archived_at).map((membership) => {
-              const project = projectById.get(String(membership.project_id));
-              const client = (clients || []).find((item) => item.id === project?.client_id);
-              return {
-                membership_id: String(membership.id),
-                client_id: client?.legacy_id || String(project?.client_id || ""),
-                project_id: project?.legacy_id || String(membership.project_id),
-                project_name: project?.project_name || "",
-                permission_code: membership.permission_code,
-                allowed_pages: membership.allowed_pages || [],
-                row_version: membership.row_version,
-              };
-            }),
+            accesses,
           };
-        }),
+        }).filter((profile) => pocketManager || profile.accesses.length > 0),
         pageOptions: PAGE_OPTIONS,
       };
     };
@@ -128,8 +149,24 @@ Deno.serve(async (req: Request) => {
     const { data: project, error: projectError } = await admin.from("projects").select("id,legacy_id,client_id").eq("legacy_id", projectLegacyId).is("archived_at", null).maybeSingle();
     if (projectError) throw projectError;
     if (!project) return fail(req, 404, "not_found", "프로젝트를 찾지 못했습니다.");
+    if (!canManageProject(project.id)) return fail(req, 403, "forbidden", "이 프로젝트의 고객 권한을 관리할 수 없습니다.");
+    if (operation === "DISABLE" && !pocketManager) return fail(req, 403, "forbidden", "전체 계정 비활성화는 포켓 관리자만 할 수 있습니다.");
     const users = await allUsers(admin);
     let authUser = users.find((user) => String(user.email || "").toLowerCase() === email) || null;
+    if (nsManager && authUser) {
+      const scopedIds = [...(manageableProjectIds || [])];
+      if (!scopedIds.length) return fail(req, 403, "forbidden", "관리 가능한 프로젝트가 없습니다.");
+      const { data: scopedAccess, error: scopedAccessError } = await admin
+        .from("project_memberships")
+        .select("id")
+        .eq("user_id", authUser.id)
+        .eq("status_code", "ACTIVE")
+        .is("archived_at", null)
+        .in("project_id", scopedIds)
+        .limit(1);
+      if (scopedAccessError) throw scopedAccessError;
+      if (!scopedAccess?.length) return fail(req, 403, "forbidden", "이 고객 계정은 NS 관리 범위 밖에 있습니다.");
+    }
 
     if (operation === "REMOVE_ACCESS") {
       if (!authUser) return fail(req, 404, "not_found", "계정을 찾지 못했습니다.");
