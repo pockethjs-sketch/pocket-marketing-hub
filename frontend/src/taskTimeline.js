@@ -58,7 +58,16 @@ export function groupTaskScheduleByMedia(tasks = []) {
     }
     group.push(task);
   });
-  return groups.flat();
+  return groups.flatMap((group) => {
+    const authored = group.map((task, index) => ({ task, index })).sort((left, right) => {
+      const leftOrder = Number(left.task.sortOrder);
+      const rightOrder = Number(right.task.sortOrder);
+      const leftValue = Number.isFinite(leftOrder) ? leftOrder : Number.MAX_SAFE_INTEGER;
+      const rightValue = Number.isFinite(rightOrder) ? rightOrder : Number.MAX_SAFE_INTEGER;
+      return leftValue - rightValue || left.index - right.index;
+    });
+    return authored.map(({ task }) => task);
+  });
 }
 
 export function taskScheduleStatusGroup(task = {}) {

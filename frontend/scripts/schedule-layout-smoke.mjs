@@ -29,6 +29,7 @@ try {
   const evaluate=async expression=>{const r=await send("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.text);return r.result.value;};
   const wait=async expression=>{for(let i=0;i<60;i++){if(await evaluate(`Boolean(${expression})`))return;await delay(100);}throw Error("Timeout: "+expression);};
   const click=async selector=>{assert.ok(await evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)});b?.click();return !!b;})()`));await delay(80);};
+  const selectValue=async(selector,value)=>{assert.ok(await evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});if(!el)return false;Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,"value").set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event("change",{bubbles:true}));return true;})()`));await delay(120);};
   const width=selector=>evaluate(`Math.round(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().width)`);
   await send("Runtime.enable");await send("Page.enable");
   await send("Emulation.setDeviceMetricsOverride",{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
@@ -76,7 +77,9 @@ try {
       await delay(70);
     }
   }
-  assert.deepEqual(await evaluate('qaPickerCalls'),["채널 세팅 업무 시작일","채널 세팅 업무 종료일","채널 세팅 업무 시작일","채널 세팅 업무 종료일"]);
+  assert.deepEqual((await evaluate('qaPickerCalls')).slice(0,2),["채널 세팅 업무 시작일","채널 세팅 업무 종료일"]);
+  const dateHitAreas=await evaluate('[...document.querySelectorAll(".task-inline-date-compact")].map(label=>{const input=label.querySelector("input"),a=label.getBoundingClientRect(),b=input.getBoundingClientRect();return {labelWidth:a.width,labelHeight:a.height,inputWidth:b.width,inputHeight:b.height}})');
+  assert.ok(dateHitAreas.every(area=>Math.abs(area.labelWidth-area.inputWidth)<=2&&Math.abs(area.labelHeight-area.inputHeight)<=2),JSON.stringify(dateHitAreas));
   await send("Emulation.setTouchEmulationEnabled",{enabled:false});
   await send("Emulation.setDeviceMetricsOverride",{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
   await fill('.task-inline-date',"2026-09-22");
@@ -85,7 +88,7 @@ try {
   assert.ok(await evaluate('qaWrites[0].schedule_dates_json.includes("2026-09-22")'),"Gantt dates saved with date range");
   await fill('.task-inline-progress input',"73");
   assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"73");
-  await click('.task-inline-status');
+  await selectValue('.task-inline-status','DONE');
   assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"100");
   const numberMetrics=await evaluate(`(()=>{const el=document.querySelector('.task-inline-progress input'),s=getComputedStyle(el),ctx=document.createElement('canvas').getContext('2d');ctx.font=s.font;return {width:el.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight),text:ctx.measureText('100').width,appearance:s.appearance,scroll:el.scrollWidth,client:el.clientWidth};})()`);
   assert.ok(numberMetrics.width>=numberMetrics.text+2,JSON.stringify(numberMetrics));
@@ -96,13 +99,13 @@ try {
   await evaluate('qaView("table")');await wait('document.querySelector(".task-inline-progress input")');
   assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"100","saved completion survives remount");
   await fill('.task-inline-progress input',"35");
-  assert.ok(await evaluate('document.querySelector(".task-inline-status").textContent.includes("진행")'));
+  assert.equal(await evaluate('document.querySelector(".task-inline-status").value'),"IN_PROGRESS");
   assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"35");
   await evaluate('window.qaFail=true');
   await fill('.task-inline-progress input',"80");
   assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"35","rejected progress rolls back");
   await evaluate('window.qaFail=false');
-  await click('.task-inline-status');await click('.task-inline-status');
+  await selectValue('.task-inline-status','DONE');await selectValue('.task-inline-status','ON_HOLD');
   assert.equal(await evaluate('document.querySelector(".task-inline-progress input").value'),"0","reopened task is not stuck at 100");
   await evaluate('qaTasks(items=>items.map((item,index)=>index===0?{...item,statusCode:"IN_PROGRESS"}:item));qaWrites=[];document.querySelector(".reference-task-table").parentElement.scrollLeft=0;window.scrollTo(0,0)');await delay(100);
   for(const viewport of [1440,1920,1100]){
@@ -116,12 +119,12 @@ try {
         headers:[...table.querySelectorAll("th")].map(c=>c.textContent),
         categories:[...table.querySelectorAll(".reference-task-workstream")].map(c=>c.textContent)};
     })()`);
-    assert.ok(Math.abs(metrics.table-Math.max(1308,metrics.host))<1,JSON.stringify(metrics));
-    assert.deepEqual(metrics.headers.slice(0,3),["매체","업무분야","업무"]);
+    assert.ok(Math.abs(metrics.table-Math.max(1336,metrics.host))<1,JSON.stringify(metrics));
+    assert.deepEqual(metrics.headers.slice(0,4),["","매체","업무분야","업무"]);
     assert.deepEqual(metrics.categories,["마케팅","디자인","영상"]);
-    assert.ok(metrics.columns[2]>=289,"task title uses remaining width");
-    assert.ok(Math.abs(metrics.columns[1]-64)<1,"workstream remains compact");
-    assert.ok(Math.abs(metrics.columns[4]-126)<1,"date width stays compact");
+    assert.ok(metrics.columns[3]>=289,"task title uses remaining width");
+    assert.ok(Math.abs(metrics.columns[2]-64)<1,"workstream remains compact");
+    assert.ok(Math.abs(metrics.columns[5]-126)<1,"date width stays compact");
     console.log("table",viewport,JSON.stringify(metrics));
   }
   await evaluate('qaView("gantt")'); await wait('document.querySelector(".reference-gantt")');
@@ -144,13 +147,13 @@ try {
     assert.notEqual(metrics.boundary,"none");
     console.log("gantt",viewport,JSON.stringify(metrics));
   }
-  assert.deepEqual(await evaluate('[...document.querySelectorAll(".g-task-status")].map(el=>el.textContent)'),["진행중","미착수","완료"]);
-  const statusMetrics = await evaluate('[...document.querySelectorAll(".g-task-status")].map(el=>({width:el.getBoundingClientRect().width,text:el.textContent,color:getComputedStyle(el).backgroundColor}))');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".g-task-status")].map(el=>el.value)'),["IN_PROGRESS","NOT_STARTED","DONE"]);
+  const statusMetrics = await evaluate('[...document.querySelectorAll(".g-task-status")].map(el=>({width:el.getBoundingClientRect().width,text:el.options[el.selectedIndex].textContent,color:getComputedStyle(el).backgroundColor}))');
   assert.equal(new Set(statusMetrics.map(item=>item.color)).size,3);
   assert.ok(statusMetrics.every(item=>item.width>=39));
   assert.ok(await evaluate('[...document.querySelectorAll(".g-row .g-lbl")].every(el=>el.scrollWidth<=el.clientWidth)'),"status does not overflow task labels");
   await evaluate('qaTasks(items=>items.map((item,index)=>index===0?{...item,statusCode:"ON_HOLD"}:item))');
-  await wait('document.querySelector(".g-task-status").textContent==="보류"');
+  await wait('document.querySelector(".g-task-status").value==="ON_HOLD"');
   assert.ok(await evaluate('document.querySelector(".g-task-status").classList.contains("is-hold")'));
   assert.equal(await evaluate('qaWrites.length'),0,"render/resize/filter must not save dates");
   if(process.env.QA_SCREENSHOT){const capture=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});await writeFile(process.env.QA_SCREENSHOT,Buffer.from(capture.data,"base64"));}

@@ -1,4 +1,5 @@
 import { normalizeScheduleDates } from "../taskGantt.js";
+import { effectiveTaskScheduleState } from "../taskScheduleStatus.js";
 import { WORKSTREAM_LABELS } from "../taskWorkstreams.js";
 
 const PHASE_LABELS = {
@@ -382,6 +383,7 @@ export function tasksViewModel(envelope) {
   return {
     items: orderedRows.map((row) => {
       const responsibleOrganization = taskResponsibleOrganization(row.responsible_org_code);
+      const effectiveState = effectiveTaskScheduleState(row);
       return {
         id: row.task_id,
         sourceTaskId: row.source_task_id || null,
@@ -390,8 +392,10 @@ export function tasksViewModel(envelope) {
         streamCode: String(row.workstream_code || "").toUpperCase(),
         stream: codeLabel(row.workstream_code, WORKSTREAM_LABELS),
         title: row.title || "제목 없는 업무",
-        statusCode: String(row.status_code || "NOT_STARTED").toUpperCase(),
-        status: codeLabel(row.status_code, STATUS_LABELS),
+        statusMode: effectiveState.statusMode,
+        statusAutomatic: effectiveState.automatic,
+        statusCode: effectiveState.statusCode,
+        status: codeLabel(effectiveState.statusCode, STATUS_LABELS),
         priorityCode: String(row.priority_code || "NORMAL").toUpperCase(),
         priority: codeLabel(row.priority_code, PRIORITY_LABELS),
         owner: ownerLabel(row.responsible_org_code, row.assignee_user_id),
@@ -414,7 +418,7 @@ export function tasksViewModel(envelope) {
         assignee: row.assignee_user_id || null,
         blocker: row.blocker_reason || "",
         customerStatus: row.customer_status_text || "",
-        progressPercent: row.progress_percent === undefined || row.progress_percent === null || row.progress_percent === "" ? null : numberFrom(row.progress_percent),
+        progressPercent: effectiveState.progressPercent,
         completionUrl: row.completion_url || "",
         remarks: row.remarks || "",
         sourceCode: row.source_code || "",

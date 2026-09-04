@@ -148,6 +148,19 @@ test("일정표와 간트는 원장 순서를 보존하면서 같은 매체를 �
   assert.deepEqual(groupTaskScheduleByMedia(tasks).map((task) => task.id), ["YT-1", "YT-2", "ADS-1", "ADS-2", "NAVER-1"]);
 });
 
+test("유튜브 패키지 순서는 저장된 sort_order를 따라 드래그 재정렬을 보존한다", () => {
+  const tasks = [
+    { id: "SHORT-1", title: "쇼츠 업로드 SEO 1/2", categoryCode: "YOUTUBE", sortOrder: 60 },
+    { id: "MAIN-2", title: "본편 업로드 SEO 2/2", categoryCode: "YOUTUBE", sortOrder: 40 },
+    { id: "VIEW-1", title: "영상 조회수 작업 1/2", categoryCode: "YOUTUBE", sortOrder: 20 },
+    { id: "MAIN-1", title: "본편 업로드 SEO 1/2", categoryCode: "YOUTUBE", sortOrder: 10 },
+    { id: "LIKE-1", title: "영상 좋아요 작업 1/2", categoryCode: "YOUTUBE", sortOrder: 30 },
+    { id: "VIEW-2", title: "영상 조회수 작업 2/2", categoryCode: "YOUTUBE", sortOrder: 50 },
+    { id: "SHORT-2", title: "쇼츠 업로드 SEO 2/2", categoryCode: "YOUTUBE", sortOrder: 70 },
+  ];
+  assert.deepEqual(groupTaskScheduleByMedia(tasks).map((task) => task.id), ["MAIN-1", "VIEW-1", "LIKE-1", "MAIN-2", "VIEW-2", "SHORT-1", "SHORT-2"]);
+});
+
 test("일정표 상단 상태 요약은 같은 상태를 다시 누르면 전체로 돌아간다", () => {
   assert.equal(toggleScheduleStatusFilter("ALL", "DONE"), "DONE");
   assert.equal(toggleScheduleStatusFilter("DONE", "DONE"), "ALL");

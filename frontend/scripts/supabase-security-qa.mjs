@@ -357,8 +357,15 @@ for (const [fields,status,percent] of [
   assert(progressRow.ok && progressRow.data.item.status_code===status && progressRow.data.item.progress_percent===percent, `status/progress mismatch ${JSON.stringify(progressRow)}`);
 }
 await db.exec('reset role');
+assert(await scalar("select private.effective_task_status('SCHEDULE','NOT_STARTED','2099-01-01','2099-01-05','2098-12-31') as value", "value") === 'NOT_STARTED', 'future scheduled task was not NOT_STARTED');
+assert(await scalar("select private.effective_task_status('SCHEDULE','NOT_STARTED','2099-01-01','2099-01-05','2099-01-03') as value", "value") === 'IN_PROGRESS', 'active scheduled task was not IN_PROGRESS');
+assert(await scalar("select private.effective_task_status('MANUAL','ON_HOLD','2099-01-01','2099-01-05','2099-01-03') as value", "value") === 'ON_HOLD', 'manual status was not preserved in range');
+assert(await scalar("select private.effective_task_status('MANUAL','ON_HOLD','2099-01-01','2099-01-05','2099-01-06') as value", "value") === 'DONE', 'expired manual task was not completed');
+await db.exec(`insert into public.tasks(project_id,phase_code,workstream_code,title,status_code,progress_percent,planned_start_date,due_date,responsible_org_code,reviewer_org_code,visibility_code) values (1,'P0','MARKETING','만료 자동완료 QA','ON_HOLD',35,'2000-01-01','2000-01-02','NS','POCKET','PROJECT_TEAM')`);
+assert(await scalar("select count(*)::int as count from public.tasks where title='만료 자동완료 QA' and status_code='DONE' and progress_percent=100") === 1, 'expired insert was not persisted as DONE/100');
 console.log(JSON.stringify({
   confirmationDeadlineAndAudit: "pass",
+  scheduledTaskAutomation: "pass",
   taskStatusProgressInvariant: "pass",
   nsAllProjectsAndFutureMemberships: "pass",
   migrations: readdirSync(migrationsDir).filter((name) => name.endsWith('.sql')).length,

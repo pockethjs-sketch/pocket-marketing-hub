@@ -5079,6 +5079,52 @@ table tbody tr:hover {
 .g-task-status.is-other { background: #f0f1f4; color: #747b88; }
 .g-row .g-new-badge { margin-left: 0; }
 
+select.g-task-status,
+.g-owner-select {
+  max-width: 58px;
+  border: 0;
+  outline: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.g-owner-select {
+  height: 19px;
+  padding: 0 3px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  background: var(--ns-soft);
+  color: var(--ns);
+  font-size: 9.5px;
+  font-weight: 750;
+}
+
+.g-owner-select.op { background: var(--pk-soft); color: var(--pk); }
+.g-owner-select.oc { background: #fff4dc; color: #946200; }
+
+.g-lbl > input[type="checkbox"],
+.g-corner > input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: #17356f;
+}
+
+.g-reorder-handle {
+  display: inline-flex;
+  width: 14px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: #8b97a8;
+  cursor: grab;
+}
+
+.g-reorder-handle[draggable="false"] { opacity: .35; cursor: not-allowed; }
+.g-row.is-dragging { opacity: .48; }
+.g-row.is-selected .g-lbl { background: #edf3ff; box-shadow: inset 3px 0 #3153a4, 1px 0 0 var(--line); }
+
 .g-track {
   position: relative;
   display: flex;
@@ -10547,6 +10593,43 @@ table tbody tr:hover {
   display: table-cell;
 }
 
+.campaign-schedule-surface .reference-task-table.has-row-selection thead th:first-child,
+.campaign-schedule-surface .reference-task-table.has-row-selection tbody td:first-child {
+  width: 28px !important;
+  padding: 0;
+  border-left: 0;
+  text-align: center;
+}
+
+.campaign-schedule-surface .reference-task-table.has-row-selection thead th:nth-child(2),
+.campaign-schedule-surface .reference-task-table.has-row-selection tbody td:nth-child(2) {
+  position: sticky;
+  left: 28px;
+  z-index: 6;
+  border-left: 3px solid var(--media-color, #6e7177);
+}
+
+.campaign-schedule-surface .reference-task-table.has-row-selection thead th:nth-child(3),
+.campaign-schedule-surface .reference-task-table.has-row-selection tbody td:nth-child(3) {
+  position: sticky;
+  left: 116px;
+  z-index: 6;
+  box-shadow: none;
+}
+
+.campaign-schedule-surface .reference-task-table.has-row-selection thead th:nth-child(4),
+.campaign-schedule-surface .reference-task-table.has-row-selection tbody td:nth-child(4) {
+  position: sticky;
+  left: 180px;
+  z-index: 6;
+  box-shadow: 1px 0 0 #dfe4ec;
+}
+
+.campaign-schedule-surface .reference-task-table.has-row-selection thead th:nth-child(-n+4) {
+  z-index: 10;
+  background: #f7f8fa;
+}
+
 .campaign-schedule-surface .reference-task-table thead th:first-child,
 .campaign-schedule-surface .reference-task-table tbody td:first-child {
   position: sticky;
@@ -10598,6 +10681,24 @@ table tbody tr:hover {
   min-height: 32px;
   padding: 3px 6px;
 }
+
+.reference-task-select .reference-task-cell {
+  display: grid;
+  min-height: 32px;
+  place-items: center;
+  padding: 0;
+}
+
+.reference-task-select input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #17356f;
+  cursor: pointer;
+}
+
+.reference-task-row.is-selected td { background: #f1f5ff !important; }
+.reference-task-row.is-dragging { opacity: .48; }
 
 .reference-task-media .reference-task-cell > span {
   display: inline-flex;
@@ -10679,8 +10780,25 @@ table tbody tr:hover {
 
 .reference-task-name .task-name {
   padding-right: 38px;
+  padding-left: 20px;
   font-weight: 700;
 }
+
+.task-reorder-handle {
+  position: absolute;
+  top: 7px;
+  left: 4px;
+  z-index: 2;
+  display: inline-flex;
+  width: 16px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  color: #8b97a8;
+  cursor: grab;
+}
+
+.task-reorder-handle[draggable="false"] { opacity: .3; cursor: not-allowed; }
 
 .reference-task-name .task-new-badge {
   position: absolute;
@@ -10698,6 +10816,10 @@ table tbody tr:hover {
 }
 
 .reference-task-row.has-save-error td:nth-child(2) {
+  box-shadow: inset 0 -2px 0 #e05265, 1px 0 0 #dfe4ec;
+}
+
+.reference-task-table.has-row-selection .reference-task-row.has-save-error td:nth-child(4) {
   box-shadow: inset 0 -2px 0 #e05265, 1px 0 0 #dfe4ec;
 }
 
@@ -10897,6 +11019,18 @@ table tbody tr:hover {
   cursor: pointer;
 }
 
+.task-inline-select {
+  max-width: 100%;
+  outline: 0;
+  font-family: inherit;
+  text-align: center;
+}
+
+.task-inline-select:focus-visible {
+  border-color: currentColor;
+  box-shadow: 0 0 0 2px rgba(49, 83, 164, .16);
+}
+
 .task-inline-status:hover:not(:disabled),
 .task-inline-owner:hover:not(:disabled) {
   border-color: currentColor;
@@ -10918,6 +11052,56 @@ table tbody tr:hover {
 .task-inline-owner.is-pocket { background: #e8eefc; color: #244c9e; }
 .task-inline-owner.is-ns { background: #e8f7f1; color: #087a55; }
 .task-inline-owner.is-client { background: #fff4dc; color: #9a6500; }
+
+.task-bulk-toolbar {
+  position: sticky;
+  top: 64px;
+  z-index: 24;
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #b8c8ea;
+  border-radius: 9px;
+  background: #f5f8ff;
+  box-shadow: 0 7px 20px rgba(22, 49, 100, .11);
+}
+
+.task-bulk-toolbar > strong {
+  min-width: 72px;
+  color: #17356f;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.task-bulk-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.task-bulk-toolbar select {
+  height: 30px;
+  padding: 0 24px 0 8px;
+  border: 1px solid #ccd6e8;
+  border-radius: 7px;
+  background: #fff;
+  color: #263247;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.task-bulk-toolbar > small { color: #b42334; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .task-bulk-toolbar { position: static; flex-wrap: wrap; }
+  .task-bulk-toolbar > strong { width: 100%; }
+}
 
 .task-inline-link {
   display: flex;
@@ -11060,7 +11244,9 @@ table tbody tr:hover {
   .campaign-schedule-surface .reference-task-table thead th:nth-child(2),
   .campaign-schedule-surface .reference-task-table tbody td:nth-child(2),
   .campaign-schedule-surface .reference-task-table thead th:nth-child(3),
-  .campaign-schedule-surface .reference-task-table tbody td:nth-child(3) {
+  .campaign-schedule-surface .reference-task-table tbody td:nth-child(3),
+  .campaign-schedule-surface .reference-task-table.has-row-selection thead th:nth-child(4),
+  .campaign-schedule-surface .reference-task-table.has-row-selection tbody td:nth-child(4) {
     position: static;
     box-shadow: none;
   }
