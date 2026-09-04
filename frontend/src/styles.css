@@ -5628,7 +5628,7 @@ table tbody tr:hover {
 }
 
 #issueTable th:nth-child(1), #issueTable td:nth-child(1) { width: 44px; text-align: center; }
-#issueTable th:nth-child(2), #issueTable td:nth-child(2) { width: 130px; }
+#issueTable th:nth-child(2), #issueTable td:nth-child(2) { width: 250px; }
 #issueTable th:nth-child(3), #issueTable td:nth-child(3) { width: 100px; }
 #issueTable th:nth-child(4), #issueTable td:nth-child(4) { width: 170px; }
 #issueTable th:nth-child(5), #issueTable td:nth-child(5) { width: 290px; }
@@ -10824,7 +10824,62 @@ table tbody tr:hover {
   font-style: normal;
 }
 
-.project-issue-deadline { display:grid; gap:2px; margin-top:4px; color:#667085; font-size:10px; }
+.project-issue-date-stack {
+  display: grid;
+  gap: 5px;
+  padding: 7px 8px;
+}
+
+.project-issue-date-field {
+  display: grid;
+  grid-template-columns: 85px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  color: #667085;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+#issueTable .project-issue-date-field input[type="date"] {
+  min-height: 29px;
+  padding: 4px 5px;
+  border: 1px solid #dfe5ee;
+  border-radius: 6px;
+  background: #fff;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.project-issue-date-field.is-deadline {
+  color: #1d3768;
+}
+
+#issueTable .project-issue-date-field.is-deadline input[type="date"] {
+  border-color: #b7c8ed;
+  background: #edf3ff;
+  color: #162b59;
+  box-shadow: inset 3px 0 0 #294a8e;
+}
+
+#issueTable .project-issue-date-field input[type="date"]:focus {
+  border-color: #2563eb;
+  background: #f1f6ff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, .14);
+}
+
+#issueTable .project-issue-date-field input[type="date"]:disabled {
+  opacity: 1;
+  color: #344054;
+  -webkit-text-fill-color: #344054;
+}
+
+#issueTable .project-issue-date-field.is-deadline input[type="date"]:disabled {
+  color: #162b59;
+  -webkit-text-fill-color: #162b59;
+}
 
 .task-inline-status,
 .task-inline-owner {

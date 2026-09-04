@@ -99,6 +99,9 @@ try {
   await click("요청 등록");
   await wait('document.querySelector(".pb-request") && !document.querySelector(".pb-request-form")');
   assert.ok(await evaluate('document.querySelector(".pb-deadline").textContent.includes("기한 초과")'));
+  const deadlineBadgeStyle=await evaluate('(()=>{const el=document.querySelector(".pb-deadline > span"),s=getComputedStyle(el);return {height:el.getBoundingClientRect().height,fontSize:s.fontSize,background:s.backgroundColor,color:s.color,label:getComputedStyle(el,"::before").content}})()');
+  assert.ok(deadlineBadgeStyle.height>=30);assert.equal(deadlineBadgeStyle.label,'"컨펌 마감"');assert.notEqual(deadlineBadgeStyle.background,"rgba(0, 0, 0, 0)");
+  if(process.env.QA_DEADLINE_SCREENSHOT){await evaluate('document.querySelector(".pb-request")?.scrollIntoView({block:"center"})');const shot=await send("Page.captureScreenshot",{format:"png"});await writeFile(process.env.QA_DEADLINE_SCREENSHOT,Buffer.from(shot.data,"base64"));}
   await click("마감일 변경");
   await fill('.pb-deadline-form input',"2026-09-08");
   await evaluate('window.failWrite=true');
