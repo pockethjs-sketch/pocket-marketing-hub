@@ -162,18 +162,11 @@ try {
     {id:"series-1",title:"콘텐츠 제작 / 업로드 1/10",description:"카드뉴스 제작·업로드",stream:"DESIGN",categoryCode:"INSTAGRAM",statusCode:"IN_PROGRESS",progressPercent:40,responsibleOrgCode:"NS",plannedStartDate:"2026-09-20",dueDate:"2026-09-22",scheduleDates:[]},
     {id:"series-2",title:"콘텐츠 제작 / 업로드 2/10",description:"카드뉴스 제작·업로드",stream:"DESIGN",categoryCode:"INSTAGRAM",statusCode:"DONE",progressPercent:100,responsibleOrgCode:"NS",plannedStartDate:"2026-09-23",dueDate:"2026-09-25",scheduleDates:[]}
   ])`);
-  await wait('document.querySelector(".task-series-summary")');
-  assert.equal(await evaluate('document.querySelectorAll(".reference-task-row").length'),1,"numbered work starts as one collapsed table row");
-  assert.deepEqual(await evaluate('[...document.querySelectorAll(".task-series-dates strong")].map(el=>el.textContent)'),["9.20","9.25"],"collapsed series keeps its saved start and end dates");
-  assert.equal(await evaluate('document.querySelector(".task-series-summary .reference-task-duration").textContent.trim()'),"6일","collapsed series shows the actual overall duration");
-  await click('.task-series-toggle');
-  assert.equal(await evaluate('document.querySelectorAll(".reference-task-row").length'),3,"table series expands to its two source rows");
-  await evaluate('qaView("gantt")');await wait('document.querySelector(".g-series-summary")');
-  assert.equal(await evaluate('document.querySelectorAll(".g-row").length'),3,"expanded state is shared with Gantt");
-  await click('.g-series-toggle');
-  assert.equal(await evaluate('document.querySelectorAll(".g-row").length'),1,"Gantt series collapses to one summary row");
-  assert.ok(await evaluate('document.querySelectorAll(".g-series-summary .g-c.on").length >= 6'),"collapsed Gantt series keeps its task dates");
-  await evaluate('qaView("table")');await wait('document.querySelector(".task-series-toggle")');await click('.task-series-toggle');
+  await wait('document.querySelectorAll(".reference-task-row").length===2');
+  assert.equal(await evaluate('document.querySelectorAll(".task-series-summary,.task-series-toggle").length'),0,"numbered work is always fully expanded in the table");
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".reference-task-row .task-name")].map(el=>el.value)'),["콘텐츠 제작 / 업로드 1/10","콘텐츠 제작 / 업로드 2/10"]);
+  await evaluate('qaView("gantt")');await wait('document.querySelectorAll(".g-row").length===2');
+  assert.equal(await evaluate('document.querySelectorAll(".g-series-summary,.g-series-toggle").length'),0,"numbered work is always fully expanded in Gantt");
   if(process.env.QA_SCREENSHOT){const capture=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});await writeFile(process.env.QA_SCREENSHOT,Buffer.from(capture.data,"base64"));}
   await evaluate('qaView("table");qaWrite(false)');await wait('document.querySelector(".reference-task-table")');
   assert.equal(await evaluate('[...document.querySelectorAll(".reference-task-table th")].some(t=>t.textContent==="관리")'),false);

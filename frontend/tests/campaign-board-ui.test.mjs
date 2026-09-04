@@ -62,22 +62,19 @@ test("간트는 사각형 드래그로 일정 추가와 삭제를 구분하고 �
 test("간트 드래그 행은 매체로 묶인 일정표와 실제 화면 순서가 동일하다", () => {
   assert.match(appSource, /groupTaskScheduleByMedia\(ganttVisibleTasks\)/);
   assert.match(appSource, /groupGanttTasks\(filteredTasks, taskScheduleMedia\)/);
-  assert.match(appSource, /ganttSeriesGroups\.flatMap/);
-  assert.match(appSource, /entry\.type === "series" && !expandedSeries\.has\(entry\.key\) \? \[\] : entry\.tasks/);
+  assert.match(appSource, /const ganttTasks = filteredTasks/);
   assert.match(appSource, /ganttTasksRef\.current = ganttTasks/);
   assert.match(appSource, /const rows = ganttTasksRef\.current\.map/);
   assert.match(appSource, /const rowIndex = ganttRowIndexById\.get\(task\.id\)/);
   assert.doesNotMatch(appSource, /filteredTasks\.findIndex\(\(item\) => item\.id === task\.id\)/);
 });
 
-test("번호 회차 업무는 일정표와 간트에서 같은 펼침 상태를 공유한다", () => {
-  assert.match(appSource, /groupTaskScheduleSeries\(tasks\)/);
-  assert.match(appSource, /className="task-series-toggle"/);
-  assert.match(appSource, /className="g-series-toggle"/);
-  assert.match(appSource, /expandedSeries\.has\(entry\.key\)/);
-  assert.match(appSource, /onSelectTasks=\{selectTasks\}/);
-  assert.match(styleSource, /\.task-series-summary\.is-expanded \.task-series-toggle svg/);
-  assert.match(styleSource, /\.g-series-summary\.is-expanded \.g-series-toggle svg/);
+test("번호 회차 업무도 일정표와 간트에서 접지 않고 개별 행으로 표시한다", () => {
+  assert.doesNotMatch(appSource, /const displayRows = groupTaskScheduleSeries\(tasks\)/);
+  assert.doesNotMatch(appSource, /ganttSeriesGroups/);
+  assert.doesNotMatch(appSource, /expandedSeries/);
+  assert.match(appSource, /tasks\.forEach\(\(task\) =>/);
+  assert.match(appSource, /group\.tasks\.map\(\(task\) => renderGanttTaskRow/);
 });
 
 test("참고 캠페인 일정 화면이 업무 화면의 최상위 구조이며 로그는 툴바에서 연다", () => {
