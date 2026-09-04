@@ -7781,6 +7781,78 @@ select.g-task-status,
   font-size: 10px;
 }
 
+.task-activity-filters {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--rule);
+  background: #f8fafc;
+}
+
+.task-activity-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.task-activity-filter-group > strong,
+.task-activity-filters > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.task-activity-filter-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.task-activity-filter-group button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #d8e0eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #617087;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.task-activity-filter-group button.is-active {
+  border-color: #18294d;
+  background: #18294d;
+  color: #fff;
+}
+
+.task-activity-filters > span {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.task-change-log-day > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 22px;
+  border-bottom: 1px solid #dfe6ef;
+  background: #eef3f8;
+}
+
+.task-change-log-day > header strong {
+  color: #243652;
+  font-size: 11px;
+}
+
+.task-change-log-day > header span {
+  color: #748198;
+  font-size: 9px;
+  font-weight: 720;
+}
+
 .task-change-log-row {
   display: grid;
   grid-template-columns: 118px minmax(160px, 0.85fr) auto minmax(260px, 1.6fr) minmax(92px, 0.55fr);
@@ -10503,6 +10575,13 @@ select.g-task-status,
     width: 100%;
     flex-basis: 100%;
   }
+  .task-activity-filters {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .task-activity-filters > span { margin-left: 0; }
+  .task-activity-filter-group { align-items: flex-start; flex-direction: column; }
 }
 
 /* Keep the 24-hour marker visible over the campaign-surface rules above. */

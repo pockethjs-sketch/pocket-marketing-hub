@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { readableTaskActivities, taskActivitySentence } from "../src/taskActivity.js";
+import { filterTaskActivities, groupTaskActivitiesByDate, readableTaskActivities, taskActivitySentence } from "../src/taskActivity.js";
 
 test("업무 로그는 내부 ID 대신 현재 업무 목록에서 이름을 복원한다", () => {
   const items = readableTaskActivities([{
@@ -47,4 +47,26 @@ test("실제 사용자와 매칭되지 않거나 사용자 작업이 아닌 이�
     changes: [{ field: "status_code", before: "미착수", after: "진행" }],
   }], []);
   assert.deepEqual(items, []);
+});
+
+test("업무 로그는 한국 날짜와 현재 담당을 동시에 필터링한다", () => {
+  const items = [
+    { id: "1", createdAt: "2026-09-03T15:10:00Z", responsibleOrgCode: "NS" },
+    { id: "2", createdAt: "2026-09-02T15:10:00Z", responsibleOrgCode: "POCKET" },
+    { id: "3", createdAt: "2026-08-20T00:00:00Z", responsibleOrgCode: "NS" },
+  ];
+  assert.deepEqual(filterTaskActivities(items, { dateFilter: "TODAY", ownerFilter: "NS", today: "2026-09-04" }).map((item) => item.id), ["1"]);
+  assert.deepEqual(filterTaskActivities(items, { dateFilter: "LAST_7_DAYS", ownerFilter: "POCKET", today: "2026-09-04" }).map((item) => item.id), ["2"]);
+});
+
+test("업무 로그는 표시 순서를 유지하며 날짜별로 묶는다", () => {
+  const groups = groupTaskActivitiesByDate([
+    { id: "1", createdAt: "2026-09-04T03:00:00+09:00" },
+    { id: "2", createdAt: "2026-09-04T01:00:00+09:00" },
+    { id: "3", createdAt: "2026-09-03T23:00:00+09:00" },
+  ]);
+  assert.deepEqual(groups.map((group) => [group.date, group.items.map((item) => item.id)]), [
+    ["2026-09-04", ["1", "2"]],
+    ["2026-09-03", ["3"]],
+  ]);
 });
