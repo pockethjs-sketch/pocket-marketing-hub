@@ -1269,9 +1269,20 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
   </tr>;
 }
 
+function taskSeriesScheduleDates(task, ganttDrafts) {
+  if (ganttDrafts?.has(task.id)) return ganttDrafts.get(task.id) || [];
+  const explicitOrLegacyDates = taskScheduleDates(task);
+  if (explicitOrLegacyDates.length) return explicitOrLegacyDates;
+  const start = String(task.plannedStartDate || "").slice(0, 10);
+  const end = String(task.dueDate || "").slice(0, 10);
+  if (start && end) return scheduleDateRange(start, end);
+  return [start || end].filter(Boolean);
+}
+
 function taskSeriesSummary(tasks, ganttDrafts) {
-  const dates = tasks.flatMap((task) => ganttDrafts?.get(task.id) || taskScheduleDates(task));
+  const dates = tasks.flatMap((task) => taskSeriesScheduleDates(task, ganttDrafts));
   const bounds = scheduleDateBounds(dates);
+  const duration = taskDurationDays(bounds.start, bounds.end);
   const completed = tasks.filter((task) => taskScheduleStatusGroup(task) === "DONE").length;
   const active = tasks.filter((task) => taskScheduleStatusGroup(task) === "ACTIVE").length;
   const held = tasks.filter((task) => taskScheduleStatusGroup(task) === "HOLD").length;
@@ -1279,7 +1290,7 @@ function taskSeriesSummary(tasks, ganttDrafts) {
   const commonDescription = tasks.every((task) => String(task.description || "") === String(tasks[0]?.description || "")) ? String(tasks[0]?.description || "") : "";
   const commonOwner = tasks.every((task) => task.responsibleOrgCode === tasks[0]?.responsibleOrgCode) ? tasks[0]?.responsibleOrgCode : "";
   const links = tasks.filter((task) => validInlineTaskUrl(task.completionUrl) && task.completionUrl).length;
-  return { bounds, completed, active, held, progress, commonDescription, commonOwner, links };
+  return { bounds, duration, completed, active, held, progress, commonDescription, commonOwner, links };
 }
 
 function TaskScheduleSeriesRow({ entry, project, canWrite, ganttDrafts, mediaColor, mediaGroupStart, expanded, selectedTaskIds, onToggle, onSelectTasks, reorderEnabled, dragging, onDragStart, onDragEnd, onDrop }) {
@@ -1298,7 +1309,7 @@ function TaskScheduleSeriesRow({ entry, project, canWrite, ganttDrafts, mediaCol
     <td className="reference-task-name"><div className="reference-task-cell">{canWrite && <span className="task-series-reorder-handle" draggable={reorderEnabled} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", entry.key); onDragStart?.(entry.key); }} onDragEnd={onDragEnd} aria-label={`${baseTitle} 묶음 순서 이동`} title={reorderEnabled ? "묶음 전체를 끌어서 이동" : "필터를 해제하면 순서를 이동할 수 있습니다"}><GripVertical size={14} /><small>이동</small></span>}<button type="button" className="task-series-toggle" aria-expanded={expanded} onClick={() => onToggle?.(entry.key)}><ChevronRight size={15} aria-hidden="true" /><strong>{baseTitle}</strong><em>{tasks.length}건</em></button></div></td>
     <td className="reference-task-detail"><div className="reference-task-cell task-series-detail">{summary.commonDescription || `${tasks.length}개 회차 업무`}</div></td>
     <td className="reference-task-dates"><div className="reference-task-cell task-series-dates"><strong>{compactTaskDateLabel(summary.bounds.start)}</strong><ArrowRight size={10} /><strong>{compactTaskDateLabel(summary.bounds.end)}</strong></div></td>
-    <td className="reference-task-duration"><div className="reference-task-cell">{tasks.length}건</div></td>
+    <td className="reference-task-duration"><div className="reference-task-cell">{summary.duration === null ? "–" : `${summary.duration}일`}</div></td>
     <td className="reference-task-progress"><div className="reference-task-cell"><span className="task-inline-progress is-summary"><span><i style={{ width: `${summary.progress}%` }} /></span><strong>{summary.progress}</strong><em>%</em></span></div></td>
     <td className="reference-task-status"><div className="reference-task-cell"><span className="task-series-status">{statusText}</span></div></td>
     <td className="reference-task-owner"><div className="reference-task-cell"><span className="task-series-owner">{ownerText}</span></div></td>
@@ -1919,7 +1930,7 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
 
   const renderGanttSeriesRow = (entry, groupLabel, color) => {
     const expanded = expandedSeries.has(entry.key);
-    const scheduleSet = new Set(entry.tasks.flatMap((task) => ganttDrafts?.get(task.id) || taskScheduleDates(task)));
+    const scheduleSet = new Set(entry.tasks.flatMap((task) => taskSeriesScheduleDates(task, ganttDrafts)));
     const summary = taskSeriesSummary(entry.tasks, ganttDrafts);
     const allSelected = entry.tasks.every((task) => selectedTaskIds.has(task.id));
     const someSelected = entry.tasks.some((task) => selectedTaskIds.has(task.id));
