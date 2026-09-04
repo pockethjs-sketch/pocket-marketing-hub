@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { tasksViewModel } from "../src/api/viewModel.js";
 
-import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, groupTaskScheduleSeries, reorderTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleSeries, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, groupTaskScheduleSeries, reorderTaskSchedule, selectTaskRange, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleMediaCode, taskScheduleSeries, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("신규 DB 업무분야와 구형 코드는 한글로 표시하고 같은 필터에 포함한다", () => {
   const codes = ["MARKETING", "DESIGN", "VIDEO", "MKT", "DSN", "VID"];
@@ -202,6 +202,24 @@ test("개별 업무와 접힌 회차 묶음을 대상 업무 앞으로 이동한
   const seriesKey = groupTaskScheduleSeries(tasks).find((entry) => entry.type === "series").key;
   assert.deepEqual(reorderTaskSchedule(tasks, seriesKey, "A").map((task) => task.id), ["S1", "S2", "A", "B"]);
   assert.deepEqual(reorderTaskSchedule(tasks, seriesKey, "S2").map((task) => task.id), ["A", "S1", "S2", "B"]);
+});
+
+test("체크한 여러 업무는 기존 상대 순서를 유지해 대상 앞뒤로 함께 이동한다", () => {
+  const tasks = ["A", "B", "C", "D", "E"].map((id) => ({ id }));
+  assert.deepEqual(reorderTaskSchedule(tasks, ["B", "D"], "A", "before").map((task) => task.id), ["B", "D", "A", "C", "E"]);
+  assert.deepEqual(reorderTaskSchedule(tasks, ["B", "D"], "E", "after").map((task) => task.id), ["A", "C", "E", "B", "D"]);
+  assert.deepEqual(reorderTaskSchedule(tasks, ["B", "D"], "D", "after").map((task) => task.id), ["A", "B", "C", "D", "E"]);
+});
+
+test("Shift 체크는 현재 보이는 업무 범위만 한 번에 선택하거나 해제한다", () => {
+  const tasks = ["A", "B", "C", "D"].map((id) => ({ id }));
+  assert.deepEqual([...selectTaskRange(tasks, new Set(["OUTSIDE"]), "A", "C", true)], ["OUTSIDE", "A", "B", "C"]);
+  assert.deepEqual([...selectTaskRange(tasks, new Set(["A", "B", "C", "D"]), "B", "D", false)], ["A"]);
+});
+
+test("드롭 대상 매체 코드는 화면 라벨 또는 원장 코드에서 동일하게 계산한다", () => {
+  assert.equal(taskScheduleMediaCode({ categoryCode: "youtube" }), "YOUTUBE");
+  assert.equal(taskScheduleMediaCode({ category: "네이버블로그" }), "NAVER_BLOG");
 });
 
 test("일정표 상단 상태 요약은 같은 상태를 다시 누르면 전체로 돌아간다", () => {

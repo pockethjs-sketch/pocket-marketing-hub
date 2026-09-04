@@ -34,6 +34,17 @@ const TASK_MEDIA_LABELS = {
   ADS: "Ads",
 };
 
+const TASK_MEDIA_CODES = Object.fromEntries(
+  Object.entries(TASK_MEDIA_LABELS).map(([code, label]) => [label.toLocaleUpperCase("ko"), code]),
+);
+
+export function taskScheduleMediaCode(task = {}) {
+  const explicit = String(task.categoryCode || task.category_code || "").trim().toUpperCase();
+  if (explicit) return explicit;
+  const label = taskScheduleMedia(task).replace(/\s+/g, " ").trim().toLocaleUpperCase("ko");
+  return TASK_MEDIA_CODES[label] || "";
+}
+
 export function taskScheduleMedia(task = {}) {
   const code = String(task.categoryCode || "").trim().toUpperCase();
   return TASK_MEDIA_LABELS[code] || String(task.category || task.parent || "미지정").trim() || "미지정";
@@ -126,21 +137,46 @@ export function groupTaskScheduleSeries(tasks = []) {
   return rows;
 }
 
-export function reorderTaskSchedule(tasks = [], sourceKey, targetTaskId) {
-  const source = String(sourceKey || "");
+export function reorderTaskSchedule(tasks = [], sourceKey, targetTaskId, position = "before") {
+  const requestedIds = Array.isArray(sourceKey) ? sourceKey.map(String) : [];
+  const source = Array.isArray(sourceKey) ? "" : String(sourceKey || "");
   const target = String(targetTaskId || "");
-  if (!source || !target) return tasks.slice();
+  if ((!source && !requestedIds.length) || !target) return tasks.slice();
   const seriesEntry = source.startsWith("series:")
     ? groupTaskScheduleSeries(tasks).find((entry) => entry.key === source)
     : null;
-  const sourceTasks = seriesEntry?.tasks || tasks.filter((task) => String(task.id) === source);
+  const requestedSet = new Set(requestedIds);
+  const sourceTasks = seriesEntry?.tasks || tasks.filter((task) => requestedSet.size
+    ? requestedSet.has(String(task.id))
+    : String(task.id) === source);
   const sourceIds = new Set(sourceTasks.map((task) => String(task.id)));
   if (!sourceTasks.length || sourceIds.has(target)) return tasks.slice();
   const ordered = tasks.filter((task) => !sourceIds.has(String(task.id)));
   const targetIndex = ordered.findIndex((task) => String(task.id) === target);
   if (targetIndex < 0) return tasks.slice();
-  ordered.splice(targetIndex, 0, ...sourceTasks);
+  const insertAt = targetIndex + (String(position).toLowerCase() === "after" ? 1 : 0);
+  ordered.splice(insertAt, 0, ...sourceTasks);
   return ordered;
+}
+
+// Shift selection always follows the rows currently visible to the user.
+// This mirrors native file-list behaviour while keeping selections outside the
+// current filter untouched.
+export function selectTaskRange(tasks = [], selectedIds = new Set(), anchorTaskId, targetTaskId, checked = true) {
+  const next = new Set(selectedIds);
+  const visibleIds = tasks.map((task) => String(task.id));
+  const anchorIndex = visibleIds.indexOf(String(anchorTaskId || ""));
+  const targetIndex = visibleIds.indexOf(String(targetTaskId || ""));
+  if (anchorIndex < 0 || targetIndex < 0) {
+    if (checked) next.add(targetTaskId); else next.delete(targetTaskId);
+    return next;
+  }
+  const start = Math.min(anchorIndex, targetIndex);
+  const end = Math.max(anchorIndex, targetIndex);
+  visibleIds.slice(start, end + 1).forEach((id) => {
+    if (checked) next.add(id); else next.delete(id);
+  });
+  return next;
 }
 
 export function taskScheduleStatusGroup(task = {}) {

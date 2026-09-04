@@ -5139,6 +5139,43 @@ select.g-task-status,
 .g-reorder-handle[draggable="false"] { opacity: .35; cursor: not-allowed; }
 .g-row.is-dragging { opacity: .48; }
 .g-row.is-selected .g-lbl { background: #edf3ff; box-shadow: inset 3px 0 #3153a4, 1px 0 0 var(--line); }
+.g-row.is-drop-before { box-shadow: inset 0 3px 0 #0058ff; }
+.g-row.is-drop-after { box-shadow: inset 0 -3px 0 #0058ff; }
+.g-row.is-drop-before .g-lbl::after,
+.g-row.is-drop-after .g-lbl::after {
+  position: absolute;
+  right: 8px;
+  z-index: 5;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #0058ff;
+  color: #fff;
+  content: "여기에 이동";
+  font-size: 8px;
+  font-weight: 850;
+  pointer-events: none;
+}
+.g-row.is-drop-before .g-lbl::after { top: -8px; }
+.g-row.is-drop-after .g-lbl::after { bottom: -8px; }
+
+.reference-gantt .g-row.is-axis-hover-row .g-lbl {
+  background: #eaf1ff;
+  box-shadow: inset 3px 0 #0058ff, 1px 0 0 var(--line);
+}
+.reference-gantt .g-row.is-axis-hover-row .g-c:not(.on) {
+  background-image: linear-gradient(rgba(0, 88, 255, .09), rgba(0, 88, 255, .09));
+}
+.reference-gantt .g-d.is-axis-hover-column,
+.reference-gantt .g-c.is-axis-hover-column {
+  box-shadow: inset 1px 0 rgba(0, 88, 255, .52), inset -1px 0 rgba(0, 88, 255, .52);
+  background-image: linear-gradient(rgba(0, 88, 255, .16), rgba(0, 88, 255, .16));
+}
+.reference-gantt .g-c.on.is-axis-hover-column::before { filter: brightness(.88) saturate(1.2); }
+.reference-gantt .g-c.is-axis-hover-intersection {
+  z-index: 4;
+  outline: 2px solid rgba(0, 88, 255, .82);
+  outline-offset: -2px;
+}
 
 .g-series-summary,
 .g-series-summary .g-lbl {
@@ -8120,6 +8157,28 @@ select.g-task-status,
 .task-schedule-row.is-seo { --schedule-bar: #2e8a61; --schedule-soft: #edf9f3; }
 .task-schedule-row.is-done { --schedule-bar: #16805d; --schedule-soft: #eaf8f2; }
 .task-schedule-row.is-hold { --schedule-bar: #bf7b16; --schedule-soft: #fff7e7; }
+.task-schedule-row.is-dragging { opacity: .48; }
+.task-schedule-row.is-drop-before > td { box-shadow: inset 0 3px 0 #0058ff; }
+.task-schedule-row.is-drop-after > td { box-shadow: inset 0 -3px 0 #0058ff; }
+.task-schedule-row.is-drop-before > td:first-child,
+.task-schedule-row.is-drop-after > td:first-child { position: relative; }
+.task-schedule-row.is-drop-before > td:first-child::after,
+.task-schedule-row.is-drop-after > td:first-child::after {
+  position: absolute;
+  left: 6px;
+  z-index: 7;
+  width: max-content;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #0058ff;
+  color: #fff;
+  content: "여기에 이동";
+  font-size: 8px;
+  font-weight: 850;
+  pointer-events: none;
+}
+.task-schedule-row.is-drop-before > td:first-child::after { top: -9px; }
+.task-schedule-row.is-drop-after > td:first-child::after { bottom: -9px; }
 .task-schedule-cell.has-schedule { background: var(--schedule-soft); }
 .task-schedule-cell.is-schedule-start { z-index: 4; overflow: visible; }
 .task-schedule-bar-shell {
@@ -11355,6 +11414,13 @@ select.g-task-status,
 }
 
 .task-bulk-toolbar > small { color: #b42334; font-size: 10px; }
+.task-bulk-toolbar .task-bulk-delete { color: #b42334; }
+.task-bulk-toolbar .task-bulk-delete:hover,
+.task-bulk-toolbar .task-bulk-delete.is-armed {
+  border-color: #dc3548;
+  background: #fff0f1;
+  color: #a41126;
+}
 
 @media (max-width: 760px) {
   .task-bulk-toolbar { position: static; flex-wrap: wrap; }

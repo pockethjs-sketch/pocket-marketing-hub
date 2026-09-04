@@ -65,7 +65,7 @@ import {
 import { canOperateProjectTasks, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskStatusMutationFields, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { TaskCreateModal } from "./TaskCreateModal.jsx";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
-import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, reorderTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, reorderTaskSchedule, selectTaskRange, taskScheduleCategory, taskScheduleMedia, taskScheduleMediaCode, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
 import { buildGanttAxis, ganttMonthClass, ganttTaskLabelWidth, groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
 import { filterTaskActivities, groupTaskActivitiesByDate, readableTaskActivities, taskActivityDateKey, taskActivitySentence } from "./taskActivity.js";
 import { isNewTask, unacknowledgedNewTasks } from "./taskFreshness.js";
@@ -798,6 +798,7 @@ function taskWithMutationFields(task, fields = {}) {
     next.scheduleDates = normalizeScheduleDates(fields.schedule_dates_json) || [];
   }
   if (Object.prototype.hasOwnProperty.call(fields, "sort_order")) next.sortOrder = Number(fields.sort_order);
+  if (Object.prototype.hasOwnProperty.call(fields, "category_code")) next.categoryCode = String(fields.category_code || "").trim().toUpperCase();
   if (Object.prototype.hasOwnProperty.call(fields, "responsible_org_code")) {
     const organization = taskResponsibleOrganization(fields.responsible_org_code);
     next.responsibleOrgCode = organization.code;
@@ -1177,7 +1178,7 @@ function TaskRowActions({ task, onEdit, onArchive, disabled = false, compact = f
   </div>;
 }
 
-function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onArchive, displayedStart, displayedEnd, newTask, rowClass, mediaColor, mediaGroupStart, selected, onSelect, reorderEnabled, dragging, onDragStart, onDragEnd, onDrop }) {
+function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onArchive, displayedStart, displayedEnd, newTask, rowClass, mediaColor, mediaGroupStart, selected, onSelect, reorderEnabled, dragging, dropPosition, onDragStart, onDragEnd, onDragOver, onDrop }) {
   const [draft, setDraft] = useState(() => taskInlineDraft(task, displayedStart, displayedEnd));
   const [savingField, setSavingField] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -1281,8 +1282,8 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
   const progress = Math.max(0, Math.min(100, Number(draft.progress_percent) || 0));
   const disabled = !canWrite || Boolean(savingField);
 
-  return <tr className={`task-schedule-row reference-task-row ${rowClass}${mediaGroupStart ? " is-media-group-start" : ""}${newTask ? " is-new-task" : ""}${savingField ? " is-saving" : ""}${saveError ? " has-save-error" : ""}${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}`} style={{ "--media-color": mediaColor }} onDragOver={(event) => { if (reorderEnabled) event.preventDefault(); }} onDrop={(event) => { if (!reorderEnabled) return; event.preventDefault(); onDrop?.(task.id); }}>
-    {canWrite && <td className="reference-task-select"><div className="reference-task-cell"><input type="checkbox" checked={selected} onChange={(event) => onSelect?.(task.id, event.target.checked)} aria-label={`${task.title} 선택`} /></div></td>}
+  return <tr className={`task-schedule-row reference-task-row ${rowClass}${mediaGroupStart ? " is-media-group-start" : ""}${newTask ? " is-new-task" : ""}${savingField ? " is-saving" : ""}${saveError ? " has-save-error" : ""}${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}${dropPosition ? ` is-drop-${dropPosition}` : ""}`} style={{ "--media-color": mediaColor }} onDragOver={(event) => onDragOver?.(event, task.id)} onDrop={(event) => { if (!reorderEnabled) return; event.preventDefault(); onDrop?.(task.id); }}>
+    {canWrite && <td className="reference-task-select"><div className="reference-task-cell"><input type="checkbox" checked={selected} onChange={(event) => onSelect?.(task.id, event.target.checked, { shiftKey: event.nativeEvent?.shiftKey || event.shiftKey })} aria-label={`${task.title} 선택`} /></div></td>}
     <td className="reference-task-media" aria-label={media}><div className="reference-task-cell"><span><i aria-hidden="true" />{media}</span></div></td>
     <td className="reference-task-workstream"><div className="reference-task-cell">{taskScheduleCategory(task)}</div></td>
     <td className="reference-task-name"><div className="reference-task-cell">{canWrite && <span className="task-reorder-handle" draggable={reorderEnabled} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", String(task.id)); onDragStart?.(task.id); }} onDragEnd={onDragEnd} aria-label={`${task.title} 순서 이동`} title={reorderEnabled ? "끌어서 업무 순서 이동" : "필터를 해제하면 순서를 이동할 수 있습니다"}><GripVertical size={14} /><small>이동</small></span>}<input className="task-inline-input task-name" aria-label={`${task.title} 업무명`} maxLength={500} readOnly={!canWrite} disabled={Boolean(savingField)} value={draft.title} onChange={(event) => setField("title", event.target.value)} onBlur={(event) => void commitField("title", event.currentTarget.value)} onKeyDown={(event) => commitOnEnter(event, "title")} />{newTask && <em className="task-new-badge">신규</em>}{saveError && <small className="task-inline-error" role="alert">{saveError}</small>}</div></td>
@@ -1298,7 +1299,7 @@ function TaskScheduleInlineRow({ task, project, canWrite, onUpdate, onEdit, onAr
   </tr>;
 }
 
-function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, onEdit, onArchive, ganttDrafts, freshnessNow, scheduleClass, mediaColor, selectedTaskIds, onSelectTask, onSelectAll, reorderEnabled, draggingTaskId, onDragStart, onDragEnd, onDropTask }) {
+function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, onEdit, onArchive, ganttDrafts, freshnessNow, scheduleClass, mediaColor, selectedTaskIds, onSelectTask, onSelectAll, reorderEnabled, draggingTaskIds, dropIndicator, onDragStart, onDragEnd, onDragOverTask, onDropTask }) {
   const columnWidths = [88, 64, null, 200, 126, 44, 92, 54, 54, 105, 135];
   const allSelected = Boolean(canWrite && tasks.length && tasks.every((task) => selectedTaskIds?.has(task.id)));
   let previousMedia = "";
@@ -1310,7 +1311,7 @@ function TaskScheduleInlineTable({ tasks, project, canWrite, onUpdate, onEdit, o
     previousMedia = mediaKey;
     const scheduleDates = ganttDrafts?.get(task.id) || taskScheduleDates(task);
     const bounds = scheduleDateBounds(scheduleDates);
-    bodyRows.push(<TaskScheduleInlineRow key={task.id} task={task} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={onEdit} onArchive={onArchive} displayedStart={bounds.start || task.plannedStartDate || ""} displayedEnd={bounds.end || task.dueDate || ""} newTask={isNewTask(task, freshnessNow)} rowClass={scheduleClass(task)} mediaColor={mediaColor(media)} mediaGroupStart={mediaGroupStart} selected={selectedTaskIds?.has(task.id)} onSelect={onSelectTask} reorderEnabled={reorderEnabled} dragging={draggingTaskId === task.id} onDragStart={onDragStart} onDragEnd={onDragEnd} onDrop={onDropTask} />);
+    bodyRows.push(<TaskScheduleInlineRow key={task.id} task={task} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={onEdit} onArchive={onArchive} displayedStart={bounds.start || task.plannedStartDate || ""} displayedEnd={bounds.end || task.dueDate || ""} newTask={isNewTask(task, freshnessNow)} rowClass={scheduleClass(task)} mediaColor={mediaColor(media)} mediaGroupStart={mediaGroupStart} selected={selectedTaskIds?.has(task.id)} onSelect={onSelectTask} reorderEnabled={reorderEnabled} dragging={draggingTaskIds?.includes(task.id)} dropPosition={dropIndicator?.taskId === task.id ? dropIndicator.position : ""} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragOver={onDragOverTask} onDrop={onDropTask} />);
   });
   return <div className="task-schedule-matrix-scroll reference-task-scroll"><table className={`task-schedule-matrix is-detailed reference-task-table${canWrite ? " has-row-selection" : ""}`} style={{ "--schedule-min-width": canWrite ? "1336px" : "1252px" }}><colgroup>{canWrite && <col style={{ width: 28 }} />}{columnWidths.map((width, index) => <col key={index} style={width ? { width } : undefined} />)}{canWrite && <col style={{ width: 56 }} />}</colgroup><thead><tr>{canWrite && <th className="reference-task-select"><input type="checkbox" checked={allSelected} onChange={(event) => onSelectAll?.(event.target.checked)} aria-label="표시된 업무 전체 선택" /></th>}<th>매체</th><th>업무분야</th><th>업무</th><th>세부내용</th><th>일정</th><th>기간</th><th>진행률</th><th>상태</th><th>담당</th><th>완료링크</th><th>비고</th>{canWrite && <th>관리</th>}</tr></thead><tbody>{bodyRows}</tbody></table></div>;
 }
@@ -1487,7 +1488,10 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkOwner, setBulkOwner] = useState("");
   const [bulkSave, setBulkSave] = useState({ status: "idle", error: "" });
+  const [bulkDeleteArmed, setBulkDeleteArmed] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
+  const [draggingTaskIds, setDraggingTaskIds] = useState([]);
+  const [taskDropIndicator, setTaskDropIndicator] = useState(null);
   const [startDateDraft, setStartDateDraft] = useState(project.startDate || "");
   const [startDateSaving, setStartDateSaving] = useState(false);
   const [startDateError, setStartDateError] = useState("");
@@ -1510,6 +1514,11 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
   const paintRef = useRef(null);
   const ganttTasksRef = useRef([]);
   const daysRef = useRef([]);
+  const selectionAnchorRef = useRef(null);
+  const dragAutoScrollRef = useRef({ frame: null, container: null, speed: 0 });
+  const draggingTaskIdsRef = useRef([]);
+  const taskDropIndicatorRef = useRef(null);
+  const ganttHoverRef = useRef({ rowIndex: null, dayIndex: null });
   useEffect(() => {
     setStatusFilter("ALL");
     setCategoryFilter("ALL");
@@ -1521,10 +1530,16 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     setBulkStatus("");
     setBulkOwner("");
     setBulkSave({ status: "idle", error: "" });
+    setBulkDeleteArmed(false);
     setDraggingTaskId(null);
+    setDraggingTaskIds([]);
+    setTaskDropIndicator(null);
+    draggingTaskIdsRef.current = [];
+    taskDropIndicatorRef.current = null;
     setGanttSave({ status: "idle", saved: 0, total: 0, error: "" });
     setGanttDrafts(null);
     paintRef.current = null;
+    selectionAnchorRef.current = null;
   }, [project.id]);
   useEffect(() => {
     setFreshnessNow(Date.now());
@@ -1636,21 +1651,35 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     });
   }, [tasks]);
 
-  const selectTask = (taskId, checked) => setSelectedTaskIds((current) => {
-    const next = new Set(current);
-    if (checked) next.add(taskId); else next.delete(taskId);
-    return next;
-  });
-  const selectAllVisible = (checked) => setSelectedTaskIds((current) => {
-    const next = new Set(current);
-    filteredTasks.forEach((task) => { if (checked) next.add(task.id); else next.delete(task.id); });
-    return next;
-  });
+  const selectTask = (taskId, checked, options = {}) => {
+    setBulkDeleteArmed(false);
+    setSelectedTaskIds((current) => {
+      if (options.shiftKey && selectionAnchorRef.current) {
+        return selectTaskRange(filteredTasks, current, selectionAnchorRef.current, taskId, checked);
+      }
+      const next = new Set(current);
+      if (checked) next.add(taskId); else next.delete(taskId);
+      return next;
+    });
+    selectionAnchorRef.current = taskId;
+  };
+  const selectAllVisible = (checked) => {
+    setBulkDeleteArmed(false);
+    selectionAnchorRef.current = null;
+    setSelectedTaskIds((current) => {
+      const next = new Set(current);
+      filteredTasks.forEach((task) => { if (checked) next.add(task.id); else next.delete(task.id); });
+      return next;
+    });
+  };
   const saveUpdateChunks = async (updates) => {
     for (let offset = 0; offset < updates.length; offset += 40) {
       const batch = updates.slice(offset, offset + 40);
       if (onBatchUpdate) await onBatchUpdate(batch);
-      else for (const update of batch) await onUpdate(update.task, update.fields);
+      else for (const update of batch) {
+        if (update.operation === "ARCHIVE") await onArchive(update.task);
+        else await onUpdate(update.task, update.fields);
+      }
     }
   };
   const applyBulkUpdate = async () => {
@@ -1674,19 +1703,116 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
       setSelectedTaskIds(new Set());
       setBulkStatus("");
       setBulkOwner("");
+      setBulkDeleteArmed(false);
       setBulkSave({ status: "saved", error: "" });
     } catch (error) {
       setBulkSave({ status: "error", error: error?.message || "일괄 변경을 저장하지 못했습니다." });
     }
   };
-  const dropTaskBefore = async (targetTaskId) => {
-    const sourceKey = draggingTaskId;
+  const applyBulkArchive = async () => {
+    if (bulkSave.status === "saving") return;
+    const selectedTasks = tasks.filter((task) => selectedTaskIds.has(task.id));
+    if (!selectedTasks.length) return;
+    if (!bulkDeleteArmed) {
+      setBulkDeleteArmed(true);
+      setBulkSave({ status: "idle", error: "삭제할 업무가 맞으면 삭제 확정을 한 번 더 눌러 주세요." });
+      return;
+    }
+    setBulkSave({ status: "saving", error: "" });
+    try {
+      await saveUpdateChunks(selectedTasks.map((task) => ({ task, operation: "ARCHIVE", fields: {} })));
+      setSelectedTaskIds(new Set());
+      selectionAnchorRef.current = null;
+      setBulkDeleteArmed(false);
+      setBulkSave({ status: "saved", error: "" });
+    } catch (error) {
+      setBulkDeleteArmed(false);
+      setBulkSave({ status: "error", error: error?.message || "선택 업무를 삭제하지 못했습니다." });
+    }
+  };
+  const stopTaskAutoScroll = useCallback(() => {
+    const scroll = dragAutoScrollRef.current;
+    if (scroll.frame) globalThis.cancelAnimationFrame?.(scroll.frame);
+    dragAutoScrollRef.current = { frame: null, container: null, speed: 0 };
+  }, []);
+  const runTaskAutoScroll = useCallback(() => {
+    const tick = () => {
+      const scroll = dragAutoScrollRef.current;
+      if (!scroll.container || !scroll.speed) {
+        scroll.frame = null;
+        return;
+      }
+      scroll.container.scrollTop += scroll.speed;
+      scroll.frame = globalThis.requestAnimationFrame?.(tick) || null;
+    };
+    if (!dragAutoScrollRef.current.frame) dragAutoScrollRef.current.frame = globalThis.requestAnimationFrame?.(tick) || null;
+  }, []);
+  const updateTaskAutoScroll = useCallback((event) => {
+    const container = event.currentTarget?.closest?.(".reference-task-scroll, .reference-gantt-scroll");
+    if (!container) return;
+    const bounds = container.getBoundingClientRect();
+    const edge = Math.min(72, Math.max(44, bounds.height * 0.12));
+    const topDistance = event.clientY - bounds.top;
+    const bottomDistance = bounds.bottom - event.clientY;
+    let speed = 0;
+    if (topDistance < edge) speed = -Math.ceil((edge - Math.max(0, topDistance)) / edge * 18);
+    else if (bottomDistance < edge) speed = Math.ceil((edge - Math.max(0, bottomDistance)) / edge * 18);
+    dragAutoScrollRef.current.container = container;
+    dragAutoScrollRef.current.speed = speed;
+    if (speed) runTaskAutoScroll();
+  }, [runTaskAutoScroll]);
+  const startTaskDrag = (taskId) => {
+    const ids = selectedTaskIds.has(taskId)
+      ? filteredTasks.filter((task) => selectedTaskIds.has(task.id)).map((task) => task.id)
+      : [taskId];
+    setDraggingTaskId(taskId);
+    setDraggingTaskIds(ids);
+    setTaskDropIndicator(null);
+    draggingTaskIdsRef.current = ids;
+    taskDropIndicatorRef.current = null;
+  };
+  const finishTaskDrag = useCallback(() => {
+    stopTaskAutoScroll();
     setDraggingTaskId(null);
-    if (!reorderEnabled || !sourceKey) return;
-    const ordered = reorderTaskSchedule(filteredTasks, sourceKey, targetTaskId);
+    setDraggingTaskIds([]);
+    setTaskDropIndicator(null);
+    draggingTaskIdsRef.current = [];
+    taskDropIndicatorRef.current = null;
+  }, [stopTaskAutoScroll]);
+  useEffect(() => () => stopTaskAutoScroll(), [stopTaskAutoScroll]);
+  const handleTaskDragOver = (event, targetTaskId) => {
+    const draggedIds = draggingTaskIdsRef.current;
+    if (!reorderEnabled || !draggedIds.length) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    updateTaskAutoScroll(event);
+    if (draggedIds.includes(targetTaskId)) {
+      setTaskDropIndicator(null);
+      taskDropIndicatorRef.current = null;
+      return;
+    }
+    const row = event.currentTarget?.closest?.(".task-schedule-row, .g-row") || event.currentTarget;
+    const bounds = row?.getBoundingClientRect?.();
+    const position = bounds && event.clientY > bounds.top + bounds.height / 2 ? "after" : "before";
+    taskDropIndicatorRef.current = { taskId: targetTaskId, position };
+    setTaskDropIndicator((current) => current?.taskId === targetTaskId && current.position === position ? current : { taskId: targetTaskId, position });
+  };
+  const dropTasksAt = async (targetTaskId) => {
+    const sourceIds = draggingTaskIdsRef.current.length ? draggingTaskIdsRef.current.slice() : (draggingTaskId ? [draggingTaskId] : []);
+    const indicator = taskDropIndicatorRef.current;
+    const position = indicator?.taskId === targetTaskId ? indicator.position : "before";
+    const targetTask = filteredTasks.find((task) => task.id === targetTaskId);
+    const targetMediaCode = taskScheduleMediaCode(targetTask);
+    finishTaskDrag();
+    if (!reorderEnabled || !sourceIds.length || !targetTask) return;
+    const ordered = reorderTaskSchedule(filteredTasks, sourceIds, targetTaskId, position);
     if (ordered.every((task, index) => task.id === filteredTasks[index]?.id)) return;
-    const updates = ordered.map((task, index) => ({ task, fields: { sort_order: (index + 1) * 10 } }))
-      .filter(({ task, fields }) => Number(task.sortOrder) !== fields.sort_order);
+    const sourceSet = new Set(sourceIds);
+    const updates = ordered.map((task, index) => {
+      const fields = { sort_order: (index + 1) * 10 };
+      if (sourceSet.has(task.id) && targetMediaCode && taskScheduleMediaCode(task) !== targetMediaCode) fields.category_code = targetMediaCode;
+      return { task, fields };
+    }).filter(({ task, fields }) => Number(task.sortOrder) !== fields.sort_order || fields.category_code);
     if (!updates.length) return;
     setBulkSave({ status: "saving", error: "" });
     try {
@@ -1706,6 +1832,33 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
       setGanttSave({ status: "error", saved: 0, total: 1, error: error?.message || "업무를 저장하지 못했습니다." });
     }
   };
+  const clearGanttAxisHighlight = useCallback(() => {
+    const root = matrixRef.current;
+    if (root) {
+      root.querySelectorAll(".is-axis-hover-row, .is-axis-hover-column, .is-axis-hover-intersection").forEach((element) => {
+        element.classList.remove("is-axis-hover-row", "is-axis-hover-column", "is-axis-hover-intersection");
+      });
+    }
+    ganttHoverRef.current = { rowIndex: null, dayIndex: null };
+  }, []);
+  const highlightGanttAxes = useCallback((event) => {
+    if (paintRef.current) return;
+    const root = matrixRef.current;
+    const cell = event.target.closest?.(".g-c[data-gantt-row-index][data-gantt-day-index]");
+    if (!root || !cell || !root.contains(cell)) {
+      clearGanttAxisHighlight();
+      return;
+    }
+    const rowIndex = Number(cell.dataset.ganttRowIndex);
+    const dayIndex = Number(cell.dataset.ganttDayIndex);
+    const previous = ganttHoverRef.current;
+    if (previous.rowIndex === rowIndex && previous.dayIndex === dayIndex) return;
+    clearGanttAxisHighlight();
+    root.querySelector(`.g-row[data-gantt-row-index="${rowIndex}"]`)?.classList.add("is-axis-hover-row");
+    root.querySelectorAll(`[data-gantt-day-index="${dayIndex}"]`).forEach((element) => element.classList.add("is-axis-hover-column"));
+    cell.classList.add("is-axis-hover-intersection");
+    ganttHoverRef.current = { rowIndex, dayIndex };
+  }, [clearGanttAxisHighlight]);
 
   const repaintGantt = useCallback((paint) => {
     const root = matrixRef.current;
@@ -1827,6 +1980,7 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     if (displayMode !== "gantt" || !canWrite || ganttSave.status === "saving" || event.button !== 0) return;
     const cell = event.target.closest?.(".g-c[data-gantt-task-id]");
     if (!cell || !matrixRef.current?.contains(cell)) return;
+    clearGanttAxisHighlight();
     event.preventDefault();
     const rowIndex = Number(cell.dataset.ganttRowIndex);
     const dayIndex = Number(cell.dataset.ganttDayIndex);
@@ -1864,10 +2018,10 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     const scheduleSet = new Set(scheduleDates);
     const owner = taskResponsibleOrgLabel(task.responsibleOrgCode, project.clientName);
     const newTask = isNewTask(task, freshnessNow);
-    return <div className={`g-row${seriesChild ? " is-series-child" : ""}${newTask ? " is-new-task" : ""}${selectedTaskIds.has(task.id) ? " is-selected" : ""}${draggingTaskId === task.id ? " is-dragging" : ""}`} key={task.id} style={{ "--fill": ganttFillColor(task), "--rail": color }}>
-      <div className="g-lbl" title={`${groupLabel} · ${task.title}`} onDragOver={(event) => { if (reorderEnabled) event.preventDefault(); }} onDrop={(event) => { if (!reorderEnabled) return; event.preventDefault(); void dropTaskBefore(task.id); }}>
-        {canWrite && <input type="checkbox" checked={selectedTaskIds.has(task.id)} onChange={(event) => selectTask(task.id, event.target.checked)} aria-label={`${task.title} 선택`} />}
-        {canWrite && <span className="g-reorder-handle" draggable={reorderEnabled} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", String(task.id)); setDraggingTaskId(task.id); }} onDragEnd={() => setDraggingTaskId(null)} title={reorderEnabled ? "끌어서 업무 순서 이동" : "필터를 해제하면 순서를 이동할 수 있습니다"}><GripVertical size={13} /></span>}
+    return <div data-gantt-row-index={rowIndex} className={`g-row${seriesChild ? " is-series-child" : ""}${newTask ? " is-new-task" : ""}${selectedTaskIds.has(task.id) ? " is-selected" : ""}${draggingTaskIds.includes(task.id) ? " is-dragging" : ""}${taskDropIndicator?.taskId === task.id ? ` is-drop-${taskDropIndicator.position}` : ""}`} key={task.id} style={{ "--fill": ganttFillColor(task), "--rail": color }}>
+      <div className="g-lbl" title={`${groupLabel} · ${task.title}`} onDragOver={(event) => handleTaskDragOver(event, task.id)} onDrop={(event) => { if (!reorderEnabled) return; event.preventDefault(); void dropTasksAt(task.id); }}>
+        {canWrite && <input type="checkbox" checked={selectedTaskIds.has(task.id)} onChange={(event) => selectTask(task.id, event.target.checked, { shiftKey: event.nativeEvent?.shiftKey || event.shiftKey })} aria-label={`${task.title} 선택`} />}
+        {canWrite && <span className="g-reorder-handle" draggable={reorderEnabled} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", String(task.id)); startTaskDrag(task.id); }} onDragEnd={finishTaskDrag} title={reorderEnabled ? "끌어서 선택 업무 순서 이동" : "필터를 해제하면 순서를 이동할 수 있습니다"}><GripVertical size={13} /></span>}
         <i className="g-rail-dot" />
         <button type="button" className="g-task-open nm" disabled={!canWrite} onClick={() => canWrite && setEditingTaskId(task.id)}>{task.title}</button>
         {newTask && <span className="g-new-badge">신규</span>}
@@ -1903,17 +2057,17 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
       ...(canWrite ? [{ id: "owner", label: "담당 업무별", value: ownerFilter, options: ownerOptions, onChange: setOwnerFilter }] : []),
     ]} />}
     </>}
-    {!activityMode && canWrite && selectedTaskIds.size > 0 && <section className="task-bulk-toolbar" aria-label="선택 업무 일괄 변경"><strong>{selectedTaskIds.size}개 선택</strong><label><span>상태</span><select value={bulkStatus} disabled={bulkSave.status === "saving"} onChange={(event) => setBulkStatus(event.target.value)}><option value="">변경 안 함</option>{trackerStatusOptions.map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label><label><span>담당</span><select value={bulkOwner} disabled={bulkSave.status === "saving"} onChange={(event) => setBulkOwner(event.target.value)}><option value="">변경 안 함</option>{taskResponsibleOrgOptions(project.clientName).map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label><button type="button" className="btn primary" disabled={bulkSave.status === "saving"} onClick={() => void applyBulkUpdate()}>{bulkSave.status === "saving" ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />}일괄 적용</button><button type="button" className="btn" disabled={bulkSave.status === "saving"} onClick={() => setSelectedTaskIds(new Set())}>선택 해제</button>{bulkSave.error && <small role="alert">{bulkSave.error}</small>}</section>}
+    {!activityMode && canWrite && selectedTaskIds.size > 0 && <section className="task-bulk-toolbar" aria-label="선택 업무 일괄 변경"><strong>{selectedTaskIds.size}개 선택</strong><label><span>상태</span><select value={bulkStatus} disabled={bulkSave.status === "saving"} onChange={(event) => { setBulkStatus(event.target.value); setBulkDeleteArmed(false); }}><option value="">변경 안 함</option>{trackerStatusOptions.map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label><label><span>담당</span><select value={bulkOwner} disabled={bulkSave.status === "saving"} onChange={(event) => { setBulkOwner(event.target.value); setBulkDeleteArmed(false); }}><option value="">변경 안 함</option>{taskResponsibleOrgOptions(project.clientName).map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label><button type="button" className="btn primary" disabled={bulkSave.status === "saving"} onClick={() => void applyBulkUpdate()}>{bulkSave.status === "saving" ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />}일괄 적용</button><button type="button" className={`btn task-bulk-delete${bulkDeleteArmed ? " is-armed" : ""}`} disabled={bulkSave.status === "saving"} onClick={() => void applyBulkArchive()}>{bulkSave.status === "saving" && bulkDeleteArmed ? <LoaderCircle size={13} className="spin" /> : <Trash2 size={13} />}{bulkDeleteArmed ? `${selectedTaskIds.size}개 삭제 확정` : "선택 삭제"}</button><button type="button" className="btn" disabled={bulkSave.status === "saving"} onClick={() => { setSelectedTaskIds(new Set()); selectionAnchorRef.current = null; setBulkDeleteArmed(false); setBulkSave({ status: "idle", error: "" }); }}>선택 해제</button>{bulkSave.error && <small role="alert">{bulkSave.error}</small>}</section>}
     <section ref={schedulePanelRef} className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
       <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{summaryOnly ? "프로젝트 간트" : activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 누적 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : canWrite ? " · 업무명 수정 · 이동 손잡이로 순서 변경" : " · 업무명과 일정을 확인"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={() => onLoadActivity?.()} disabled={activityState?.status === "loading" || activityState?.loadingMore}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
       {displayMode === "gantt" && canWrite && <div className="g-hint"><span>✎</span><span>칸을 클릭하면 칠해지고, 다시 누르면 지워집니다. 옆으로 끌면 여러 칸을 한 번에 — 시작일·종료일·기간은 칠한 범위에 맞춰 자동으로 바뀝니다.</span></div>}
-      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} clientName={project.clientName} onRefresh={() => onLoadActivity?.()} onLoadMore={(cursor) => onLoadActivity?.({ append: true, cursor })} /> : filteredTasks.length === 0 ? <EmptyState title={summaryOnly ? "등록된 업무가 없습니다" : "조건에 맞는 업무가 없습니다"} description={summaryOnly ? "업무를 등록하면 같은 일정이 여기에 표시됩니다." : "상태·카테고리·일정 필터를 변경해 주세요."} /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={setEditingTaskId} onArchive={onArchive} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} selectedTaskIds={selectedTaskIds} onSelectTask={selectTask} onSelectAll={selectAllVisible} reorderEnabled={reorderEnabled} draggingTaskId={draggingTaskId} onDragStart={setDraggingTaskId} onDragEnd={() => setDraggingTaskId(null)} onDropTask={(taskId) => void dropTaskBefore(taskId)} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ width: `${ganttLabelWidth + ganttTrackWidth}px`, minWidth: `${ganttLabelWidth + ganttTrackWidth}px`, "--gantt-label-width": `${ganttLabelWidth}px`, "--gantt-day-width": `${GANTT_DAY_WIDTH}px` }}>
-        <div className="g-hrow"><div className="g-lbl g-corner">{canWrite && <input type="checkbox" checked={Boolean(filteredTasks.length && filteredTasks.every((task) => selectedTaskIds.has(task.id)))} onChange={(event) => selectAllVisible(event.target.checked)} aria-label="표시된 업무 전체 선택" />}<span className="nm">매체 · 업무</span></div><div className="g-hstack" style={{ width: `${ganttTrackWidth}px` }}><div className="g-months">{months.map((month) => <div className={`g-m month-tone-${month.tone}`} key={month.key} style={{ width: `${month.count * GANTT_DAY_WIDTH}px` }}>{month.label}</div>)}</div><div className="g-days">{days.map((day) => <div key={day.iso} className={`g-d${ganttMonthClass(day)}${day.weekend ? " we" : ""}${day.weekday === "일" ? " sun" : ""}${day.iso === today ? " ref" : ""}`}><span>{day.day}</span><span className="dw">{day.weekday}</span></div>)}</div></div></div>
+      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} clientName={project.clientName} onRefresh={() => onLoadActivity?.()} onLoadMore={(cursor) => onLoadActivity?.({ append: true, cursor })} /> : filteredTasks.length === 0 ? <EmptyState title={summaryOnly ? "등록된 업무가 없습니다" : "조건에 맞는 업무가 없습니다"} description={summaryOnly ? "업무를 등록하면 같은 일정이 여기에 표시됩니다." : "상태·카테고리·일정 필터를 변경해 주세요."} /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={setEditingTaskId} onArchive={onArchive} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} selectedTaskIds={selectedTaskIds} onSelectTask={selectTask} onSelectAll={selectAllVisible} reorderEnabled={reorderEnabled} draggingTaskIds={draggingTaskIds} dropIndicator={taskDropIndicator} onDragStart={startTaskDrag} onDragEnd={finishTaskDrag} onDragOverTask={handleTaskDragOver} onDropTask={(taskId) => void dropTasksAt(taskId)} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} onPointerMove={highlightGanttAxes} onPointerLeave={clearGanttAxisHighlight} className="gantt reference-gantt" style={{ width: `${ganttLabelWidth + ganttTrackWidth}px`, minWidth: `${ganttLabelWidth + ganttTrackWidth}px`, "--gantt-label-width": `${ganttLabelWidth}px`, "--gantt-day-width": `${GANTT_DAY_WIDTH}px` }}>
+        <div className="g-hrow"><div className="g-lbl g-corner">{canWrite && <input type="checkbox" checked={Boolean(filteredTasks.length && filteredTasks.every((task) => selectedTaskIds.has(task.id)))} onChange={(event) => selectAllVisible(event.target.checked)} aria-label="표시된 업무 전체 선택" />}<span className="nm">매체 · 업무</span></div><div className="g-hstack" style={{ width: `${ganttTrackWidth}px` }}><div className="g-months">{months.map((month) => <div className={`g-m month-tone-${month.tone}`} key={month.key} style={{ width: `${month.count * GANTT_DAY_WIDTH}px` }}>{month.label}</div>)}</div><div className="g-days">{days.map((day, dayIndex) => <div key={day.iso} data-gantt-day-index={dayIndex} className={`g-d${ganttMonthClass(day)}${day.weekend ? " we" : ""}${day.weekday === "일" ? " sun" : ""}${day.iso === today ? " ref" : ""}`}><span>{day.day}</span><span className="dw">{day.weekday}</span></div>)}</div></div></div>
         {ganttGroups.map((group) => {
           const color = ganttCategoryColor(group.label);
           const groupDone = group.tasks.filter((task) => task.statusCode === "DONE").length;
           return <section className="g-section" key={group.label}>
-            <div className="g-grow"><div className="g-lbl" style={{ "--rail": color }}><span className="nm">{group.label}</span><span className="g-gcount">{groupDone}/{group.tasks.length}</span></div><div className="g-track g-gtrack" style={{ width: `${ganttTrackWidth}px` }}>{days.map((day) => <div key={`${group.label}-${day.iso}`} className={`g-c${ganttMonthClass(day)} ${day.weekend ? "we" : ""} ${day.iso === today ? "ref" : ""}`} />)}{todayIndex >= 0 && <div className="g-refline" style={{ left: `${todayIndex * GANTT_DAY_WIDTH}px` }} />}</div></div>
+            <div className="g-grow"><div className="g-lbl" style={{ "--rail": color }}><span className="nm">{group.label}</span><span className="g-gcount">{groupDone}/{group.tasks.length}</span></div><div className="g-track g-gtrack" style={{ width: `${ganttTrackWidth}px` }}>{days.map((day, dayIndex) => <div key={`${group.label}-${day.iso}`} data-gantt-day-index={dayIndex} className={`g-c${ganttMonthClass(day)} ${day.weekend ? "we" : ""} ${day.iso === today ? "ref" : ""}`} />)}{todayIndex >= 0 && <div className="g-refline" style={{ left: `${todayIndex * GANTT_DAY_WIDTH}px` }} />}</div></div>
             {group.tasks.map((task) => renderGanttTaskRow(task, group.label, color))}
           </section>;
         })}
@@ -3095,15 +3249,16 @@ export function App() {
     const projectId = activeProjectId;
     const previousTasks = new Map(updates.map(({ task }) => [task.id, { ...task }]));
     resourceCacheEpochRef.current += 1;
-    updates.forEach(({ task, fields }) => {
-      patchTaskResource(projectId, task.id, (current) => taskWithMutationFields(current, fields));
+    updates.forEach(({ task, operation = "UPDATE", fields = {} }) => {
+      if (operation === "ARCHIVE") removeTaskResource(projectId, task.id);
+      else patchTaskResource(projectId, task.id, (current) => taskWithMutationFields(current, fields));
     });
     try {
       const result = await mutateBatchWithSaveLock(`${updates.length}개 업무 변경사항을 한 번에 기록하고 있습니다.`, {
         projectId,
-        mutations: updates.map(({ task, fields }) => ({
+        mutations: updates.map(({ task, operation = "UPDATE", fields = {} }) => ({
           entityType: "task",
-          operation: "UPDATE",
+          operation,
           id: task.id,
           expectedRowVersion: task.rowVersion,
           fields,
@@ -3113,19 +3268,25 @@ export function App() {
         .filter(Boolean)
         .map((record) => tasksViewModel({ data: { items: [record], totalMatching: 1 }, generatedAt: result.generatedAt }).items[0]);
       const canonicalById = new Map(canonicalTasks.map((task) => [task.id, task]));
-      updates.forEach(({ task, fields }) => {
+      updates.forEach(({ task, operation = "UPDATE", fields = {} }) => {
+        if (operation === "ARCHIVE") return;
         const canonicalTask = canonicalById.get(task.id);
         patchTaskResource(projectId, task.id, (current) => canonicalTask
           ? { ...current, ...canonicalTask }
           : { ...taskWithMutationFields(current, fields), rowVersion: Number(current.rowVersion || 0) + 1 });
       });
       setTaskActivityState({ ...blankTaskActivity, projectId });
-      setSaveNotice(`${updates.length}개 업무 변경사항을 Supabase에 저장했습니다.`);
+      const archived = updates.filter(({ operation = "UPDATE" }) => operation === "ARCHIVE").length;
+      setSaveNotice(archived === updates.length
+        ? `${archived}개 업무를 삭제했습니다. 원장에는 복구 가능한 보관 이력이 남습니다.`
+        : `${updates.length}개 업무 변경사항을 Supabase에 저장했습니다.`);
       return canonicalTasks;
     } catch (error) {
-      updates.forEach(({ task }) => {
+      updates.forEach(({ task, operation = "UPDATE" }) => {
         const previousTask = previousTasks.get(task.id);
-        if (previousTask) patchTaskResource(projectId, task.id, () => previousTask);
+        if (!previousTask) return;
+        if (operation === "ARCHIVE") appendTaskResource(projectId, previousTask);
+        else patchTaskResource(projectId, task.id, () => previousTask);
       });
       if (error.code === "conflict") invalidateResource(projectId, "tasks");
       throw error;

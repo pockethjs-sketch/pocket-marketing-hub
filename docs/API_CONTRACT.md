@@ -61,7 +61,7 @@ GitHub Pages 운영 빌드는 아래 계약의 Apps Script API를 사용합니�
 
 Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `action`, `projectId`로 라우팅한다. 인증 세션도 query string이나 커스텀 헤더가 아니라 JSON 본문의 `auth.sessionToken`으로 전달한다. 프런트는 각 요청 URL에 데이터 의미와 무관한 `_mh` 난수를 붙여 만료된 Apps Script 302 리다이렉트가 재사용되는 것을 막는다.
 
-간트의 다중 행 수정은 `mutate_batch`를 사용한다. 한 요청에는 같은 `projectId`의 `task / UPDATE`만 최대 40건까지 포함할 수 있으며 업무 ID와 `mutationId`는 요청 안에서 중복될 수 없다. 서버는 모든 행의 권한·허용 필드·`expectedRowVersion`을 쓰기 전에 검사하고, 행별 canonical record를 입력 순서대로 `data.results`에 반환한다. 대량 요청은 프런트가 40건 단위로 순차 분할한다.
+간트 및 선택 업무의 다중 변경은 `mutate_batch`를 사용한다. 한 요청에는 같은 `projectId`의 `task / UPDATE|ARCHIVE`를 최대 40건까지 포함할 수 있으며 업무 ID와 `mutationId`는 요청 안에서 중복될 수 없다. 서버는 모든 행의 권한·허용 필드·`expectedRowVersion`을 쓰기 전에 검사하고, 행별 canonical record를 입력 순서대로 `data.results`에 반환한다. 대량 요청은 프런트가 40건 단위로 순차 분할한다. `ARCHIVE`는 물리 삭제가 아니라 `archived_at`을 기록하는 복구 가능한 삭제이며 사용자 업무 로그에도 남는다.
 
 ```json
 {

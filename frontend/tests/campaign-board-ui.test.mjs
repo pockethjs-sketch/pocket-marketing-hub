@@ -119,11 +119,33 @@ test("일정표와 간트는 체크 선택, 일괄 상태·담당 변경, 드래
   assert.match(appSource, /className="task-bulk-toolbar"/);
   assert.match(appSource, /selectedTaskIds\.size/);
   assert.match(appSource, /await saveUpdateChunks\(updates\)/);
-  assert.match(appSource, /fields: \{ sort_order: \(index \+ 1\) \* 10 \}/);
+  assert.match(appSource, /const fields = \{ sort_order: \(index \+ 1\) \* 10 \}/);
   assert.match(appSource, /className="g-reorder-handle"/);
   assert.match(appSource, /select className=\{`g-task-status/);
   assert.match(appSource, /select className=\{`g-owner-select/);
   assert.match(styleSource, /\.task-bulk-toolbar/);
+});
+
+test("업무표와 간트는 다중 이동·Shift 범위 선택·일괄 소프트 삭제를 제공한다", () => {
+  assert.match(appSource, /selectTaskRange\(filteredTasks, current, selectionAnchorRef\.current, taskId, checked\)/);
+  assert.match(appSource, /event\.nativeEvent\?\.shiftKey \|\| event\.shiftKey/);
+  assert.match(appSource, /selectedTaskIds\.has\(taskId\)[\s\S]*filteredTasks\.filter/);
+  assert.match(appSource, /reorderTaskSchedule\(filteredTasks, sourceIds, targetTaskId, position\)/);
+  assert.match(appSource, /fields\.category_code = targetMediaCode/);
+  assert.match(appSource, /operation: "ARCHIVE"/);
+  assert.match(appSource, /className=\{`btn task-bulk-delete/);
+  assert.match(styleSource, /\.task-schedule-row\.is-drop-before/);
+  assert.match(styleSource, /\.g-row\.is-drop-after/);
+  assert.match(styleSource, /content: "여기에 이동"/);
+});
+
+test("간트 포인터는 업무 행과 날짜 열을 동시에 강조한다", () => {
+  assert.match(appSource, /onPointerMove=\{highlightGanttAxes\}/);
+  assert.match(appSource, /data-gantt-day-index=\{dayIndex\}/);
+  assert.match(appSource, /data-gantt-row-index=\{rowIndex\}/);
+  assert.match(styleSource, /\.reference-gantt \.g-row\.is-axis-hover-row/);
+  assert.match(styleSource, /\.reference-gantt \.g-d\.is-axis-hover-column/);
+  assert.match(styleSource, /\.g-c\.is-axis-hover-intersection/);
 });
 
 test("일정표 아래 이슈사항·추가요청 원장은 기준 HTML의 열과 직접 저장 동작을 유지한다", () => {

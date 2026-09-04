@@ -133,3 +133,20 @@ test("Gantt task batches use one atomic Supabase RPC and return canonical rows",
   assert.equal(calls[0].name, "mutate_tasks_batch");
   assert.equal(result.data.results[0].record.task_id, 31);
 });
+
+test("선택 업무 보관도 같은 배치 RPC에 ARCHIVE 연산으로 전달한다", () => {
+  const args = taskBatchMutationRpcArguments({
+    projectId: 17,
+    mutations: [{
+      mutationId: "mut_archive_12345678",
+      entityType: "task",
+      operation: "ARCHIVE",
+      id: 31,
+      expectedRowVersion: 4,
+      fields: {},
+    }],
+  });
+  assert.equal(args.p_mutations[0].operation, "ARCHIVE");
+  assert.equal(args.p_mutations[0].task_id, "31");
+  assert.deepEqual(args.p_mutations[0].fields, {});
+});
