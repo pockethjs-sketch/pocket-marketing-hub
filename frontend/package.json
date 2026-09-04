@@ -12,6 +12,7 @@
     "configure:backup": "node scripts/configure-backup-runner.mjs",
     "test:navigation": "node --test tests/navigation-state.test.mjs",
     "test:task-nav": "node scripts/task-navigation-smoke.mjs",
+    "test:client-gantt": "node scripts/client-progress-gantt-smoke.mjs",
     "migrate:campaign-schedule": "node scripts/migrate-campaign-schedule.mjs",
     "restore:supabase-schedules": "node scripts/restore-supabase-campaign-schedules.mjs",
     "test:ui": "node scripts/browser-smoke.mjs",
