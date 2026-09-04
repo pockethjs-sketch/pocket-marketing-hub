@@ -70,6 +70,62 @@ export function groupTaskScheduleByMedia(tasks = []) {
   });
 }
 
+function normalizedSeriesText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("ko");
+}
+
+export function taskScheduleSeries(task = {}) {
+  const title = String(task.title || "").trim();
+  const match = /^(.*?\S)\s+(\d+)\s*\/\s*(\d+)\s*$/.exec(title);
+  if (!match) return null;
+  const item = Number(match[2]);
+  const total = Number(match[3]);
+  if (!Number.isInteger(item) || !Number.isInteger(total) || total < 2 || item < 1 || item > total) return null;
+  const baseTitle = match[1].trim();
+  const key = [
+    taskScheduleMediaKey(task),
+    normalizedSeriesText(taskScheduleCategory(task)),
+    normalizedSeriesText(baseTitle),
+    total,
+  ].join("::");
+  return { key, baseTitle, item, total };
+}
+
+// Numbered repetitions stay as individual records in the database, but the
+// schedule UI can present them as one expandable row. A group only exists when
+// at least two matching repetitions are currently visible.
+export function groupTaskScheduleSeries(tasks = []) {
+  const buckets = new Map();
+  tasks.forEach((task) => {
+    const series = taskScheduleSeries(task);
+    if (!series) return;
+    const bucket = buckets.get(series.key) || [];
+    bucket.push({ task });
+    buckets.set(series.key, bucket);
+  });
+
+  const emitted = new Set();
+  const rows = [];
+  tasks.forEach((task, sourceIndex) => {
+    const series = taskScheduleSeries(task);
+    const bucket = series ? buckets.get(series.key) : null;
+    if (!series || !bucket || bucket.length < 2) {
+      rows.push({ key: `task:${task.id || sourceIndex}`, type: "task", task, tasks: [task] });
+      return;
+    }
+    if (emitted.has(series.key)) return;
+    emitted.add(series.key);
+    rows.push({
+      key: `series:${series.key}`,
+      type: "series",
+      baseTitle: series.baseTitle,
+      expectedTotal: series.total,
+      tasks: bucket.map((entry) => entry.task),
+    });
+  });
+  return rows;
+}
+
 export function taskScheduleStatusGroup(task = {}) {
   const status = String(task.statusCode || "").toUpperCase();
   if (["DONE", "COMPLETED"].includes(status)) return "DONE";

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { tasksViewModel } from "../src/api/viewModel.js";
 
-import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, groupTaskScheduleSeries, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleSeries, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("신규 DB 업무분야와 구형 코드는 한글로 표시하고 같은 필터에 포함한다", () => {
   const codes = ["MARKETING", "DESIGN", "VIDEO", "MKT", "DSN", "VID"];
@@ -159,6 +159,36 @@ test("유튜브 패키지 순서는 저장된 sort_order를 따라 드래그 재
     { id: "SHORT-2", title: "쇼츠 업로드 SEO 2/2", categoryCode: "YOUTUBE", sortOrder: 70 },
   ];
   assert.deepEqual(groupTaskScheduleByMedia(tasks).map((task) => task.id), ["MAIN-1", "VIEW-1", "LIKE-1", "MAIN-2", "VIEW-2", "SHORT-1", "SHORT-2"]);
+});
+
+test("같은 매체·분야·업무명의 번호 회차만 하나의 펼침 묶음으로 만든다", () => {
+  const tasks = [
+    { id: "IG-1", title: "콘텐츠 제작 / 업로드 1/10", categoryCode: "INSTAGRAM", streamCode: "DESIGN" },
+    { id: "IG-2", title: "콘텐츠 제작 / 업로드 2/10", categoryCode: "INSTAGRAM", streamCode: "DESIGN" },
+    { id: "IG-OTHER", title: "계정 설정", categoryCode: "INSTAGRAM", streamCode: "MARKETING" },
+    { id: "YT-1", title: "콘텐츠 제작 / 업로드 1/10", categoryCode: "YOUTUBE", streamCode: "DESIGN" },
+  ];
+  assert.deepEqual(taskScheduleSeries(tasks[0]), {
+    key: "INSTAGRAM::디자인::콘텐츠 제작 / 업로드::10",
+    baseTitle: "콘텐츠 제작 / 업로드",
+    item: 1,
+    total: 10,
+  });
+  const rows = groupTaskScheduleSeries(tasks);
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].type, "series");
+  assert.equal(rows[0].baseTitle, "콘텐츠 제작 / 업로드");
+  assert.deepEqual(rows[0].tasks.map((task) => task.id), ["IG-1", "IG-2"]);
+  assert.equal(rows[1].type, "task");
+  assert.equal(rows[2].type, "task");
+});
+
+test("필터로 같은 회차가 하나만 남으면 불필요한 묶음 행을 만들지 않는다", () => {
+  const rows = groupTaskScheduleSeries([
+    { id: "ONE", title: "포스팅 2/5", categoryCode: "NAVER_BLOG", streamCode: "MARKETING" },
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].type, "task");
 });
 
 test("일정표 상단 상태 요약은 같은 상태를 다시 누르면 전체로 돌아간다", () => {

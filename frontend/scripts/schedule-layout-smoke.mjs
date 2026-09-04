@@ -156,6 +156,19 @@ try {
   await wait('document.querySelector(".g-task-status").value==="ON_HOLD"');
   assert.ok(await evaluate('document.querySelector(".g-task-status").classList.contains("is-hold")'));
   assert.equal(await evaluate('qaWrites.length'),0,"render/resize/filter must not save dates");
+  await evaluate(`qaView("table");qaTasks([
+    {id:"series-1",title:"콘텐츠 제작 / 업로드 1/10",description:"카드뉴스 제작·업로드",stream:"DESIGN",categoryCode:"INSTAGRAM",statusCode:"IN_PROGRESS",progressPercent:40,responsibleOrgCode:"NS",plannedStartDate:"2026-09-20",dueDate:"2026-09-22"},
+    {id:"series-2",title:"콘텐츠 제작 / 업로드 2/10",description:"카드뉴스 제작·업로드",stream:"DESIGN",categoryCode:"INSTAGRAM",statusCode:"DONE",progressPercent:100,responsibleOrgCode:"NS",plannedStartDate:"2026-09-23",dueDate:"2026-09-25"}
+  ])`);
+  await wait('document.querySelector(".task-series-summary")');
+  assert.equal(await evaluate('document.querySelectorAll(".reference-task-row").length'),1,"numbered work starts as one collapsed table row");
+  await click('.task-series-toggle');
+  assert.equal(await evaluate('document.querySelectorAll(".reference-task-row").length'),3,"table series expands to its two source rows");
+  await evaluate('qaView("gantt")');await wait('document.querySelector(".g-series-summary")');
+  assert.equal(await evaluate('document.querySelectorAll(".g-row").length'),3,"expanded state is shared with Gantt");
+  await click('.g-series-toggle');
+  assert.equal(await evaluate('document.querySelectorAll(".g-row").length'),1,"Gantt series collapses to one summary row");
+  await evaluate('qaView("table")');await wait('document.querySelector(".task-series-toggle")');await click('.task-series-toggle');
   if(process.env.QA_SCREENSHOT){const capture=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});await writeFile(process.env.QA_SCREENSHOT,Buffer.from(capture.data,"base64"));}
   await evaluate('qaView("table");qaWrite(false)');await wait('document.querySelector(".reference-task-table")');
   assert.equal(await evaluate('[...document.querySelectorAll(".reference-task-table th")].some(t=>t.textContent==="관리")'),false);
