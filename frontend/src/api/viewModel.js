@@ -642,6 +642,7 @@ export function activityListViewModel(envelope) {
     // 현재 업무명과 대조할 수 있는 화면 계층에서 별도로 수행한다.
     items: (data.items || []).map(activityViewModel),
     nextCursor: data.nextCursor || null,
+    loadedCount: Number(data.loadedCount ?? data.items?.length ?? 0),
     generatedAt: envelope?.generatedAt || null,
   };
 }

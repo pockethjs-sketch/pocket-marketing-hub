@@ -245,6 +245,15 @@ const { rows: [createResult] } = await db.query(`
 assert(createResult.response?.ok === true, `valid task RPC failed: ${JSON.stringify(createResult.response)}`);
 assert(await scalar("select count(*)::int as count from public.activity_events where entity_type='TASK'") >= 1, "safe task activity metadata is not readable by NS");
 await expectDenied("select before_data from public.activity_events", "NS raw audit payload");
+const { rows: [firstActivityPage] } = await db.query("select public.read_task_activity(1, 2, null, null) as response");
+assert(firstActivityPage.response?.items?.length === 2, "task activity first page size mismatch");
+assert(firstActivityPage.response?.nextCursor?.createdAt && firstActivityPage.response?.nextCursor?.id, "task activity cursor missing");
+const { rows: [secondActivityPage] } = await db.query(
+  "select public.read_task_activity(1, 2, $1::timestamptz, $2::bigint) as response",
+  [firstActivityPage.response.nextCursor.createdAt, firstActivityPage.response.nextCursor.id],
+);
+const firstActivityIds = new Set(firstActivityPage.response.items.map((item) => item.event_id));
+assert(secondActivityPage.response.items.every((item) => !firstActivityIds.has(item.event_id)), "task activity pages overlap");
 await expectDenied(`insert into public.kpi_definitions(project_id, metric_code, metric_name, unit_code, period_type_code, target_value, aggregation_code, created_by_user_id, updated_by_user_id) values (1, 'QA', '권한 우회', 'COUNT', 'MONTHLY', 1, 'SUM', '${userIds.ns}', '${userIds.ns}')`, "page-specific KPI write");
 try {
   await db.query(`
@@ -365,6 +374,7 @@ await db.exec(`insert into public.tasks(project_id,phase_code,workstream_code,ti
 assert(await scalar("select count(*)::int as count from public.tasks where title='만료 자동완료 QA' and status_code='DONE' and progress_percent=100") === 1, 'expired insert was not persisted as DONE/100');
 console.log(JSON.stringify({
   confirmationDeadlineAndAudit: "pass",
+  persistentTaskActivityPagination: "pass",
   scheduledTaskAutomation: "pass",
   taskStatusProgressInvariant: "pass",
   nsAllProjectsAndFutureMemberships: "pass",

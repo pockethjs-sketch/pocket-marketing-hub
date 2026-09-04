@@ -12,14 +12,31 @@ function positiveId(value) {
   return normalized;
 }
 
+function activityCursor(value) {
+  if (!value) return { createdAt: null, id: null };
+  const createdAt = String(value.createdAt || "").trim();
+  const id = String(value.id || "").trim();
+  if (!createdAt || Number.isNaN(Date.parse(createdAt)) || !/^[1-9]\d*$/.test(id)) {
+    throw new HubApiError("업무 로그 조회 위치가 올바르지 않습니다.", {
+      code: "invalid_activity_cursor",
+      action: "read_task_activity",
+      retriable: false,
+    });
+  }
+  return { createdAt, id };
+}
+
 export function createSupabaseTaskActivityReader(client) {
   if (!client || typeof client.rpc !== "function") {
     throw new TypeError("A Supabase client with rpc() is required");
   }
   return async function readTaskActivity(params = {}) {
+    const cursor = activityCursor(params.cursor);
     let request = client.rpc("read_task_activity", {
       p_project_id: positiveId(params.projectId),
       p_limit: Math.max(1, Math.min(Number(params.limit) || 100, 200)),
+      p_before_created_at: cursor.createdAt,
+      p_before_id: cursor.id,
     });
     if (params.signal && typeof request?.abortSignal === "function") {
       request = request.abortSignal(params.signal);

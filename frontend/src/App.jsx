@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   FolderOpen,
   GripVertical,
+  History,
   FileUp,
   LayoutDashboard,
   ListFilter,
@@ -1064,7 +1065,7 @@ function taskActivityDateLabel(value) {
   return value === today ? `오늘 · ${label}` : label;
 }
 
-function TaskActivityLog({ state, tasks, clientName, onRefresh }) {
+function TaskActivityLog({ state, tasks, clientName, onRefresh, onLoadMore }) {
   const data = state?.data || null;
   const items = useMemo(() => readableTaskActivities(data?.items || [], tasks || []), [data?.items, tasks]);
   const [dateFilter, setDateFilter] = useState("ALL");
@@ -1073,6 +1074,7 @@ function TaskActivityLog({ state, tasks, clientName, onRefresh }) {
   const groups = useMemo(() => groupTaskActivitiesByDate(filteredItems), [filteredItems]);
   const ownerOptions = useMemo(() => [["ALL", "전체"], ...taskResponsibleOrgOptions(clientName)], [clientName]);
   const loading = state?.status === "loading";
+  const loadingMore = state?.loadingMore === true;
 
   return <section className="task-change-log is-embedded" aria-label="업무 로그" aria-busy={loading}>
     {loading && !data ? <LoadingState label="업무 로그를 불러오는 중입니다." /> : state?.status === "error" && !data ? <ErrorState error={state.error} onRetry={onRefresh} title="업무 로그를 불러오지 못했습니다." /> : <>
@@ -1089,6 +1091,7 @@ function TaskActivityLog({ state, tasks, clientName, onRefresh }) {
       <div className="task-change-log-changes">{item.changes.length ? item.changes.map((change) => <div key={`${item.id}-${change.field}`}><strong>{change.label}</strong><span>{taskActivityValue(change.before)}</span><ArrowRight size={12} /><em>{taskActivityValue(change.after)}</em></div>) : <span className="task-change-log-no-detail">{taskActivitySentence(item)}</span>}</div>
       <div className="task-change-log-actor"><small>변경자</small><strong>{item.actor}</strong></div>
       </article>)}</section>)}</div> : <EmptyState title={items.length ? "조건에 맞는 업무 로그가 없습니다" : "업무 로그가 없습니다"} description={items.length ? "일자 또는 담당 필터를 변경해 주세요." : "웹에서 업무를 생성하거나 수정하면 확정된 이력이 표시됩니다."} />}
+      {data?.nextCursor && <div className="task-activity-load-more"><button className="btn" type="button" disabled={loadingMore} onClick={() => onLoadMore?.(data.nextCursor)}>{loadingMore ? <LoaderCircle size={13} className="spin" /> : <History size={13} />}{loadingMore ? "이전 로그 불러오는 중" : "이전 로그 더 보기"}</button><small>로그는 삭제하지 않고 계속 누적 저장됩니다.</small></div>}
     </>}
   </section>;
 }
@@ -1898,9 +1901,9 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     </>}
     {!activityMode && canWrite && selectedTaskIds.size > 0 && <section className="task-bulk-toolbar" aria-label="선택 업무 일괄 변경"><strong>{selectedTaskIds.size}개 선택</strong><label><span>상태</span><select value={bulkStatus} disabled={bulkSave.status === "saving"} onChange={(event) => setBulkStatus(event.target.value)}><option value="">변경 안 함</option>{trackerStatusOptions.map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label><label><span>담당</span><select value={bulkOwner} disabled={bulkSave.status === "saving"} onChange={(event) => setBulkOwner(event.target.value)}><option value="">변경 안 함</option>{taskResponsibleOrgOptions(project.clientName).map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label><button type="button" className="btn primary" disabled={bulkSave.status === "saving"} onClick={() => void applyBulkUpdate()}>{bulkSave.status === "saving" ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />}일괄 적용</button><button type="button" className="btn" disabled={bulkSave.status === "saving"} onClick={() => setSelectedTaskIds(new Set())}>선택 해제</button>{bulkSave.error && <small role="alert">{bulkSave.error}</small>}</section>}
     <section ref={schedulePanelRef} className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
-      <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{summaryOnly ? "프로젝트 간트" : activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : canWrite ? " · 업무명 수정 · 이동 손잡이로 순서 변경" : " · 업무명과 일정을 확인"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={onLoadActivity} disabled={activityState?.status === "loading"}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
+      <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{summaryOnly ? "프로젝트 간트" : activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 누적 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : canWrite ? " · 업무명 수정 · 이동 손잡이로 순서 변경" : " · 업무명과 일정을 확인"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={() => onLoadActivity?.()} disabled={activityState?.status === "loading" || activityState?.loadingMore}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
       {displayMode === "gantt" && canWrite && <div className="g-hint"><span>✎</span><span>칸을 클릭하면 칠해지고, 다시 누르면 지워집니다. 옆으로 끌면 여러 칸을 한 번에 — 시작일·종료일·기간은 칠한 범위에 맞춰 자동으로 바뀝니다.</span></div>}
-      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} clientName={project.clientName} onRefresh={onLoadActivity} /> : filteredTasks.length === 0 ? <EmptyState title={summaryOnly ? "등록된 업무가 없습니다" : "조건에 맞는 업무가 없습니다"} description={summaryOnly ? "업무를 등록하면 같은 일정이 여기에 표시됩니다." : "상태·카테고리·일정 필터를 변경해 주세요."} /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={setEditingTaskId} onArchive={onArchive} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} selectedTaskIds={selectedTaskIds} onSelectTask={selectTask} onSelectAll={selectAllVisible} reorderEnabled={reorderEnabled} draggingTaskId={draggingTaskId} onDragStart={setDraggingTaskId} onDragEnd={() => setDraggingTaskId(null)} onDropTask={(taskId) => void dropTaskBefore(taskId)} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ width: `${GANTT_LABEL_WIDTH + ganttTrackWidth}px`, minWidth: `${GANTT_LABEL_WIDTH + ganttTrackWidth}px`, "--gantt-label-width": `${GANTT_LABEL_WIDTH}px`, "--gantt-day-width": `${GANTT_DAY_WIDTH}px` }}>
+      {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} clientName={project.clientName} onRefresh={() => onLoadActivity?.()} onLoadMore={(cursor) => onLoadActivity?.({ append: true, cursor })} /> : filteredTasks.length === 0 ? <EmptyState title={summaryOnly ? "등록된 업무가 없습니다" : "조건에 맞는 업무가 없습니다"} description={summaryOnly ? "업무를 등록하면 같은 일정이 여기에 표시됩니다." : "상태·카테고리·일정 필터를 변경해 주세요."} /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={setEditingTaskId} onArchive={onArchive} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} selectedTaskIds={selectedTaskIds} onSelectTask={selectTask} onSelectAll={selectAllVisible} reorderEnabled={reorderEnabled} draggingTaskId={draggingTaskId} onDragStart={setDraggingTaskId} onDragEnd={() => setDraggingTaskId(null)} onDropTask={(taskId) => void dropTaskBefore(taskId)} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ width: `${GANTT_LABEL_WIDTH + ganttTrackWidth}px`, minWidth: `${GANTT_LABEL_WIDTH + ganttTrackWidth}px`, "--gantt-label-width": `${GANTT_LABEL_WIDTH}px`, "--gantt-day-width": `${GANTT_DAY_WIDTH}px` }}>
         <div className="g-hrow"><div className="g-lbl g-corner">{canWrite && <input type="checkbox" checked={Boolean(filteredTasks.length && filteredTasks.every((task) => selectedTaskIds.has(task.id)))} onChange={(event) => selectAllVisible(event.target.checked)} aria-label="표시된 업무 전체 선택" />}<span className="nm">매체 · 업무</span></div><div className="g-hstack" style={{ width: `${ganttTrackWidth}px` }}><div className="g-months">{months.map((month) => <div className={`g-m month-tone-${month.tone}`} key={month.key} style={{ width: `${month.count * GANTT_DAY_WIDTH}px` }}>{month.label}</div>)}</div><div className="g-days">{days.map((day) => <div key={day.iso} className={`g-d${ganttMonthClass(day)}${day.weekend ? " we" : ""}${day.weekday === "일" ? " sun" : ""}${day.iso === today ? " ref" : ""}`}><span>{day.day}</span><span className="dw">{day.weekday}</span></div>)}</div></div></div>
         {ganttGroups.map((group) => {
           const color = ganttCategoryColor(group.label);
@@ -2302,7 +2305,7 @@ function AppContent({ view, planVariant, project, role, search, setView, pageSta
 }
 
 const blankPage = { status: "idle", data: null, error: null, resource: null, projectId: null };
-const blankTaskActivity = { status: "idle", data: null, error: null, projectId: null };
+const blankTaskActivity = { status: "idle", data: null, error: null, projectId: null, loadingMore: false };
 const RESOURCE_CACHE_TTL_MS = 10 * 60_000;
 const BOOTSTRAP_SESSION_CACHE_KEY = "pocket-marketing-hub.bootstrap.v2";
 const PERSISTED_RESOURCES = new Set(["tasks", "plan-client", "plan-internal", "daily", "performance"]);
@@ -2776,24 +2779,36 @@ export function App() {
     invalidateResource(activeProjectId, activeResource);
   };
 
-  const loadTaskActivity = async () => {
+  const loadTaskActivity = async (options = {}) => {
     const projectId = activeProjectId;
     if (!source || !projectId) return null;
-    const requestKey = projectId;
+    const append = options?.append === true;
+    const cursor = append ? options.cursor : null;
+    if (append && !cursor) return null;
+    const requestKey = `${projectId}:${append ? `${cursor.createdAt}:${cursor.id}` : "latest"}`;
     if (taskActivityRequestRef.current?.key === requestKey) return taskActivityRequestRef.current.promise;
 
     setTaskActivityState((current) => ({
-      status: "loading",
+      status: append && current.data ? current.status : "loading",
       data: current.projectId === projectId ? current.data : null,
       error: null,
       projectId,
+      loadingMore: append,
     }));
-    const request = source.activity({ projectId, entityType: "TASK", limit: 200 })
+    const request = source.activity({ projectId, entityType: "TASK", limit: 200, cursor })
       .then((envelope) => {
         if (activeProjectIdRef.current !== projectId) return null;
-        const data = activityListViewModel(envelope);
-        setTaskActivityState({ status: "ready", data, error: null, projectId });
-        return data;
+        const page = activityListViewModel(envelope);
+        let resolved = page;
+        setTaskActivityState((current) => {
+          if (append && current.projectId === projectId && current.data) {
+            const seen = new Set(current.data.items.map((item) => String(item.id)));
+            const items = [...current.data.items, ...page.items.filter((item) => !seen.has(String(item.id)))];
+            resolved = { ...page, items, loadedCount: items.length };
+          }
+          return { status: "ready", data: resolved, error: null, projectId, loadingMore: false };
+        });
+        return resolved;
       })
       .catch((error) => {
         if (activeProjectIdRef.current !== projectId) return null;
@@ -2803,6 +2818,7 @@ export function App() {
           data: current.projectId === projectId ? current.data : null,
           error,
           projectId,
+          loadingMore: false,
         }));
         return null;
       })

@@ -8633,6 +8633,21 @@ select.g-task-status,
   font-size: 10px;
 }
 
+.task-activity-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--rule);
+  background: #f8fafc;
+}
+
+.task-activity-load-more small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 @media (max-width: 1180px) {
   .tracker-control-top {
     grid-template-columns: 112px minmax(0, 1fr);
