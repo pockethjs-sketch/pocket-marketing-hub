@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildGanttAxis,
+  buildGanttAxisFromDates,
   ganttMonthClass,
   groupGanttTasks,
   normalizeScheduleDates,
@@ -12,6 +13,19 @@ import {
   serializeScheduleDates,
   taskScheduleDates,
 } from "../src/taskGantt.js";
+
+test("간트 날짜축은 실제 선택된 날짜만 중복 없이 표시한다", () => {
+  const axis = buildGanttAxisFromDates([
+    "2026-09-01",
+    "2026-09-03",
+    "2026-09-03",
+    "2026-10-05",
+  ]);
+  assert.deepEqual(axis.map((day) => day.iso), ["2026-09-01", "2026-09-03", "2026-10-05"]);
+  assert.equal(axis[1].monthStart, false);
+  assert.equal(axis[2].monthStart, true);
+  assert.deepEqual(buildGanttAxisFromDates([]), []);
+});
 
 test("간트는 빈 화면 폭만 다음 달 날짜로 채우고 업무 일정은 바꾸지 않는다", () => {
   const axis = buildGanttAxis("2026-09-20", "2026-09-30", 35);

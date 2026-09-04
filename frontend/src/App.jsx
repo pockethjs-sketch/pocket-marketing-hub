@@ -65,8 +65,8 @@ import {
 import { canOperateProjectTasks, taskResponsibleOrgLabel, taskResponsibleOrgOptions, taskStatusMutationFields, taskUpdateInitialFields, taskUpdateSubmissionFields } from "./taskForm.js";
 import { TaskCreateModal } from "./TaskCreateModal.jsx";
 import { disclosureChevronDirection, disclosureChevronGlyph, expandSelectedTaskGroup, toggleCollapsedTaskGroup } from "./taskGroupState.js";
-import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, reorderTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
-import { buildGanttAxis, ganttMonthClass, groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
+import { filterTaskSchedule, groupTaskScheduleByMedia, reorderTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "./taskTimeline.js";
+import { buildGanttAxisFromDates, ganttMonthClass, groupGanttTasks, normalizeScheduleDates, paintGanttRectangle, scheduleDateBounds, scheduleDateRange, scheduleDatesEqual, serializeScheduleDates, taskScheduleDates } from "./taskGantt.js";
 import { filterTaskActivities, groupTaskActivitiesByDate, readableTaskActivities, taskActivityDateKey, taskActivitySentence } from "./taskActivity.js";
 import { isNewTask, unacknowledgedNewTasks } from "./taskFreshness.js";
 import { effectiveTaskScheduleState } from "./taskScheduleStatus.js";
@@ -90,9 +90,9 @@ import {
 
 const SAVE_OVERLAY_MIN_MS = 500;
 const SAVE_OVERLAY_COALESCE_MS = 250;
-// Keep the Gantt geometry identical to the supplied campaign schedule HTML.
-// These are fixed columns; the scroll container owns overflow on narrow screens.
-const GANTT_LABEL_WIDTH = 380;
+// Keep fixed Gantt columns so long task names remain readable and the scroll
+// container owns overflow on narrow screens.
+const GANTT_LABEL_WIDTH = 620;
 const GANTT_DAY_WIDTH = 24;
 
 const navIcons = {
@@ -1499,17 +1499,6 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
   const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
   const activityMode = displayMode === "activity";
   const matrixRef = useRef(null);
-  const schedulePanelRef = useRef(null);
-  const [ganttViewportWidth, setGanttViewportWidth] = useState(0);
-  useEffect(() => {
-    const panel = schedulePanelRef.current;
-    if (!panel) return;
-    const measure = () => setGanttViewportWidth(panel.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(panel);
-    return () => observer.disconnect();
-  }, []);
   const paintRef = useRef(null);
   const ganttTasksRef = useRef([]);
   const daysRef = useRef([]);
@@ -1560,10 +1549,6 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     media: mediaFilter,
     owner: canWrite ? ownerFilter : "ALL",
   }), [tasks, categoryFilter, scheduleFilter, mediaFilter, ownerFilter, canWrite]);
-  const timeline = useMemo(
-    () => buildTaskTimeline(filteredTasks, project),
-    [filteredTasks, project.startDate, project.endDate],
-  );
   const summary = useMemo(() => {
     const countable = statusSummaryTasks.filter((task) => task.statusCode !== "CANCELLED");
     const completed = countable.filter((task) => ["DONE", "COMPLETED"].includes(task.statusCode)).length;
@@ -1578,9 +1563,9 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
   }, [statusSummaryTasks]);
   const { done, inProgress, onHold, countable, completed, completionRate } = summary;
   const missingSchedule = useMemo(() => filteredTasks.filter((task) => !task.plannedStartDate || !task.dueDate).length, [filteredTasks]);
-  const days = useMemo(() => buildGanttAxis(timeline.start, timeline.end,
-    Math.ceil(Math.max(0, ganttViewportWidth - GANTT_LABEL_WIDTH) / GANTT_DAY_WIDTH)),
-  [timeline.start, timeline.end, ganttViewportWidth]);
+  // Show only dates that at least one visible task actually uses. The compact
+  // axis gives the fixed task-name column more room without changing saved dates.
+  const days = useMemo(() => buildGanttAxisFromDates(filteredTasks.flatMap(taskScheduleDates)), [filteredTasks]);
   const months = useMemo(() => days.reduce((items, day) => {
     const last = items[items.length - 1];
     if (last?.key === day.monthKey) last.count += 1;
@@ -1904,7 +1889,7 @@ export function TaskScheduleTimeline({ tasks, issues, project, query, canWrite, 
     ]} />}
     </>}
     {!activityMode && canWrite && selectedTaskIds.size > 0 && <section className="task-bulk-toolbar" aria-label="선택 업무 일괄 변경"><strong>{selectedTaskIds.size}개 선택</strong><label><span>상태</span><select value={bulkStatus} disabled={bulkSave.status === "saving"} onChange={(event) => setBulkStatus(event.target.value)}><option value="">변경 안 함</option>{trackerStatusOptions.map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label><label><span>담당</span><select value={bulkOwner} disabled={bulkSave.status === "saving"} onChange={(event) => setBulkOwner(event.target.value)}><option value="">변경 안 함</option>{taskResponsibleOrgOptions(project.clientName).map(([code, label]) => <option value={code} key={code}>{label}</option>)}</select></label><button type="button" className="btn primary" disabled={bulkSave.status === "saving"} onClick={() => void applyBulkUpdate()}>{bulkSave.status === "saving" ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />}일괄 적용</button><button type="button" className="btn" disabled={bulkSave.status === "saving"} onClick={() => setSelectedTaskIds(new Set())}>선택 해제</button>{bulkSave.error && <small role="alert">{bulkSave.error}</small>}</section>}
-    <section ref={schedulePanelRef} className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
+    <section className="task-timeline panel campaign-schedule-surface reference-schedule-panel" aria-label="업무 일정">
       <header className="campaign-schedule-table-heading panel-head reference-panel-head"><div><h2>{summaryOnly ? "프로젝트 간트" : activityMode ? "업무 로그" : displayMode === "gantt" ? "타임라인" : "업무 일정"}</h2><span className="hint">{activityMode ? "업무명과 변경 내용을 확인할 수 있는 누적 사용자 작업 이력" : <>{filteredTasks.length}건 표시{displayMode === "gantt" ? " · 머리글과 왼쪽 업무명 고정" : canWrite ? " · 업무명 수정 · 이동 손잡이로 순서 변경" : " · 업무명과 일정을 확인"}</>}</span>{!activityMode && ganttSave.status !== "idle" && <small className={`gantt-save-state is-${ganttSave.status}`}>{ganttSave.status === "saving" ? `업무 저장 중 ${ganttSave.saved}/${ganttSave.total}` : ganttSave.status === "saved" ? `${ganttSave.saved}개 업무 일정 저장 완료` : ganttSave.error}</small>}</div><div>{activityMode ? <button className="btn" type="button" onClick={() => onLoadActivity?.()} disabled={activityState?.status === "loading" || activityState?.loadingMore}>{activityState?.status === "loading" ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}새로고침</button> : <>{canWrite && onCreate && <button type="button" className="btn task-schedule-create" onClick={() => onCreate("task-completed")}><Check size={13} />완료 업무 추가</button>}{canWrite && onCreate && <button type="button" className="btn primary task-schedule-create" onClick={() => onCreate("task")}><Plus size={13} />업무 추가</button>}</>}</div></header>
       {displayMode === "gantt" && canWrite && <div className="g-hint"><span>✎</span><span>칸을 클릭하면 칠해지고, 다시 누르면 지워집니다. 옆으로 끌면 여러 칸을 한 번에 — 시작일·종료일·기간은 칠한 범위에 맞춰 자동으로 바뀝니다.</span></div>}
       {activityMode ? <TaskActivityLog state={activityState} tasks={tasks} clientName={project.clientName} onRefresh={() => onLoadActivity?.()} onLoadMore={(cursor) => onLoadActivity?.({ append: true, cursor })} /> : filteredTasks.length === 0 ? <EmptyState title={summaryOnly ? "등록된 업무가 없습니다" : "조건에 맞는 업무가 없습니다"} description={summaryOnly ? "업무를 등록하면 같은 일정이 여기에 표시됩니다." : "상태·카테고리·일정 필터를 변경해 주세요."} /> : displayMode === "gantt" && !days.length ? <EmptyState title={`일정 미등록 ${missingSchedule}건`} description="프로젝트 기간 또는 업무 날짜를 먼저 입력해 주세요." /> : displayMode === "table" ? <TaskScheduleInlineTable tasks={filteredTasks} project={project} canWrite={canWrite} onUpdate={onUpdate} onEdit={setEditingTaskId} onArchive={onArchive} ganttDrafts={ganttDrafts} freshnessNow={freshnessNow} scheduleClass={scheduleClass} mediaColor={ganttCategoryColor} selectedTaskIds={selectedTaskIds} onSelectTask={selectTask} onSelectAll={selectAllVisible} reorderEnabled={reorderEnabled} draggingTaskId={draggingTaskId} onDragStart={setDraggingTaskId} onDragEnd={() => setDraggingTaskId(null)} onDropTask={(taskId) => void dropTaskBefore(taskId)} /> : <div className="reference-gantt-scroll scroll"><div id="gantt" ref={matrixRef} onPointerDown={beginGanttPaint} className="gantt reference-gantt" style={{ width: `${GANTT_LABEL_WIDTH + ganttTrackWidth}px`, minWidth: `${GANTT_LABEL_WIDTH + ganttTrackWidth}px`, "--gantt-label-width": `${GANTT_LABEL_WIDTH}px`, "--gantt-day-width": `${GANTT_DAY_WIDTH}px` }}>

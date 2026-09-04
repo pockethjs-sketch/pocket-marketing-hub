@@ -10,6 +10,14 @@ function isoDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function ganttAxisDay(cursor, monthStart = cursor.getDate() === 1) {
+  const iso = isoDate(cursor);
+  const monthIndex = cursor.getFullYear() * 12 + cursor.getMonth();
+  return { iso, day: cursor.getDate(), weekday: ["일", "월", "화", "수", "목", "금", "토"][cursor.getDay()],
+    monthKey: iso.slice(0, 7), monthTone: monthIndex % 2,
+    monthStart, weekend: [0, 6].includes(cursor.getDay()) };
+}
+
 // Extend the display axis only; never change any task's saved schedule.
 export function buildGanttAxis(startValue, endValue, minimumDays = 0) {
   const start = dateAtNoon(startValue);
@@ -20,13 +28,20 @@ export function buildGanttAxis(startValue, endValue, minimumDays = 0) {
   const last = end > fillEnd ? end : fillEnd;
   const days = [];
   for (const cursor = new Date(start); cursor <= last; cursor.setDate(cursor.getDate() + 1)) {
-    const iso = isoDate(cursor);
-    const monthIndex = cursor.getFullYear() * 12 + cursor.getMonth();
-    days.push({ iso, day: cursor.getDate(), weekday: ["일", "월", "화", "수", "목", "금", "토"][cursor.getDay()],
-      monthKey: iso.slice(0, 7), monthTone: monthIndex % 2,
-      monthStart: cursor.getDate() === 1, weekend: [0, 6].includes(cursor.getDay()) });
+    days.push(ganttAxisDay(cursor));
   }
   return days;
+}
+
+// Build a compressed axis from dates that are actually selected by at least
+// one visible task. This intentionally omits unused dates between schedules.
+export function buildGanttAxisFromDates(values = []) {
+  const dates = normalizeScheduleDates(values) || [];
+  return dates.map((value, index) => {
+    const cursor = dateAtNoon(value);
+    const previousMonth = dates[index - 1]?.slice(0, 7);
+    return ganttAxisDay(cursor, index > 0 && previousMonth !== value.slice(0, 7));
+  });
 }
 
 export function ganttMonthClass(day) {

@@ -202,12 +202,14 @@ test("업무표는 고정 헤더와 고정 업무명 열을 제공한다", () =>
   assert.match(styleSource, /\.task-schedule-matrix thead tr:first-child > th:first-child,[\s\S]*position:\s*sticky/);
 });
 
-test("간트는 업무명을 넓히고 날짜 셀을 줄여 장기 일정을 압축한다", () => {
-  assert.match(appSource, /const GANTT_LABEL_WIDTH = 380/);
+test("간트는 업무명을 넓히고 실제 업무 일정까지만 날짜축을 표시한다", () => {
+  assert.match(appSource, /const GANTT_LABEL_WIDTH = 620/);
   assert.match(appSource, /const GANTT_DAY_WIDTH = 24/);
+  assert.match(appSource, /buildGanttAxisFromDates\(filteredTasks\.flatMap\(taskScheduleDates\)\)/);
+  assert.doesNotMatch(appSource, /ganttViewportWidth/);
   assert.match(appSource, /"--gantt-label-width": `\$\{GANTT_LABEL_WIDTH\}px`/);
   assert.match(appSource, /"--gantt-day-width": `\$\{GANTT_DAY_WIDTH\}px`/);
-  assert.match(styleSource, /\.g-lbl\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-label-width, 380px\)/);
+  assert.match(styleSource, /\.g-lbl\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-label-width, 620px\)/);
   assert.match(styleSource, /\.g-c\s*\{[\s\S]*flex:\s*0 0 var\(--gantt-day-width, 24px\)/);
   assert.match(styleSource, /\.g-row \.g-lbl\s*\{[\s\S]*height:\s*32px/);
 });
