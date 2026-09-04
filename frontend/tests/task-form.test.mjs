@@ -74,12 +74,19 @@ test("일정 빠른 선택은 한국 기준일과 월·연도 경계를 유지�
 test("작성 오류는 저장 전에 안내하며 일정 미정은 허용한다", () => {
   const valid = {...taskForm.taskCreateInitialFields("pocket", "default", "2026-09-03"),title:"업무"};
   assert.equal(taskForm.taskCreateValidationError(valid), "");
-  assert.match(taskForm.taskCreateValidationError({...valid,title:"   "}), /제목/);
+  assert.equal(taskForm.taskCreateValidationError({...valid,title:"   "}), "");
   assert.match(taskForm.taskCreateValidationError({...valid,due_date:"2026-09-01"}), /종료일/);
   assert.match(taskForm.taskCreateValidationError({...valid,due_date:""}), /함께/);
   assert.match(taskForm.taskCreateValidationError({...valid,progress_percent:101}), /진행률/);
   assert.match(taskForm.taskCreateValidationError({...valid,completion_url:"javascript:alert(1)"}), /https/);
   assert.equal(taskForm.taskCreateValidationError({...valid,...taskForm.taskDateRangePreset("UNSCHEDULED")}), "");
+});
+
+test("업무명은 선택 입력이며 비우면 식별 가능한 기본 제목으로 저장한다", () => {
+  const fields = taskForm.taskCreateInitialFields("ns", "default", "2026-09-04");
+  assert.equal(taskForm.taskCreateValidationError(fields), "");
+  assert.equal(taskForm.taskCreateSubmissionFields(fields).title, "제목 없는 업무");
+  assert.equal(taskForm.taskCreateSubmissionFields({...fields,title:"  직접 입력한 업무  "}).title, "직접 입력한 업무");
 });
 
 test("새 업무 일정은 간트 배열에 일치시키고 완료 진행률은 100으로 저장한다", () => {

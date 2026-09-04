@@ -56,7 +56,7 @@ export function TaskCreateModal({ completed = false, role, clientName, onClose, 
       <header><div className="task-create-heading"><span className="task-create-mark"><ClipboardCheck size={21}/></span><div><p>{clientName || "프로젝트"} · 업무 등록</p><h2 id="task-create-title">{title}</h2></div></div><button className="task-create-close" type="button" aria-label="닫기" disabled={saving} onClick={close}><X size={19}/></button></header>
       <form onSubmit={submit} noValidate>
         <div className="task-create-body"><fieldset className="task-create-fields" disabled={saving}>
-          <label className="task-create-field task-create-title-field"><span>어떤 업무인가요? <em>필수</em></span><input name="title" required maxLength={200} value={fields.title} onChange={event => setField("title",event.target.value)} placeholder="예: 9월 인스타그램 콘텐츠 제작"/></label>
+          <label className="task-create-field task-create-title-field"><span>어떤 업무인가요? <small>선택</small></span><input name="title" maxLength={200} value={fields.title} onChange={event => setField("title",event.target.value)} placeholder="비워두면 ‘제목 없는 업무’로 등록됩니다"/></label>
           <label className="task-create-field"><span>세부내용 <small>선택</small></span><textarea name="description" rows={2} maxLength={10000} value={fields.description} onChange={event => setField("description",event.target.value)} placeholder="해야 할 일과 완료 기준을 간단히 적어 주세요."/></label>
           <div className="task-create-two-column">
             <Choices label="업무 분야" options={streams} value={fields.workstream_code} onChange={value => setField("workstream_code",value)}/>
@@ -81,7 +81,7 @@ export function TaskCreateModal({ completed = false, role, clientName, onClose, 
         </fieldset></div>
         {error && <div className="task-create-message is-error" role="alert"><AlertCircle size={15}/><span>{error}</span></div>}
         {discard && <div className="task-create-message" role="alert"><span>작성 중인 내용을 버릴까요?</span><button type="button" disabled={saving} onClick={() => setDiscard(false)}>계속 작성</button><button type="button" disabled={saving} onClick={() => { if (!submitLock.current) onClose(); }}>버리고 닫기</button></div>}
-        <footer><span>{owners.find(([code]) => code === fields.responsible_org_code)?.[1]} 담당 · {duration ? `${duration}일 일정` : "일정 미정"}</span><div><button type="button" className="task-create-cancel" disabled={saving} onClick={close}>취소</button><button type="submit" className="task-create-submit" disabled={saving || !fields.title.trim()}>{saving ? <LoaderCircle size={15} className="spin"/> : completed ? <Check size={15}/> : <Plus size={15}/>} {saving ? "저장 중" : title}</button></div></footer>
+        <footer><span>{owners.find(([code]) => code === fields.responsible_org_code)?.[1]} 담당 · {duration ? `${duration}일 일정` : "일정 미정"}</span><div><button type="button" className="task-create-cancel" disabled={saving} onClick={close}>취소</button><button type="submit" className="task-create-submit" disabled={saving}>{saving ? <LoaderCircle size={15} className="spin"/> : completed ? <Check size={15}/> : <Plus size={15}/>} {saving ? "저장 중" : title}</button></div></footer>
       </form>
     </section>
   </div>;

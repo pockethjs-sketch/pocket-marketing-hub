@@ -82,7 +82,6 @@ export function taskDateRangeDuration(fields = {}) {
 }
 
 export function taskCreateValidationError(fields = {}) {
-  if (!String(fields.title || "").trim()) return "업무 제목을 입력해 주세요.";
   if (Boolean(fields.planned_start_date) !== Boolean(fields.due_date)) return "시작일과 종료일을 함께 선택하거나 일정 미정을 선택해 주세요.";
   if (fields.planned_start_date && taskDateRangeDuration(fields) === null) return "종료일은 시작일과 같거나 이후여야 합니다.";
   if (!Number.isFinite(Number(fields.progress_percent)) || Number(fields.progress_percent) < 0 || Number(fields.progress_percent) > 100) return "진행률은 0~100 사이로 입력해 주세요.";
@@ -113,7 +112,7 @@ export function taskCreateInitialFields(role, mode = "default", todayValue = new
 
 export function taskCreateSubmissionFields(fields) {
   const cleaned = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== ""));
-  if (Object.prototype.hasOwnProperty.call(cleaned, "title")) cleaned.title = String(cleaned.title).trim();
+  cleaned.title = String(fields.title || "").trim() || "제목 없는 업무";
   if (Object.prototype.hasOwnProperty.call(cleaned, "progress_percent")) cleaned.progress_percent = Number(cleaned.progress_percent);
   if (cleaned.status_code === "DONE") cleaned.progress_percent = 100;
   if (cleaned.planned_start_date && cleaned.due_date) cleaned.schedule_dates_json = serializeScheduleDates(scheduleDateRange(cleaned.planned_start_date, cleaned.due_date));
