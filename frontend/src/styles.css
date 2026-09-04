@@ -4950,10 +4950,10 @@ table tbody tr:hover {
   left: 0;
   z-index: 2;
   display: flex;
-  width: var(--gantt-label-width, 620px);
-  min-width: var(--gantt-label-width, 620px);
-  max-width: var(--gantt-label-width, 620px);
-  flex: 0 0 var(--gantt-label-width, 620px);
+  width: var(--gantt-label-width, 360px);
+  min-width: var(--gantt-label-width, 360px);
+  max-width: var(--gantt-label-width, 360px);
+  flex: 0 0 var(--gantt-label-width, 360px);
   align-items: center;
   gap: 8px;
   padding: 0 12px;

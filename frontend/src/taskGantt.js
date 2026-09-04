@@ -33,15 +33,19 @@ export function buildGanttAxis(startValue, endValue, minimumDays = 0) {
   return days;
 }
 
-// Build a compressed axis from dates that are actually selected by at least
-// one visible task. This intentionally omits unused dates between schedules.
-export function buildGanttAxisFromDates(values = []) {
-  const dates = normalizeScheduleDates(values) || [];
-  return dates.map((value, index) => {
-    const cursor = dateAtNoon(value);
-    const previousMonth = dates[index - 1]?.slice(0, 7);
-    return ganttAxisDay(cursor, index > 0 && previousMonth !== value.slice(0, 7));
-  });
+function estimatedTextWidth(value) {
+  return Array.from(String(value || "")).reduce((width, character) => (
+    width + (/[^\u0000-\u00ff]/.test(character) ? 12.5 : 7.2)
+  ), 0);
+}
+
+export function ganttTaskLabelWidth(tasks = [], { canWrite = true, showOwners = true } = {}) {
+  const longestTitleWidth = tasks.reduce((maximum, task) => (
+    Math.max(maximum, estimatedTextWidth(task?.title || "제목 없는 업무"))
+  ), 0);
+  const controlsWidth = canWrite ? (showOwners ? 248 : 186) : (showOwners ? 112 : 68);
+  const minimumWidth = canWrite ? 360 : 280;
+  return Math.min(620, Math.max(minimumWidth, Math.ceil((longestTitleWidth + controlsWidth) / 8) * 8));
 }
 
 export function ganttMonthClass(day) {
