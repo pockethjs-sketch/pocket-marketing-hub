@@ -8292,6 +8292,26 @@ select.g-task-status,
 
 .task-new-badge { min-height: 17px; margin-left: 6px; padding: 0 6px; font-size: 8px; }
 .g-new-badge { min-height: 16px; margin-left: 5px; padding: 0 5px; font-size: 8px; }
+.task-client-hidden-badge,
+.g-client-hidden-badge {
+  display: inline-flex;
+  flex: none;
+  min-height: 17px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin-left: 5px;
+  padding: 0 6px;
+  border: 1px solid #cdd5e3;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #526078;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.g-client-hidden-badge { min-height: 16px; padding-inline: 5px; }
 .task-schedule-identity > span:last-child > strong { display: flex; min-width: 0; align-items: center; }
 .task-schedule-identity > span:last-child > strong > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-schedule-matrix tbody .task-schedule-row.is-new-task > td { background: #f3f6ff; }

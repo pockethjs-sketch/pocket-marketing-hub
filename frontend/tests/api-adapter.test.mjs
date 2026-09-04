@@ -774,6 +774,7 @@ test("업무 로그 변경값의 상태·담당 조직 코드를 화면 라벨�
           { field: "status_code", label: "상태", before: "IN_PROGRESS", after: "DONE" },
           { field: "responsible_org_code", label: "담당 조직", before: "POCKET", after: "CLIENT" },
           { field: "schedule_dates_json", label: "간트 일정", before: "[]", after: '["2026-09-01","2026-09-03"]' },
+          { field: "visibility_code", before: "CLIENT", after: "PROJECT_TEAM" },
         ],
       }],
     },
@@ -783,6 +784,7 @@ test("업무 로그 변경값의 상태·담당 조직 코드를 화면 라벨�
     { field: "status_code", label: "상태", before: "진행", after: "완료" },
     { field: "responsible_org_code", label: "담당 조직", before: "포켓", after: "고객사" },
     { field: "schedule_dates_json", label: "간트 일정", before: "일정 없음", after: "2일 · 2026-09-01~2026-09-03" },
+    { field: "visibility_code", label: "고객 공개 범위", before: "고객 공개", after: "고객 숨김" },
   ]);
 });
 

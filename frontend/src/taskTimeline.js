@@ -188,6 +188,10 @@ export function taskScheduleStatusGroup(task = {}) {
   return "OTHER";
 }
 
+export function taskHiddenFromClient(task = {}) {
+  return String(task.visibilityCode || task.visibility_code || "").trim().toUpperCase() !== "CLIENT";
+}
+
 function taskWeekRange(today, weekOffset) {
   const start = new Date(today);
   const day = start.getDay();

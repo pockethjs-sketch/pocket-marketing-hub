@@ -126,6 +126,17 @@ test("일정표와 간트는 체크 선택, 일괄 상태·담당 변경, 드래
   assert.match(styleSource, /\.task-bulk-toolbar/);
 });
 
+test("포켓은 선택한 업무를 고객사에서 일괄 숨기거나 다시 공개할 수 있다", () => {
+  assert.match(appSource, /canManageVisibility=\{Boolean\(editable && role === "pocket"\)\}/);
+  assert.match(appSource, /className="task-bulk-visibility"/);
+  assert.match(appSource, /<option value="PROJECT_TEAM">숨김 · 내부만<\/option><option value="CLIENT">공개<\/option>/);
+  assert.match(appSource, /bulkVisibility \? \{ visibility_code: bulkVisibility \} : \{\}/);
+  assert.match(appSource, /next\.visibilityCode = String\(fields\.visibility_code/);
+  assert.match(appSource, /className="task-client-hidden-badge"/);
+  assert.match(appSource, /className="g-client-hidden-badge"/);
+  assert.match(styleSource, /\.task-client-hidden-badge,/);
+});
+
 test("업무표와 간트는 다중 이동·Shift 범위 선택·일괄 소프트 삭제를 제공한다", () => {
   assert.match(appSource, /selectTaskRange\(filteredTasks, current, selectionAnchorRef\.current, taskId, checked\)/);
   assert.match(appSource, /event\.nativeEvent\?\.shiftKey \|\| event\.shiftKey/);

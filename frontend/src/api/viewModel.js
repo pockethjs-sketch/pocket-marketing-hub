@@ -55,6 +55,22 @@ const FORMAT_LABELS = {
 const PRIORITY_LABELS = { LOW: "낮음", NORMAL: "보통", HIGH: "높음", CRITICAL: "긴급", URGENT: "긴급" };
 const TASK_RESPONSIBLE_ORG_LABELS = { POCKET: "포켓", NS: "NS", CLIENT: "고객사" };
 const ACTIVITY_ACTION_LABELS = { CREATED: "추가", UPDATED: "수정", ARCHIVED: "보관", APPROVED: "승인", REJECTED: "반려" };
+const ACTIVITY_FIELD_LABELS = {
+  title: "업무명",
+  status_code: "상태",
+  description: "세부내용",
+  planned_start_date: "시작일",
+  due_date: "종료일",
+  schedule_dates_json: "간트 일정",
+  progress_percent: "진행률",
+  completion_url: "완료링크",
+  remarks: "비고",
+  priority_code: "우선순위",
+  responsible_org_code: "담당",
+  workstream_code: "업무 분야",
+  phase_code: "단계",
+  visibility_code: "고객 공개 범위",
+};
 // 화면의 대외 담당 주체는 포켓컴퍼니로 통일한다.
 // 원장에 남아 있는 기존 NS 코드도 표시 단계에서는 포켓컴퍼니로 정규화한다.
 const ORG_LABELS = { POCKET: "포켓컴퍼니", NS: "포켓컴퍼니", NS_MARKETING: "포켓컴퍼니", CLIENT: "고객사" };
@@ -91,6 +107,7 @@ function activityChangeValue(field, value) {
     const organizationCode = normalized === "NS_MARKETING" ? "NS" : normalized;
     return TASK_RESPONSIBLE_ORG_LABELS[organizationCode] || value;
   }
+  if (field === "visibility_code") return { CLIENT: "고객 공개", PROJECT_TEAM: "고객 숨김", POCKET_ONLY: "포켓 전용" }[normalized] || value;
   return value;
 }
 
@@ -280,12 +297,16 @@ function activityViewModel(row) {
   const type = entity === "content" ? "content" : entity === "approval" ? "schedule" : entity === "task" ? "task" : "metric";
   const actionCode = String(row.action_code || "").toUpperCase();
   const rawChanges = Array.isArray(row.changes) ? row.changes : [];
-  const changes = rawChanges.map((change) => ({
-    field: String(change?.field || ""),
-    label: String(change?.label || change?.field || "변경값"),
-    before: activityChangeValue(String(change?.field || ""), change?.before),
-    after: activityChangeValue(String(change?.field || ""), change?.after),
-  }));
+  const changes = rawChanges.map((change) => {
+    const field = String(change?.field || "");
+    const providedLabel = String(change?.label || "").trim();
+    return {
+      field,
+      label: providedLabel && providedLabel !== field ? providedLabel : ACTIVITY_FIELD_LABELS[field] || providedLabel || field || "변경값",
+      before: activityChangeValue(field, change?.before),
+      after: activityChangeValue(field, change?.after),
+    };
+  });
   const completesTask = actionCode === "UPDATED" && rawChanges.some((change) => (
     String(change?.field || "") === "status_code" && ["DONE", "COMPLETED"].includes(String(change?.after || "").toUpperCase())
   ));

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { tasksViewModel } from "../src/api/viewModel.js";
 
-import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, groupTaskScheduleSeries, reorderTaskSchedule, selectTaskRange, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleMediaCode, taskScheduleSeries, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, groupTaskScheduleSeries, reorderTaskSchedule, selectTaskRange, sortTaskSchedule, taskHiddenFromClient, taskScheduleCategory, taskScheduleMedia, taskScheduleMediaCode, taskScheduleSeries, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("신규 DB 업무분야와 구형 코드는 한글로 표시하고 같은 필터에 포함한다", () => {
   const codes = ["MARKETING", "DESIGN", "VIDEO", "MKT", "DSN", "VID"];
@@ -226,6 +226,13 @@ test("일정표 상단 상태 요약은 같은 상태를 다시 누르면 전체
   assert.equal(toggleScheduleStatusFilter("ALL", "DONE"), "DONE");
   assert.equal(toggleScheduleStatusFilter("DONE", "DONE"), "ALL");
   assert.equal(toggleScheduleStatusFilter("DONE", "ACTIVE"), "ACTIVE");
+});
+
+test("고객 공개 업무만 고객사 표시 대상으로 판정한다", () => {
+  assert.equal(taskHiddenFromClient({ visibilityCode: "CLIENT" }), false);
+  assert.equal(taskHiddenFromClient({ visibilityCode: "PROJECT_TEAM" }), true);
+  assert.equal(taskHiddenFromClient({ visibility_code: "POCKET_ONLY" }), true);
+  assert.equal(taskHiddenFromClient({}), true);
 });
 
 test("간트는 날짜별 선택 셀과 연속 구간 모서리를 표시한다", () => {

@@ -822,7 +822,8 @@ function mhTaskActivityChanges_(row) {
     ['title', '업무명'], ['status_code', '상태'], ['responsible_org_code', '담당 조직'], ['priority_code', '우선순위'],
     ['planned_start_date', '시작일'], ['due_date', '마감일'], ['schedule_dates_json', '간트 일정'],
     ['progress_percent', '진행률'], ['completion_url', '완료링크'], ['remarks', '비고'],
-    ['completed_at', '완료일'], ['customer_status_text', '고객 공유 메모']
+    ['completed_at', '완료일'], ['customer_status_text', '고객 공유 메모'],
+    ['visibility_code', '고객 공개 범위']
   ];
   var changes = [];
   fields.forEach(function (entry) {

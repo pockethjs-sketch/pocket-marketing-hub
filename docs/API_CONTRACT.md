@@ -63,6 +63,8 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 간트 및 선택 업무의 다중 변경은 `mutate_batch`를 사용한다. 한 요청에는 같은 `projectId`의 `task / UPDATE|ARCHIVE`를 최대 40건까지 포함할 수 있으며 업무 ID와 `mutationId`는 요청 안에서 중복될 수 없다. 서버는 모든 행의 권한·허용 필드·`expectedRowVersion`을 쓰기 전에 검사하고, 행별 canonical record를 입력 순서대로 `data.results`에 반환한다. 대량 요청은 프런트가 40건 단위로 순차 분할한다. `ARCHIVE`는 물리 삭제가 아니라 `archived_at`을 기록하는 복구 가능한 삭제이며 사용자 업무 로그에도 남는다.
 
+포켓 운영자는 일정표 또는 간트의 체크박스로 여러 업무를 선택한 뒤 `visibility_code`를 `PROJECT_TEAM`(고객사 숨김) 또는 `CLIENT`(고객사 공개)로 일괄 변경한다. 숨긴 업무는 내부 원장과 업무 로그에 유지되지만 고객 계정의 업무 일정·간트·진행상황 집계에서는 서버 조회 단계부터 제외한다. 실행사와 고객 계정에는 고객 공개 범위 변경 UI를 제공하지 않으며 서버도 같은 권한 경계를 재검사한다.
+
 ```json
 {
   "action": "mutate_batch",
