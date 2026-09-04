@@ -59,6 +59,8 @@ try {
   assert.ok(await evaluate('!!document.querySelector(".schedule-filter-panel")'),"zero-result filters remain usable");
   await click(".schedule-filter-reset");
   assert.equal(await evaluate('document.querySelectorAll(".reference-task-row").length'),3);
+  const verticalOffsets=await evaluate(`[...document.querySelectorAll('.reference-task-row:first-child td')].map(td=>{const cell=td.querySelector('.reference-task-cell')||td.firstElementChild;if(!cell)return 0;const a=td.getBoundingClientRect(),b=cell.getBoundingClientRect();return Math.abs((a.top+a.height/2)-(b.top+b.height/2));})`);
+  assert.ok(verticalOffsets.every(offset=>offset<=1.1),"all schedule cells are vertically centered: "+JSON.stringify(verticalOffsets));
   assert.deepEqual(await evaluate('[...document.querySelectorAll("#schedule-filter-period button")].map(b=>b.textContent)'),["전체","오늘","지난주","이번주","다음주","이번달"]);
   const fill = async (selector,value) => {
     await evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}));})()`);

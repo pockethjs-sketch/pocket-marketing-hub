@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { tasksViewModel } from "../src/api/viewModel.js";
 
-import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, groupTaskScheduleSeries, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleSeries, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
+import { buildTaskTimeline, filterTaskSchedule, groupTaskScheduleByMedia, groupTaskScheduleSeries, reorderTaskSchedule, sortTaskSchedule, taskScheduleCategory, taskScheduleMedia, taskScheduleSeries, taskScheduleStatusGroup, toggleScheduleStatusFilter, withDisplayDeadline } from "../src/taskTimeline.js";
 
 test("신규 DB 업무분야와 구형 코드는 한글로 표시하고 같은 필터에 포함한다", () => {
   const codes = ["MARKETING", "DESIGN", "VIDEO", "MKT", "DSN", "VID"];
@@ -189,6 +189,19 @@ test("필터로 같은 회차가 하나만 남으면 불필요한 묶음 행을 
   ]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].type, "task");
+});
+
+test("개별 업무와 접힌 회차 묶음을 대상 업무 앞으로 이동한다", () => {
+  const tasks = [
+    { id: "A", title: "일반 A", categoryCode: "INSTAGRAM", streamCode: "DESIGN" },
+    { id: "S1", title: "콘텐츠 업로드 1/3", categoryCode: "INSTAGRAM", streamCode: "DESIGN" },
+    { id: "S2", title: "콘텐츠 업로드 2/3", categoryCode: "INSTAGRAM", streamCode: "DESIGN" },
+    { id: "B", title: "일반 B", categoryCode: "INSTAGRAM", streamCode: "DESIGN" },
+  ];
+  assert.deepEqual(reorderTaskSchedule(tasks, "B", "A").map((task) => task.id), ["B", "A", "S1", "S2"]);
+  const seriesKey = groupTaskScheduleSeries(tasks).find((entry) => entry.type === "series").key;
+  assert.deepEqual(reorderTaskSchedule(tasks, seriesKey, "A").map((task) => task.id), ["S1", "S2", "A", "B"]);
+  assert.deepEqual(reorderTaskSchedule(tasks, seriesKey, "S2").map((task) => task.id), ["A", "S1", "S2", "B"]);
 });
 
 test("일정표 상단 상태 요약은 같은 상태를 다시 누르면 전체로 돌아간다", () => {

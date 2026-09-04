@@ -126,6 +126,23 @@ export function groupTaskScheduleSeries(tasks = []) {
   return rows;
 }
 
+export function reorderTaskSchedule(tasks = [], sourceKey, targetTaskId) {
+  const source = String(sourceKey || "");
+  const target = String(targetTaskId || "");
+  if (!source || !target) return tasks.slice();
+  const seriesEntry = source.startsWith("series:")
+    ? groupTaskScheduleSeries(tasks).find((entry) => entry.key === source)
+    : null;
+  const sourceTasks = seriesEntry?.tasks || tasks.filter((task) => String(task.id) === source);
+  const sourceIds = new Set(sourceTasks.map((task) => String(task.id)));
+  if (!sourceTasks.length || sourceIds.has(target)) return tasks.slice();
+  const ordered = tasks.filter((task) => !sourceIds.has(String(task.id)));
+  const targetIndex = ordered.findIndex((task) => String(task.id) === target);
+  if (targetIndex < 0) return tasks.slice();
+  ordered.splice(targetIndex, 0, ...sourceTasks);
+  return ordered;
+}
+
 export function taskScheduleStatusGroup(task = {}) {
   const status = String(task.statusCode || "").toUpperCase();
   if (["DONE", "COMPLETED"].includes(status)) return "DONE";
