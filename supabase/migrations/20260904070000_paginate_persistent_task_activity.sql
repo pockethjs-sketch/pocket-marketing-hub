@@ -146,4 +146,3 @@ grant execute on function public.read_task_activity(bigint, integer, timestamptz
 
 comment on table public.activity_events is
   'Append-only audit data retained without an application TTL. Browser clients can only read authorized projections.';
-
