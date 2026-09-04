@@ -23,7 +23,7 @@
 
 - 현재 UI의 전역 선택 단위는 `clients` 한 행과 대표 `projects` 한 행의 1:1 운영 쌍이다. `프로젝트 추가`는 이 두 행과 생성자의 `project_memberships`를 `create_project` RPC 한 트랜잭션으로 생성한다.
 - 생성 가능 주체는 활성 `POCKET_MANAGER / POCKET_EDITOR / EXECUTOR_EDITOR`이며 조직은 `POCKET / NS`로 제한한다. 고객 계정은 생성할 수 없다.
-- 생성자 권한은 포켓 `ADMIN`, NS `EDIT`이고 기본 허용 페이지는 `overview / plan / tasks / daily / performance / files`다. `client_view_enabled`는 고객 계정을 별도 배정하기 전까지 `false`다.
+- 생성자 권한은 포켓 `ADMIN`, NS `EDIT`이고 기본 허용 페이지는 `overview / plan / tasks / progress / daily / performance / files`다. `client_view_enabled`는 고객 계정을 별도 배정하기 전까지 `false`다.
 - 회사명은 활성 고객사 사이에서 대소문자·앞뒤 공백을 무시해 중복을 거부한다. `mutation_id` 재호출과 동시 생성은 advisory transaction lock으로 직렬화한다.
 - 같은 고객사 아래 여러 프로젝트를 추가하는 모델은 아직 UI 선택 계약에 포함하지 않는다. 이를 도입할 때는 회사 선택과 프로젝트 선택을 분리하고 `bootstrapViewModel`의 첫 프로젝트 선택 가정을 먼저 제거해야 한다.
 
@@ -216,7 +216,7 @@ UND 운영 업무는 P0/M1/M2/M3 단계와 `plan_week`를 기준으로 `planned_
 ## 고객사 계정·페이지 권한
 
 - `03_사용자`: 고객 계정 ID를 내부 `@hub.local` 식별자로 정규화하고 표시 이름, `CLIENT_VIEWER`, 활성 상태를 저장합니다.
-- `04_프로젝트권한`: 계정과 고객사·프로젝트 연결, `READ_ONLY`, `allowed_pages_json`을 저장합니다. 현재 선택 가능한 허용 페이지 코드는 `overview`, `plan`, `tasks`, `daily`, `performance`, `files`입니다. `tasks`는 같은 원천을 쓰는 업무 목록·일정표·업무 로그를 묶은 권한이고, `files`는 기존 ID를 유지하되 화면 명칭과 책임은 `세부 로그`입니다.
+- `04_프로젝트권한`: 계정과 고객사·프로젝트 연결, `READ_ONLY`, `allowed_pages_json`을 저장합니다. 현재 선택 가능한 허용 페이지 코드는 `overview`, `plan`, `tasks`, `progress`, `daily`, `performance`, `files`입니다. 프로젝트 하위의 `tasks`(업무 목록·일정표·간트·업무 로그), `progress`(진행상황 요약), `daily`(데일리 회의록)는 각각 독립 메뉴 권한입니다. `progress`는 별도 원장을 만들지 않고 고객 공개 업무 투영을 읽으며, `files`는 기존 ID를 유지하되 화면 명칭과 책임은 `세부 로그`입니다.
 - 고객 권한 선택지와 좌측 메뉴는 프런트의 `frontend/src/accessPermissions.js` 내 `PAGE_CATALOG`에서 함께 파생합니다. 화면을 추가·숨김 처리할 때 `navigation` / `customerSelectable`을 갱신하고, 서버 `apps-script/PermissionAdmin.gs`의 `MH_ACCESS_PAGES`와 양쪽 권한 계약 테스트를 동시에 수정해야 합니다. 이 절차를 통과하지 않은 새 화면은 배포하지 않습니다.
 - `content`, `tracking`은 데이터와 API 코드를 삭제하지 않고 현재 메뉴·신규 고객 권한에서 숨깁니다. 고객의 기존 JSON에 남아 있어도 정규화 과정에서 제거되고 서버 직접 조회도 거부됩니다.
 - Script Properties: 계정별 비밀번호 HMAC digest만 저장합니다. 비밀번호 원문은 시트·프런트·Git 저장소 어디에도 저장하지 않습니다.

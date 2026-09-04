@@ -21,6 +21,7 @@ assert.deepEqual(
 assert.equal(context.mhPageForReadAction_('project_overview', {}), 'overview');
 assert.equal(context.mhPageForReadAction_('project_plan', {}), 'plan');
 assert.equal(context.mhPageForReadAction_('tasks', {}), 'tasks');
+assert.equal(context.mhPageForReadAction_('tasks', { permissionPage: 'progress' }), 'progress');
 assert.equal(context.mhPageForReadAction_('daily_meetings', {}), 'daily');
 assert.equal(context.mhPageForReadAction_('contents', {}), 'content');
 assert.equal(context.mhPageForReadAction_('performance_tracking', {}), 'tracking');
@@ -32,7 +33,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   Array.from(context.mhAllowedPagesForMembership_({ allowed_pages_json: '' })),
-  ['overview', 'plan', 'tasks', 'daily', 'performance', 'files'],
+  ['overview', 'plan', 'tasks', 'progress', 'daily', 'performance', 'files'],
 );
 assert.deepEqual(
   Array.from(context.mhNormalizeAllowedPages_(['overview', 'content', 'tracking', 'daily'])),

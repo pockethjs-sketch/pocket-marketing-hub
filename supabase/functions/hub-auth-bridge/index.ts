@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.114.0";
 
 const LEGACY_API_URL = Deno.env.get("LEGACY_API_URL") || "";
 
-const ALLOWED_PAGES = new Set(["overview", "plan", "tasks", "daily", "performance", "files"]);
+const ALLOWED_PAGES = new Set(["overview", "plan", "tasks", "progress", "daily", "performance", "files"]);
 const INTERNAL_ORIGINS = new Set([
   "https://pockethjs-sketch.github.io",
 ]);

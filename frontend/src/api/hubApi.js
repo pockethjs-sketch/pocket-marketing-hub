@@ -31,6 +31,7 @@ function scopeQuery(params = {}) {
     entityType: params.entityType,
     planType: params.planType,
     initialView: params.initialView,
+    permissionPage: params.permissionPage,
   };
 }
 

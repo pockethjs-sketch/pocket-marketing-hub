@@ -89,7 +89,7 @@ Apps Script에서는 URL 경로와 GET query 대신 `text/plain` POST JSON의 `a
 
 `performance_tracking`은 별도 실적을 저장하지 않는 읽기 전용 집계입니다. 첫 응답이 지연되지 않도록 `12_성과일별`의 비용·노출·반응·클릭·문의·전환·매출만 선택 기간 기준으로 한 번 읽어 합산합니다. 고객 역할일 때만 `05_프로젝트채널.customer_visible = true` 채널 목록을 추가 확인합니다. 프런트가 계산하는 전환율과 병목은 이 응답의 실제 합계만 사용하며, 원장 행이 없으면 0원·0건으로 가장하지 않고 연결된 빈 상태를 표시합니다. 이 경량 조회는 모든 화면에서 실행되는 `project_snapshot`에 포함하지 않고 성과 추적 탭 진입 시에만 호출합니다.
 
-고객 계정 생성·수정·비활성화는 `access_admin_mutate` 전용 action을 사용합니다. 입력은 계정 ID, 표시 이름, 프로젝트, 허용 페이지 배열, 활성 상태이며 신규 계정은 8자 이상의 임시 비밀번호가 필요합니다. 서버는 포켓 관리자 권한을 다시 검사하고 사용자·프로젝트권한 원장과 Script Properties의 비밀번호 digest를 갱신합니다. 고객 세션의 화면별 조회는 메뉴 숨김과 별개로 서버에서도 `allowed_pages_json`을 검사해 미허용 action을 `403 page_access_denied`로 거부합니다.
+고객 계정 생성·수정·비활성화는 `access_admin_mutate` 전용 action을 사용합니다. 입력은 계정 ID, 표시 이름, 프로젝트, 허용 페이지 배열, 활성 상태이며 신규 계정은 8자 이상의 임시 비밀번호가 필요합니다. 서버는 포켓 관리자 또는 배정 프로젝트의 NS 편집 권한을 다시 검사하고 사용자·프로젝트권한 원장과 Script Properties의 비밀번호 digest를 갱신합니다. 고객 세션의 화면별 조회는 메뉴 숨김과 별개로 서버에서도 `allowed_pages_json`을 검사해 미허용 action을 `403 page_access_denied`로 거부합니다. `progress`는 독립 페이지 권한이지만 표시 데이터는 고객 공개 업무 투영을 재사용합니다.
 
 `ops_maintenance.operation = migrate_campaign_schedule_v1`은 Pocket 관리자 전용 캠페인 HTML 이관 작업입니다. `mugeuk`, `und` 두 seed 캠페인을 함께 받아 각각 고정 프로젝트로 매핑하며, `06_업무`가 비어 있거나 기존 이관 원천 ID 집합과 정확히 일치할 때만 동작합니다. 첫 쓰기와 데이터 보정 전에 전체 스프레드시트를 강제 복제하고 21개 원장의 셀 해시가 모두 일치해야 진행합니다. 일정 일자 배열이 없는 구배포 원장은 `schedule_dates_json` 열을 먼저 생성하고 기존 동일 ID 행을 보정합니다. 결과는 사용자 업무 로그가 아니라 `TASK_BATCH` 감사 이벤트로 기록합니다.
 

@@ -11,7 +11,8 @@ test("진행상황은 업무 바로 아래에 위치하고 업무 권한·캐시
   assert.deepEqual(parseViewLocation("#tasks/progress"), { view: "progress", planVariant: "client" });
   assert.equal(viewLocationHash("progress"), "tasks/progress");
   assert.equal(viewResourceKey("progress"), "tasks");
-  assert.equal(isViewAllowed("progress", ["tasks"]), true);
+  assert.equal(isViewAllowed("progress", ["progress"]), true);
+  assert.equal(isViewAllowed("progress", ["tasks"]), false);
   assert.equal(isViewAllowed("progress", ["overview"]), false);
 });
 

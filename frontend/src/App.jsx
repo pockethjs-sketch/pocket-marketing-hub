@@ -2127,6 +2127,20 @@ function AccessAccountModal({ account, projects, onClose, onSave, canDisableAcco
   }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const pageGroups = [
+    {
+      id: "main",
+      label: "기본 메뉴",
+      description: "프로젝트 공통 정보와 성과·기록 화면",
+      pages: ACCESS_PAGE_OPTIONS.filter((page) => !PROJECT_NAVIGATION_GROUP.pageIds.includes(page.id)),
+    },
+    {
+      id: PROJECT_NAVIGATION_GROUP.id,
+      label: PROJECT_NAVIGATION_GROUP.label,
+      description: "왼쪽 프로젝트 메뉴에 표시할 하위 화면",
+      pages: ACCESS_PAGE_OPTIONS.filter((page) => PROJECT_NAVIGATION_GROUP.pageIds.includes(page.id)),
+    },
+  ];
   const setField = (key, value) => setFields((current) => ({ ...current, [key]: value }));
   const togglePage = (page) => setFields((current) => ({
     ...current,
@@ -2176,7 +2190,7 @@ function AccessAccountModal({ account, projects, onClose, onSave, canDisableAcco
   };
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="create-modal access-account-modal" role="dialog" aria-modal="true" aria-labelledby="access-account-title"><header><div><p className="editorial-kicker">Supabase 계정·권한 원장</p><h2 id="access-account-title">{account ? "고객사 계정 관리" : "고객사 계정 생성"}</h2></div><button className="icon-button" type="button" onClick={onClose} disabled={saving} aria-label="닫기"><X size={18} /></button></header><form onSubmit={submit}>
     <div className="access-form-grid"><label className="create-field"><span>로그인 아이디</span><input value={fields.account} onChange={(event) => setField("account", event.target.value)} placeholder="예: client-account" disabled={Boolean(account)} required /></label><label className="create-field"><span>표시 이름</span><input value={fields.displayName} onChange={(event) => setField("displayName", event.target.value)} placeholder="예: 고객사 담당자" required /></label><label className="create-field"><span>{account ? "새 비밀번호 · 변경할 때만" : "임시 비밀번호"}</span><input type="password" autoComplete="new-password" value={fields.accessCode} onChange={(event) => setField("accessCode", event.target.value)} placeholder="8자 이상" required={!account} /></label><FormSelect label="계정 상태" value={fields.enabled ? "ACTIVE" : "DISABLED"} onChange={(value) => setField("enabled", value === "ACTIVE")} options={[["ACTIVE", "사용 중"], ["DISABLED", "사용 중지"]]} /><FormSelect label="접근 프로젝트" value={fields.projectId} onChange={(value) => setField("projectId", value)} options={projects.map((project) => [project.id, project.name])} /></div>
-    <fieldset className="access-page-fieldset"><legend>접근 가능한 페이지</legend><p>현재 운영 중인 화면만 표시합니다. 체크하지 않은 페이지는 메뉴와 서버 조회에서 모두 차단합니다.</p><div>{ACCESS_PAGE_OPTIONS.map((page) => <label key={page.id}><input type="checkbox" checked={fields.allowedPages.includes(page.id)} onChange={() => togglePage(page.id)} /><span><strong>{page.label}</strong><small>{page.description}</small></span></label>)}</div></fieldset>
+    <fieldset className="access-page-fieldset"><legend>접근 가능한 페이지</legend><p>체크한 메뉴만 고객사 화면에 표시됩니다. 프로젝트의 업무·진행상황·데일리 회의록은 각각 따로 지정할 수 있습니다.</p><div className="access-page-groups">{pageGroups.map((group) => <section className="access-page-group" key={group.id}><header><strong>{group.label}</strong><small>{group.description}</small></header><div className="access-page-options">{group.pages.map((page) => <label key={page.id}><input type="checkbox" checked={fields.allowedPages.includes(page.id)} onChange={() => togglePage(page.id)} /><span><strong>{page.label}</strong><small>{page.description}</small></span></label>)}</div></section>)}</div></fieldset>
     {account?.accesses?.length > 0 && <section className="access-current-projects"><strong>현재 프로젝트 권한</strong><div>{account.accesses.map((access) => <article key={access.id}><span><b>{access.projectName}</b><small>{access.allowedPages.length}개 페이지</small></span><button type="button" className="danger-button" disabled={saving} onClick={() => removeAccess(access)}>이 프로젝트 권한 제거</button></article>)}</div></section>}
     {error && <div className="form-error"><AlertCircle size={14} />{error.message}</div>}
     <footer>{account && canDisableAccount && <button type="button" className="danger-button" onClick={disable} disabled={saving || !fields.projectId}>계정 비활성화</button>}<span /><button className="secondary-button" type="button" onClick={onClose} disabled={saving}>취소</button><button className="primary-button" type="submit" disabled={saving || !fields.account.trim() || !fields.displayName.trim() || !fields.projectId || !fields.allowedPages.length}>{saving ? <><LoaderCircle size={15} className="spin" /> 저장 중</> : "권한 저장"}</button></footer>
@@ -2316,7 +2330,7 @@ const PERSISTED_RESOURCES = new Set(["tasks", "plan-client", "plan-internal", "d
 let pendingBootstrapCacheWrite = null;
 
 function serverInitialView(view) {
-  return view === "schedule" || view === "progress" ? "tasks" : view;
+  return view === "schedule" ? "tasks" : view;
 }
 
 function readBootstrapSessionCache(session) {
@@ -2644,7 +2658,7 @@ export function App() {
     if (cachedState) setResourceState(cachedState);
     if (cacheIsFresh) return undefined;
     if (!cachedState && !visibleState) setResourceState({ status: "loading", data: null, error: null, resource: activeResource, projectId: activeProjectId, refreshKey: pageRefreshKey });
-    const params = { projectId: activeProjectId, limit: 200 };
+    const params = { projectId: activeProjectId, limit: 200, ...(view === "progress" ? { permissionPage: "progress" } : {}) };
     const requestKey = `${cacheKey}:${pageRefreshKey}`;
     const requestEpoch = resourceCacheEpochRef.current;
     let request = resourceRequestRef.current.get(requestKey);

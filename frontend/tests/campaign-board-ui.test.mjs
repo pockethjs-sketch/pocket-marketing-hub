@@ -156,9 +156,18 @@ test("프로젝트 선택과 기존 총괄 진입은 일정 권한이 있으면 
 });
 
 test("일정표 URL로 새로고침해도 서버 초기 업무 코드로 정규화한다", () => {
-  assert.match(appSource, /return view === "schedule" \|\| view === "progress" \? "tasks" : view/);
+  assert.match(appSource, /return view === "schedule" \? "tasks" : view/);
   assert.match(appSource, /source\.bootstrap\(\{ initialView: serverInitialView\(view\) \}\)/);
   assert.match(appSource, /source\.login\(\{ \.\.\.credentials, initialView: serverInitialView\(view\) \}\)/);
+});
+
+test("고객사 계정 모달은 넓은 단일 폼에서 프로젝트 하위 권한을 따로 고른다", () => {
+  assert.match(appSource, /const pageGroups = \[/);
+  assert.match(appSource, /PROJECT_NAVIGATION_GROUP\.pageIds\.includes\(page\.id\)/);
+  assert.match(appSource, /className="access-page-groups"/);
+  assert.match(styleSource, /\.create-modal\.access-account-modal\s*\{\s*width:\s*min\(960px/);
+  assert.match(styleSource, /\.access-account-modal form\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(styleSource, /\.access-page-groups\s*\{[^}]*grid-template-columns:/);
 });
 
 test("업무 일정은 상태·카테고리·주간 필터를 한 화면에서 제공한다", () => {

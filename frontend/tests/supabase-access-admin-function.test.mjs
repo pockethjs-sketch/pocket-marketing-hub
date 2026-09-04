@@ -22,3 +22,7 @@ test("NS는 자기 프로젝트에 이미 연결된 고객 계정만 수정한�
   assert.match(functionSource, /이 고객 계정은 NS 관리 범위 밖에 있습니다/);
   assert.match(functionSource, /\.in\("project_id", scopedIds\)/);
 });
+
+test("권한 관리 함수는 진행상황을 독립 페이지 코드로 저장한다", () => {
+  assert.match(functionSource, /"tasks", "progress", "daily"/);
+});

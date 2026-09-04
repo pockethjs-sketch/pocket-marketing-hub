@@ -181,7 +181,7 @@ function projectShell(row, clientsById = {}, generatedAt = null) {
     phase: codeLabel(row.phase_code, PHASE_LABELS),
     status: codeLabel(row.status_code, STATUS_LABELS),
     permissionCode: String(row.permission_code || "READ_ONLY").toUpperCase(),
-    allowedPages: Array.isArray(row.allowed_pages) ? row.allowed_pages.map((page) => String(page).toLowerCase()) : ["overview", "plan", "tasks", "content", "tracking", "performance", "files"],
+    allowedPages: Array.isArray(row.allowed_pages) ? row.allowed_pages.map((page) => String(page).toLowerCase()) : ["overview", "plan", "tasks", "progress", "daily", "performance", "files"],
     startDate: row.start_date ? String(row.start_date).slice(0, 10) : null,
     endDate: row.end_date ? String(row.end_date).slice(0, 10) : null,
     rowVersion: Number(row.row_version || 0),
@@ -329,7 +329,7 @@ export function overviewViewModel(envelope, fallbackProject) {
   const project = {
     ...base,
     ...(data.project ? projectShell(data.project, { [data.project.client_id]: { name: base.clientName } }, envelope?.generatedAt) : {}),
-    allowedPages: base.allowedPages || ["overview", "plan", "tasks", "content", "tracking", "performance", "files"],
+    allowedPages: base.allowedPages || ["overview", "plan", "tasks", "progress", "daily", "performance", "files"],
   };
 
   project.metrics = [

@@ -6,7 +6,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:8767",
   "http://localhost:8767",
 ]);
-const PAGE_OPTIONS = ["overview", "plan", "tasks", "daily", "performance", "files"];
+const PAGE_OPTIONS = ["overview", "plan", "tasks", "progress", "daily", "performance", "files"];
 
 function cors(req: Request) {
   const origin = req.headers.get("origin") || "";

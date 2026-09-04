@@ -163,6 +163,17 @@ select is(
   'membership page codes are constrained to the application catalog'
 );
 
+select like(
+  (
+    select pg_get_constraintdef(oid)
+      from pg_constraint
+     where conrelid = 'public.project_memberships'::regclass
+       and conname = 'project_memberships_allowed_pages_check'
+  ),
+  '%progress%',
+  'membership page catalog includes the customer progress view'
+);
+
 select is(
   (
     select count(*)
