@@ -2,7 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  base: "/pocket-marketing-hub/",
+  // Keep the legacy project page working while publishing the organization
+  // site at the domain root (pocket-mkt.github.io).
+  base: process.env.GITHUB_REPOSITORY?.endsWith("/pocket-mkt.github.io")
+    ? "/"
+    : "/pocket-marketing-hub/",
   build: {
     outDir: "dist/client",
     rollupOptions: {

@@ -5,6 +5,7 @@ const LEGACY_API_URL = Deno.env.get("LEGACY_API_URL") || "";
 const ALLOWED_PAGES = new Set(["overview", "plan", "tasks", "progress", "daily", "performance", "files"]);
 const INTERNAL_ORIGINS = new Set([
   "https://pockethjs-sketch.github.io",
+  "https://pocket-mkt.github.io",
 ]);
 
 function isAllowedOrigin(origin: string | null) {

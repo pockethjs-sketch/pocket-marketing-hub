@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const ALLOWED_ORIGINS = new Set([
   "https://pockethjs-sketch.github.io",
+  "https://pocket-mkt.github.io",
   "http://127.0.0.1:8767",
   "http://localhost:8767",
 ]);

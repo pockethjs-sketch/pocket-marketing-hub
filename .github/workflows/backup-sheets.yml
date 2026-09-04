@@ -11,6 +11,9 @@ concurrency:
 
 jobs:
   backup:
+    # The legacy repository remains the single backup runner while this code
+    # is mirrored to the organization Pages repository.
+    if: github.repository == 'pockethjs-sketch/pocket-marketing-hub'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
