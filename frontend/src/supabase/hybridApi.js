@@ -308,17 +308,21 @@ export function createSupabaseHybridApi(storageConfig, options = {}) {
       if (operation !== "REMOVE_ACCESS" || error?.code !== "not_found") throw error;
       result = { ok: true, generatedAt: new Date().toISOString(), data: { saved: true, removed: true, alreadyRemoved: true } };
     }
-    await requireLegacySession();
-    try {
-      await sheets.accessAdminMutate(legacyPermissionMirrorInput(input));
-    } catch (error) {
-      throw new HubApiError("Supabase 권한은 저장됐지만 기존 Sheets 화면용 계정 복제에 실패했습니다. 다시 로그인한 뒤 같은 내용을 재저장해 주세요.", {
-        code: "legacy_permission_sync_failed",
-        action: "access_admin",
-        retriable: true,
-        cause: error,
-      });
-    }
+
+    // Supabase is authoritative for account and page permissions. The legacy
+    // Sheets copy only supports pages that have not been migrated yet, so a
+    // missing/expired Sheets session must never turn a completed Supabase
+    // mutation into a visible save failure. Mirror opportunistically without
+    // delaying the permission screen.
+    void (async () => {
+      if (legacyLoginPromise) await legacyLoginPromise;
+      if (!legacySessionStore.read()) return;
+      try {
+        await sheets.accessAdminMutate(legacyPermissionMirrorInput(input));
+      } catch (error) {
+        console.info("[legacy-permission-sync] skipped", error?.code || error?.message || "unknown_error");
+      }
+    })();
     return result;
   }
 
