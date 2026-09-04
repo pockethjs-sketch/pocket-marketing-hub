@@ -124,6 +124,20 @@ $$;
 revoke all on function private.normalize_task_schedule()
   from public, anon;
 
+-- Persist the current backlog once so direct SQL/reporting agrees with the UI.
+-- The audit trigger records these rows with no actor, so the human task log
+-- continues to show user actions only.
+alter table public.tasks disable trigger tasks_normalize_schedule;
+update public.tasks
+   set status_mode = 'SCHEDULE',
+       status_code = 'DONE',
+       progress_percent = 100,
+       completed_at = coalesce(completed_at, now())
+ where archived_at is null
+   and due_date < (now() at time zone 'Asia/Seoul')::date
+   and (status_code <> 'DONE' or progress_percent <> 100 or completed_at is null or status_mode <> 'SCHEDULE');
+alter table public.tasks enable trigger tasks_normalize_schedule;
+
 -- Normalize the existing authored order once. Media groups keep their first
 -- appearance, while numbered YouTube long-form jobs stay next to the same
 -- episode's view/like/comment jobs and Shorts packages follow them. Future
